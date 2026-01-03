@@ -13,6 +13,20 @@ import { useGlobalAlert } from "../components/GlobalAlert";
 import PhoneInput, { isValidPhoneNumber } from "react-phone-number-input";
 import { detectCountryISO } from "../lib/detectCountry";
 
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(
+    window.innerWidth < breakpoint
+  );
+
+  useEffect(() => {
+    const onResize = () =>
+      setIsMobile(window.innerWidth < breakpoint);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [breakpoint]);
+
+  return isMobile;
+}
 
 function addMinutes(time, minutes) {
   const [h, m] = time.split(":").map(Number);
@@ -113,6 +127,8 @@ useEffect(() => {
   const { showAlert, showConfirm } = useGlobalAlert();
   const [useExtraTime, setUseExtraTime] = useState(false);
   const [extraBlocks, setExtraBlocks] = useState(0); // 30 min blocks
+  const isMobile = useIsMobile();
+
 
   const [useOvertime, setUseOvertime] = useState(false);
   const [overtimeBlocks, setOvertimeBlocks] = useState(0);
@@ -850,21 +866,25 @@ setShowModal(false);
               {currentTitle.charAt(0).toUpperCase() + currentTitle.slice(1)}
             </h2>
 
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap justify-end">
               {[
-                { label: "Mois", view: "dayGridMonth" },
+                !isMobile && { label: "Mois", view: "dayGridMonth" },
                 { label: "Semaine", view: "timeGridWeek" },
                 { label: "Jour", view: "timeGridDay" },
                 { label: "Agenda", view: "listWeek" },
-              ].map((v) => (
-                <button
-                  key={v.view}
-                  onClick={() => calendarRef.current?.getApi().changeView(v.view)}
-                  className="bg-white border rounded-full px-4 py-1 text-gray-700 shadow-sm hover:bg-gray-50 transition"
-                >
-                  {v.label}
-                </button>
-              ))}
+              ]
+                .filter(Boolean)
+                .map((v) => (
+                  <button
+                    key={v.view}
+                    onClick={() =>
+                      calendarRef.current?.getApi().changeView(v.view)
+                    }
+                    className="bg-white border rounded-full px-3 py-1 text-sm text-gray-700 shadow-sm hover:bg-gray-50 transition"
+                  >
+                    {v.label}
+                  </button>
+                ))}
             </div>
           </div>
 
@@ -879,7 +899,7 @@ setShowModal(false);
                 const sessionId = eventId.replace(/^legacy-|^seance-/, "");
                 await loadStudents(sessionId);
               }}
-              initialView="dayGridMonth"
+              initialView={isMobile ? "listWeek" : "dayGridMonth"}
               locales={[frLocale]}
               locale="fr"
               height="auto"
@@ -892,6 +912,8 @@ setShowModal(false);
               dateClick={handleDateClick}
               eventClick={handleEventClick}
               eventContent={eventContent}
+              listDayFormat={{ weekday: "long", day: "numeric", month: "short" }}
+              listDaySideFormat={false}
               eventTimeFormat={{
                 hour: "2-digit",
                 minute: "2-digit",
@@ -923,8 +945,8 @@ setShowModal(false);
               slotMinTime="07:00:00"
               slotMaxTime="21:00:00"
               allDaySlot={false}
-              dayMaxEvents={2}
-              moreLinkClick="popover"
+              dayMaxEvents={isMobile ? 1 : 2}
+              moreLinkClick={isMobile ? "day" : "popover"}
               moreLinkContent={(args) => `+${args.num} autres`}
             />
           </div>
