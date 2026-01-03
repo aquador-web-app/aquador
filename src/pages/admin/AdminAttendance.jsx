@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { supabase } from "../../lib/supabaseClient";
-import { QrScanner } from "@yudiel/react-qr-scanner";
+import QrScanner from "@yudiel/react-qr-scanner";
 import { formatDateFrSafe, formatMonth } from "../../lib/dateUtils";
 import { FaDollarSign } from "react-icons/fa";
 

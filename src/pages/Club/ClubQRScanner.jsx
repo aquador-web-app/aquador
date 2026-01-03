@@ -1,6 +1,6 @@
 // src/pages/Club/ClubQRScanner.jsx
 import { useState, useEffect, useRef } from "react";
-import { QrScanner } from "@yudiel/react-qr-scanner";
+import QrScanner from "@yudiel/react-qr-scanner";
 import { supabase } from "../../lib/supabaseClient";
 
 export default function ClubQRScanner() {
