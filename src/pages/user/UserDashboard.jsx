@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { useAuth } from "../../context/AuthContext"
-import UserProfile from "../User/UserProfile"
+import UserProfile from "../user/UserProfile"
 import UserCourses from "../user/UserCourses";
 import UserInvoices from "../user/UserInvoices";
 import UserEnrollments from "../user/UserEnrollments";
