@@ -128,6 +128,8 @@ useEffect(() => {
   const [useExtraTime, setUseExtraTime] = useState(false);
   const [extraBlocks, setExtraBlocks] = useState(0); // 30 min blocks
   const isMobile = useIsMobile();
+  const [currentView, setCurrentView] = useState("dayGridMonth");
+
 
 
   const [useOvertime, setUseOvertime] = useState(false);
@@ -834,6 +836,63 @@ setTimeout(() => {
 setShowModal(false);
   };
 
+  const calendarProps = {
+  ref: calendarRef,
+  plugins: [dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin],
+  initialView: "dayGridMonth",
+  locales: [frLocale],
+  locale: "fr",
+  height: "auto",
+  expandRows: true,
+  headerToolbar: false,
+  events,
+  selectable: true,
+  selectMirror: true,
+  select: handleSelect,
+  dateClick: handleDateClick,
+  eventClick: handleEventClick,
+  eventContent,
+  listDayFormat: { weekday: "long", day: "numeric", month: "short" },
+  listDaySideFormat: false,
+  eventTimeFormat: {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  },
+  datesSet: (arg) => {
+  const newStart = arg.start.getTime();
+  const newEnd = arg.end.getTime();
+
+  setCurrentTitle(arg.view.title);
+  setCurrentView(arg.view.type); // 🔑 REQUIRED for month-only horizontal scroll
+
+  setVisibleRange((prev) => {
+    if (
+      prev &&
+      prev.start.getTime() === newStart &&
+      prev.end.getTime() === newEnd
+    ) {
+      return prev;
+    }
+    return { start: arg.start, end: arg.end };
+  });
+},
+  firstDay: 0,
+  slotMinTime: "07:00:00",
+  slotMaxTime: "21:00:00",
+  allDaySlot: false,
+  dayMaxEvents: isMobile ? 1 : 2,
+  moreLinkClick: isMobile ? "day" : "popover",
+  moreLinkContent: (args) => `+${args.num} autres`,
+  eventDidMount: async (info) => {
+    const eventId = info.event.id || "";
+    if (!eventId.startsWith("legacy-") && !eventId.startsWith("seance-")) return;
+    const sessionId = eventId.replace(/^legacy-|^seance-/, "");
+    await loadStudents(sessionId);
+  },
+};
+
+
   // ---------------- Render
   try {
     return (
@@ -889,67 +948,16 @@ setShowModal(false);
           </div>
 
           <div className="aq-calendar-shell">
-            <FullCalendar
-              ref={calendarRef}
-              plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
-              eventDidMount={async (info) => {
-                const eventId = info.event.id || "";
-                if (!eventId.startsWith("legacy-") && !eventId.startsWith("seance-"))
-                  return;
-                const sessionId = eventId.replace(/^legacy-|^seance-/, "");
-                await loadStudents(sessionId);
-              }}
-              initialView={isMobile ? "listWeek" : "dayGridMonth"}
-              locales={[frLocale]}
-              locale="fr"
-              height="auto"
-              expandRows
-              headerToolbar={false}
-              events={events}
-              selectable={true}
-              selectMirror={true}
-              select={handleSelect}
-              dateClick={handleDateClick}
-              eventClick={handleEventClick}
-              eventContent={eventContent}
-              listDayFormat={{ weekday: "long", day: "numeric", month: "short" }}
-              listDaySideFormat={false}
-              eventTimeFormat={{
-                hour: "2-digit",
-                minute: "2-digit",
-                hour12: false,
-              }}
-              datesSet={(arg) => {
-  const newStart = arg.start.getTime();
-  const newEnd = arg.end.getTime();
-
-  setCurrentTitle(arg.view.title);
-
-  setVisibleRange((prev) => {
-    if (
-      prev &&
-      prev.start.getTime() === newStart &&
-      prev.end.getTime() === newEnd
-    ) {
-      return prev; // 🚫 NO state update → no loop
-    }
-
-    return {
-      start: arg.start,
-      end: arg.end,
-    };
-  });
-}}
-
-              firstDay={0}
-              slotMinTime="07:00:00"
-              slotMaxTime="21:00:00"
-              allDaySlot={false}
-              dayMaxEvents={isMobile ? 1 : 2}
-              moreLinkClick={isMobile ? "day" : "popover"}
-              moreLinkContent={(args) => `+${args.num} autres`}
-            />
-          </div>
+  {currentView === "dayGridMonth" ? (
+    <div className="overflow-x-auto">
+      <div className="min-w-[900px]">
+        <FullCalendar {...calendarProps} />
+      </div>
+    </div>
+  ) : (
+    <FullCalendar {...calendarProps} />
+  )}
+</div>
         </div>
 
         {/* Booking Modal */}
