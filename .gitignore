@@ -1,19 +1,94 @@
-# env
+# ======================
+# ENV FILES
+# ======================
 .env
 .env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
-# build
+# ======================
+# BUILD / DEPENDENCIES
+# ======================
 dist
 node_modules
+build/Release
+jspm_packages
+web_modules
 
-# Supabase temp / binaries
+# ======================
+# SUPABASE
+# ======================
 supabase/.temp
 supabase_windows_amd64
 supabase.exe
 
-# Generated PDFs / artifacts
+# ======================
+# GENERATED FILES
+# ======================
 *.pdf
+*.tgz
 
-# OS
+# ======================
+# LOGS
+# ======================
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ======================
+# CACHE / TEMP
+# ======================
+.cache
+.parcel-cache
+.npm
+.eslintcache
+.stylelintcache
+.nyc_output
+coverage
+*.lcov
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+.tsbuildinfo
+.node_repl_history
+
+# ======================
+# FRAMEWORK OUTPUTS
+# ======================
+.next
+out
+.nuxt
+.vuepress/dist
+.docusaurus
+
+# ======================
+# SERVERLESS / DB
+# ======================
+.serverless/
+.dynamodb/
+
+# ======================
+# OS FILES
+# ======================
 .DS_Store
 Thumbs.db
+
+# ======================
+# VS CODE
+# ======================
+.vscode-test
+
+# ======================
+# YARN v2
+# ======================
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*

@@ -1,4 +1,3 @@
- 
 # A'QUA D'OR – React + Supabase (No backend)
 
 ## ⚙️ Prérequis
