@@ -927,7 +927,7 @@ setShowModal(false);
 
             <div className="flex gap-2 flex-wrap justify-end">
               {[
-                !isMobile && { label: "Mois", view: "dayGridMonth" },
+                { label: "Mois", view: "dayGridMonth" },
                 { label: "Semaine", view: "timeGridWeek" },
                 { label: "Jour", view: "timeGridDay" },
                 { label: "Agenda", view: "listWeek" },
