@@ -1,0 +1,101 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===============================
+   Reusable component classes
+   =============================== */
+@layer components {
+  .input {
+    @apply w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring focus:ring-aquaBlue;
+  }
+
+  .select {
+    @apply w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring focus:ring-aquaBlue bg-white;
+  }
+
+  .label {
+    @apply block text-sm font-medium mb-1;
+  }
+
+  .btn {
+    @apply px-3 py-2 rounded-lg border border-gray-300 bg-gray-100 hover:bg-gray-200;
+  }
+
+  .btn-primary {
+    @apply bg-aquaBlue text-white hover:bg-blue-600;
+  }
+
+  .btn-sm {
+    @apply text-xs px-2 py-1;
+  }
+
+  .card {
+    @apply p-4 rounded-xl shadow bg-white;
+  }
+
+  /* ===== PhoneInput should visually match .input ===== */
+
+.PhoneInput {
+  @apply w-full flex items-center border rounded-lg px-3 py-2
+         focus-within:outline-none focus-within:ring focus-within:ring-aquaBlue;
+}
+
+.PhoneInputInput {
+  @apply flex-1 border-0 p-0 text-sm outline-none focus:ring-0;
+}
+
+.PhoneInputCountry {
+  @apply mr-2 flex items-center;
+}
+
+.PhoneInputCountrySelect {
+  @apply bg-transparent border-0 text-sm pr-1 cursor-pointer;
+}
+
+.PhoneInputCountryIcon {
+  @apply w-6 h-4 rounded-sm overflow-hidden;
+}
+
+.PhoneInput--disabled {
+  @apply bg-gray-100 cursor-not-allowed;
+}
+}
+
+/* ===============================
+   Brand colors (global utilities)
+   =============================== */
+.text-aquaBlue {
+  color: #44A8F0;
+}
+.bg-aquaBlue {
+  background-color: #44A8F0;
+}
+.bg-aquaOrange {
+  background-color: #FF8A00;
+}
+.bg-aquaYellow {
+  background-color: #FFC400;
+}
+.bg-aquaRed {
+  background-color: #FF4D4D;
+}
+
+/* ===============================
+   Invoice layout fix
+   =============================== */
+.meta {
+  width: 45%;
+  text-align: left;
+  font-size: 0.8em;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+  line-height: 1.4;
+  overflow: visible !important;
+  display: block !important;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}

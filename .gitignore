@@ -1,0 +1,19 @@
+# env
+.env
+.env.local
+
+# build
+dist
+node_modules
+
+# Supabase temp / binaries
+supabase/.temp
+supabase_windows_amd64
+supabase.exe
+
+# Generated PDFs / artifacts
+*.pdf
+
+# OS
+.DS_Store
+Thumbs.db

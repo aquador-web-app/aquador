@@ -1,0 +1,436 @@
+// src/pages/user/UserAttendance.jsx
+import { useEffect, useState } from "react";
+import { supabase } from "../../lib/supabaseClient";
+import { motion } from "framer-motion";
+import { formatDateFrSafe } from "../../lib/dateUtils";
+import { FaQrcode } from "react-icons/fa";
+import { useGlobalAlert } from "../../components/GlobalAlert";
+
+
+export default function UserAttendance({ userId }) {
+  const [sessions, setSessions] = useState([]);
+  const [profile, setProfile] = useState(null);
+  const [children, setChildren] = useState([]);
+  const [selectedProfile, setSelectedProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const { showAlert, showConfirm } = useGlobalAlert();
+
+
+  // 1️⃣ Load parent + children safely
+useEffect(() => {
+  if (!userId) return;
+  (async () => {
+    setLoading(true);
+
+    // ✅ Fetch parent
+    const { data: parent, error: parentErr } = await supabase
+      .from("profiles_with_unpaid")
+      .select("id, full_name, parent_id, signup_type")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (parentErr) {
+      console.error("❌ Parent load error:", parentErr);
+      setLoading(false);
+      return;
+    }
+
+    // ✅ Fetch children
+    const { data: kids, error: kidsErr } = await supabase
+      .from("profiles_with_unpaid")
+      .select("id, full_name, parent_id")
+      .eq("parent_id", userId);
+
+    if (kidsErr) {
+      console.error("❌ Children load error:", kidsErr);
+      setLoading(false);
+      return;
+    }
+
+    setProfile(parent || null);
+    setChildren(kids || []);
+
+    let chosenProfile = null;
+    if (parent?.signup_type === "children_only" && (kids?.length || 0) > 0) {
+      chosenProfile = kids[0];
+    } else {
+      chosenProfile = parent || kids?.[0] || null;
+    }
+
+    // ✅ Fetch QR code from main profiles table
+    if (chosenProfile?.id) {
+      const { data: qrData, error: qrErr } = await supabase
+        .from("profiles")
+        .select("qr_code_url")
+        .eq("id", chosenProfile.id)
+        .maybeSingle();
+
+      if (!qrErr && qrData) {
+        chosenProfile.qr_code_url = qrData.qr_code_url;
+      }
+    }
+
+    setSelectedProfile(chosenProfile);
+    setSessions([]);
+    setLoading(false);
+  })();
+}, [userId]);
+
+// 👇 Fetch QR when selectedProfile changes
+useEffect(() => {
+  if (!selectedProfile?.id) return;
+  (async () => {
+    const { data: qrData, error: qrErr } = await supabase
+      .from("profiles")
+      .select("qr_code_url")
+      .eq("id", selectedProfile.id)
+      .maybeSingle();
+    if (!qrErr && qrData) {
+      setSelectedProfile((prev) => ({ ...prev, qr_code_url: qrData.qr_code_url }));
+    }
+  })();
+}, [selectedProfile?.id]);
+
+
+  // 2️⃣ Load attendance data for selected profile
+  useEffect(() => {
+    if (!selectedProfile) return;
+    (async () => {
+      setLoading(true);
+
+      /** Load enrollments **/
+      const { data: enrollments, error: enrollErr } = await supabase
+        .from("enrollments")
+        .select("id, profile_id, course_id, session_group, start_date, status")
+        .eq("profile_id", selectedProfile.id)
+        .eq("status", "active");
+
+      if (enrollErr) {
+        console.error("❌ Enrollment load error:", enrollErr);
+        setLoading(false);
+        return;
+      }
+
+      if (!enrollments?.length) {
+        setSessions([]);
+        setLoading(false);
+        return;
+      }
+
+      const sessionGroups = enrollments.map((e) => e.session_group);
+      const enrollmentIds = enrollments.map((e) => e.id);
+
+      /** Load sessions **/
+      // Load all sessions for the session_groups
+const { data: allSessions, error: sessErr } = await supabase
+  .from("sessions")
+  .select(
+    "id, session_group, start_date, day_of_week, start_time, duration_hours, status"
+  )
+  .in("session_group", sessionGroups)
+  .neq("status", "deleted")
+  .order("start_date", { ascending: true });
+
+if (sessErr) {
+  console.error("❌ Session load error:", sessErr);
+  setLoading(false);
+  return;
+}
+
+// ✅ Filter sessions by each enrollment’s start_date
+const sessionsData = allSessions.filter((s) => {
+  const enroll = enrollments.find((e) => e.session_group === s.session_group);
+  if (!enroll) return false;
+  return new Date(s.start_date) >= new Date(enroll.start_date);
+});
+
+
+      if (sessErr) {
+        console.error("❌ Session load error:", sessErr);
+        setLoading(false);
+        return;
+      }
+
+      /** Load courses **/
+      const { data: courses } = await supabase.from("courses").select("id, name");
+      const courseMap = Object.fromEntries((courses || []).map((c) => [c.id, c.name]));
+
+      /** Load attendance **/
+      const { data: attendanceData, error: attErr } = await supabase
+        .from("attendance")
+        .select("enrollment_id, attended_on, status, check_in_time, check_out_time, marked_by")
+        .in("enrollment_id", enrollmentIds);
+
+      if (attErr) {
+        console.error("❌ Attendance load error:", attErr);
+      }
+
+      const attendanceMap = {};
+      (attendanceData || []).forEach((a) => {
+        const key = `${a.enrollment_id}_${a.attended_on}`;
+        attendanceMap[key] = a;
+      });
+
+      /** Merge **/
+      const combined = (sessionsData || []).map((s) => {
+        const enroll = enrollments.find((e) => e.session_group === s.session_group);
+        const a = attendanceMap[`${enroll?.id}_${s.start_date}`];
+        const normalizedStatus =
+          a?.status === "excused" ? "unmarked" : a?.status || "unmarked";
+
+        return {
+          session_id: s.id,
+          enrollment_id: enroll?.id,
+          profile_id: enroll?.profile_id,
+          course_name: courseMap[enroll?.course_id] || "—",
+          start_date: s.start_date,
+          day_of_week: s.day_of_week,
+          start_time: s.start_time,
+          duration_hours: s.duration_hours,
+          attendance_status: normalizedStatus,
+          check_in_time: a?.check_in_time || null,
+          check_out_time: a?.check_out_time || null,
+          marked_by: a?.marked_by || "user",
+        };
+      });
+
+      setSessions(combined);
+      setLoading(false);
+    })();
+  }, [selectedProfile]);
+
+  /** === Mark absence === **/
+  const markAbsent = async (enrollmentId, date, currentStatus) => {
+  try {
+    let question = "";
+
+    if (currentStatus === "unmarked") {
+      // User is about to mark ABSENT
+      question = `Êtes-vous sûr de vouloir marquer « absent » pour le cours du ${formatDateFrSafe(date)} ?`;
+    } else {
+      // User is undoing → confirming presence
+      question = `Voulez-vous reconfirmer votre présence pour le cours du ${formatDateFrSafe(date)} ?`;
+    }
+
+    const wants = await showConfirm(question);
+    if (!wants) return;
+
+    const FUNCTION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/mark-absent`;
+
+    const res = await fetch(FUNCTION_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({
+        enrollment_id: enrollmentId,
+        attended_on: date,
+        undo: currentStatus === "absent", // undo only when already absent
+      }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Unknown error");
+
+    // Update UI
+    setSessions((prev) =>
+      prev.map((s) =>
+        s.enrollment_id === enrollmentId && s.start_date === date
+          ? {
+              ...s,
+              attendance_status:
+                currentStatus === "absent" ? "unmarked" : "absent",
+              check_in_time: null,
+              check_out_time: null,
+            }
+          : s
+      )
+    );
+
+    await showAlert(data.message);
+
+  } catch (err) {
+    await showAlert("❌ Erreur lors du marquage : " + err.message);
+  }
+};
+
+
+  /** === Utility functions === **/
+  const dayLabel = (d) => {
+    const days = [
+      "Dimanche",
+      "Lundi",
+      "Mardi",
+      "Mercredi",
+      "Jeudi",
+      "Vendredi",
+      "Samedi",
+    ];
+    return days[(d - 1 + 7) % 7] || "—";
+  };
+
+  const addHoursToTimeStr = (timeStr, hoursToAdd) => {
+    if (!timeStr) return "";
+    const [h, m] = timeStr.split(":").map(Number);
+    const base = new Date(2000, 0, 1, h, m);
+    base.setHours(base.getHours() + (hoursToAdd || 1));
+    return `${String(base.getHours()).padStart(2, "0")}:${String(
+      base.getMinutes()
+    ).padStart(2, "0")}`;
+  };
+
+  if (loading) return <div className="p-6 text-center">Chargement…</div>;
+
+  // === Build selectable profiles (parent + children) ===
+  const selectable = [
+    ...(profile?.signup_type === "children_only" ? [] : [profile]),
+    ...(children || []),
+  ].filter(Boolean);
+
+  return (
+    <div className="p-6 space-y-6">
+      {/* === QR Code Section === */}
+      <motion.div
+        className="p-6 bg-white rounded-2xl shadow text-center"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+      >
+        <h2 className="text-2xl font-bold text-gray-800 flex items-center justify-center gap-2">
+          <FaQrcode className="text-aquaBlue" /> Mon code de présence
+        </h2>
+
+        {/* Dropdown or static full name */}
+        {selectable.length > 1 ? (
+          <div className="mt-3 flex justify-center">
+            <select
+              value={selectedProfile?.id || ""}
+              onChange={(e) => {
+                const p = selectable.find((x) => x.id === e.target.value);
+                setSelectedProfile(p || null);
+              }}
+              className="bg-white text-gray-700 border-none rounded-lg px-4 py-2 text-sm font-medium shadow focus:ring-4 focus:ring-blue-200 transition text-center"
+            >
+              {selectable.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.full_name}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <p className="text-lg font-semibold mt-2">
+            {selectable[0]?.full_name ?? "—"}
+          </p>
+        )}
+
+        {selectedProfile?.qr_code_url ? (
+          <img
+            src={selectedProfile.qr_code_url}
+            alt="QR Code"
+            className="mx-auto w-40 h-40 border border-gray-200 rounded-xl mt-3"
+          />
+        ) : (
+          <p className="text-gray-500 italic mt-3">Aucun code disponible</p>
+        )}
+      </motion.div>
+
+      {/* === Sessions Table === */}
+      <div className="bg-white p-4 rounded-lg shadow">
+        <h3 className="text-lg font-bold text-gray-800 mb-4">
+          Liste des séances
+        </h3>
+        <table className="min-w-full text-sm border-collapse">
+          <thead className="bg-aquaBlue text-white">
+            <tr>
+              <th className="px-4 py-2 text-left">Cours</th>
+              <th className="px-4 py-2 text-left">Jour</th>
+              <th className="px-4 py-2 text-left">Date</th>
+              <th className="px-4 py-2 text-left">Heure</th>
+              <th className="px-4 py-2 text-center">Présent</th>
+              <th className="px-4 py-2 text-center">Absent</th>
+              <th className="px-4 py-2 text-center">Entrée</th>
+              <th className="px-4 py-2 text-center">Sortie</th>
+              <th className="px-4 py-2 text-center">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sessions.length === 0 && (
+              <tr>
+                <td
+                  colSpan="9"
+                  className="text-center py-4 text-gray-500 italic"
+                >
+                  Aucune séance trouvée
+                </td>
+              </tr>
+            )}
+
+            {sessions.map((s) => (
+              <tr key={s.session_id} className="border-t hover:bg-gray-50">
+                <td className="px-4 py-2 font-semibold text-blue-700">
+                  {s.course_name || "—"}
+                </td>
+                <td className="px-4 py-2">{dayLabel(s.day_of_week)}</td>
+                <td className="px-4 py-2">{formatDateFrSafe(s.start_date)}</td>
+                <td className="px-4 py-2">
+                  {s.start_time?.slice(0, 5)}–
+                  {addHoursToTimeStr(s.start_time, s.duration_hours)}
+                </td>
+
+                <td className="px-4 py-2 text-center">
+                  {s.attendance_status === "present" ? "✔" : "-"}
+                </td>
+                <td className="px-4 py-2 text-center">
+                  {s.attendance_status === "absent" ? "✘" : "-"}
+                </td>
+
+                <td className="px-4 py-2 text-center">
+                  {s.check_in_time
+                    ? new Date(s.check_in_time).toLocaleTimeString("fr-FR", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })
+                    : "-"}
+                </td>
+                <td className="px-4 py-2 text-center">
+                  {s.check_out_time
+                    ? new Date(s.check_out_time).toLocaleTimeString("fr-FR", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })
+                    : "-"}
+                </td>
+
+                <td className="px-4 py-2 text-center">
+                  {s.attendance_status === "absent" && s.marked_by === "user" ? (
+                    <button
+                      onClick={() =>
+                        markAbsent(s.enrollment_id, s.start_date, "absent")
+                      }
+                      className="px-3 py-1 bg-gray-500 text-white rounded hover:bg-gray-600 text-xs"
+                    >
+                      Undo
+                    </button>
+                  ) : s.attendance_status === "unmarked" ? (
+                    <button
+                      onClick={() =>
+                        markAbsent(s.enrollment_id, s.start_date, "unmarked")
+                      }
+                      className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-xs"
+                    >
+                      Marquer absent
+                    </button>
+                  ) : (
+                    <span className="text-gray-400 text-xs italic">—</span>
+                  )}
+                </td>
+
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}

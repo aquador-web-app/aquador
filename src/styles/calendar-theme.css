@@ -1,0 +1,591 @@
+/* --- Base Container --- */
+.calendar-container {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  padding: 1rem;
+  box-sizing: border-box;
+}
+
+.calendar-wrapper {
+  width: 100%;
+  max-width: 1200px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+  padding: 1.25rem;
+}
+
+/* --- Legend Row --- */
+.calendar-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.calendar-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: 9999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: #f9fafb;
+  color: #1e293b;
+  border: 1px solid #e5e7eb;
+}
+
+/* --- FullCalendar Layout --- */
+.fc {
+  font-family: "Inter", "Poppins", "Segoe UI", sans-serif;
+  border-radius: 16px;
+}
+
+.fc-theme-standard .fc-scrollgrid {
+  border: none;
+  background: #fff;
+}
+
+/* Toolbar */
+.fc .fc-toolbar.fc-header-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 1rem;
+}
+.fc .fc-toolbar-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+/* --- Day Card Style --- */
+.fc .fc-daygrid-day {
+  background: #fff;
+  border: none;
+  padding: 6px;
+}
+
+.fc .fc-daygrid-day-frame {
+  background: #fff;
+  border: 1px solid #f1f5f9;
+  border-radius: 12px;
+  padding: 1px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s ease-in-out;
+  height: 135px; /* adjust to your preference */
+  display: flex;
+  flex-direction: column;
+}
+
+.fc .fc-daygrid-day-frame:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
+  background: #fdfdfd;
+}
+
+/* Today card */
+.fc .fc-day-today .fc-daygrid-day-frame {
+  border: 3px solid #93c5fd;
+  background: #f0f9ff;
+  box-shadow: 0 3px 8px rgba(59, 130, 246, 0.2);
+}
+.fc-day-today {
+  background: #ffffff !important; /* soft aqua tint */
+}
+
+
+/* Day number positioning */
+.fc .fc-daygrid-day-number {
+  font-weight: 600;
+  color: #1e293b;
+  align-self: flex-end;
+  font-size: 0.9rem;
+}
+/* Move day numbers to the top-right corner */
+.fc .fc-daygrid-day-number {
+  position: absolute !important;
+  top: 6px;              /* distance from top edge */
+  right: 8px;            /* distance from right edge */
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #1e293b;        /* or your brand color */
+  z-index: 5;
+}
+
+/* Ensure each day cell allows absolute positioning */
+.fc .fc-daygrid-day-frame {
+  position: relative; /* enable absolute positioning inside */
+}
+/* ensure day number stays visible above events */
+.fc .fc-daygrid-day-frame {
+  position: relative;
+  padding-top: 24px !important; /* ⬅ add space under the number */
+}
+
+/* keep the number pinned top right */
+.fc .fc-daygrid-day-number {
+  position: absolute !important;
+  top: 6px;
+  right: 8px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #1e293b;
+  padding: 2px 4px;
+  border-radius: 6px;
+}
+
+
+
+/* Weekday headers */
+.fc .fc-col-header-cell {
+  background: #f8fafc;
+  border: none;
+  font-weight: 600;
+}
+.fc .fc-col-header-cell-cushion {
+  color: #475569;
+  padding: 0.75rem 0;
+  text-transform: capitalize;
+}
+
+/* 🌿 Default (regular courses) */
+.fc-event {
+  background: #19ad57;
+  color: white;
+  border-radius: 30px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 1px 5px;
+  min-height: 28px;
+  width: 100%;
+  margin: 4px auto;
+  box-shadow: 0 2px 6px rgba(25, 173, 87, 0.25);
+  transition: all 0.2s ease-in-out;
+}
+.fc-event:hover {
+  transform: scale(1.03);
+}
+
+/* 🟥 Make "Fermé" span full width in list (agenda) view */
+.fc-list-event.aq-ferme {
+  background-color: #ef4444 !important; /* red background */
+  color: white !important;
+  border: none !important;
+  font-weight: 600;
+  text-align: center;
+}
+
+.fc-list-event.aq-ferme .fc-list-event-title {
+  flex: 1;
+  justify-content: center;
+  display: flex;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.fc-list-event.aq-ferme td {
+  background: transparent !important;
+  border: none !important;
+}
+
+
+
+/* 🟡 Aquafitness */
+.fc-event.aq-fitness {
+  background: linear-gradient(135deg, #fef9c3, #fde047);
+  color: #78350f;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  padding: 10px;
+  min-height: 40px;
+  width: 95%;
+  font-weight: 700;
+  text-transform: uppercase;
+  box-shadow: 0 2px 8px rgba(250, 204, 21, 0.3);
+}
+
+/* 🔵 Club Booking — Daypass */
+.fc-event.aq-booking-daypass {
+  background: #3b82f6 !important;          /* bright blue */
+  color: #ffffff !important;
+  border-radius: 30px;
+  font-size: 0.85rem;
+  padding: 1px 15px;
+  width: 100%;
+  height: 5px;
+  font-weight: 600;
+  text-align: center;
+  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.3);
+  transition: all 0.2s ease-in-out;
+}
+.fc-event.aq-booking-daypass:hover {
+  background: #2563eb !important;          /* darker blue hover */
+  transform: scale(1.03);
+}
+
+/* 🔴 Club Booking — Full reservation (blocks venue) */
+.fc-event.aq-booking-full {
+  background: #ef4444 !important;          /* red for full booking */
+  color: #ffffff !important;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  padding: 1px 25px;
+  width: 100%;
+  height: 5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  text-align: center;
+  box-shadow: 0 3px 8px rgba(239, 68, 68, 0.3);
+  transition: all 0.2s ease-in-out;
+}
+.fc-event.aq-booking-full:hover {
+  background: #dc2626 !important;          /* darker red on hover */
+  transform: scale(1.03);
+}
+
+/* 🔴 Fermé (Closed) — Month & Week grid view */
+.fc-event.aq-ferme {
+  background: linear-gradient(135deg, #dc2626, #ef4444) !important; /* red gradient */
+  color: #ffffff !important;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 1px 10px;
+  width: 100%;
+  min-height: 15px;
+  text-align: center;
+  letter-spacing: 0.5px;
+  box-shadow: 0 3px 8px rgba(239, 68, 68, 0.3);
+  transition: all 0.2s ease-in-out;
+}
+
+.fc-event.aq-ferme:hover {
+  background: #b91c1c !important; /* darker red hover */
+  transform: scale(1.03);
+}
+.fc-daygrid-day.fc-day-sun .fc-daygrid-day-frame {
+  background: #f3f2f2 !important;
+}
+
+
+
+/* --- Responsive Adjustments --- */
+@media (max-width: 768px) {
+  .calendar-wrapper {
+    padding: 0.75rem;
+  }
+  .calendar-legend {
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+  .fc .fc-daygrid-day-frame {
+    min-height: 90px;
+  }
+}
+
+
+/* --- Header Buttons: Fully rounded, card-like, separated --- */
+.fc .fc-button-group {
+  display: flex;
+  gap: 0.5rem; /* space between each button */
+}
+
+.fc .fc-button {
+  background: #ffffff;
+  color: #1e293b;
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 0.45rem 1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 9999px; /* fully rounded */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  transition: all 0.2s ease-in-out;
+}
+
+.fc .fc-button:hover {
+  background: #f9fafb;
+  border-color: #d1d5db;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+  transform: translateY(-1px);
+}
+
+/* Active or “Aujourd’hui” button */
+.fc .fc-button-primary,
+.fc .fc-button.fc-button-active {
+  background: #ffffff;
+  color: #1e293b;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+  border-radius: 9999px;
+}
+
+.fc .fc-button-primary:hover,
+.fc .fc-button.fc-button-active:hover {
+  background: #f8fafc;
+  border-color: #d1d5db;
+  transform: translateY(-1px);
+}
+
+/* Navigation arrows — smaller and rounded */
+.fc .fc-prev-button,
+.fc .fc-next-button {
+  padding: 0.35rem 0.75rem; /* smaller size */
+  font-size: 0.9rem;
+  border-radius: 9999px;
+}
+
+/* Disabled button (grayed out) */
+.fc .fc-button:disabled {
+  background: #f9fafb;
+  color: #9ca3af;
+  border-color: #e5e7eb;
+  box-shadow: none;
+  transform: none;
+}
+
+.fc-popover {
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  padding: 8px;
+}
+.fc-popover .fc-event {
+  margin-bottom: 4px;
+}
+
+/* 🧩 Force all day boxes to have equal height */
+.fc .fc-daygrid-day-frame {
+  min-height: 125px;     /* adjust this to your liking */
+  max-height: 200px;     /* lock height */
+  overflow: hidden;      /* prevent expansion */
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
+}
+
+
+/* Optional: hide scrollbar visually but keep scrollable */
+.fc .fc-daygrid-day-events::-webkit-scrollbar {
+  width: 4px;
+}
+.fc .fc-daygrid-day-events::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 4px;
+}
+
+.fc .fc-daygrid-day-frame::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 20px;
+  background: linear-gradient(to top, #fff, transparent);
+  pointer-events: none;
+}
+
+/* 🗓️ Capitalize day names in Agenda/List view */
+.fc-list-day-cushion {
+  text-transform: capitalize !important;
+  font-weight: 700;
+  color: #1e293b;
+  background: #f8fafc;
+  border-radius: 8px;
+}
+
+/* optional: slightly separate each day's block */
+.fc-list-day {
+  margin-top: 6px;
+  border-top: 1px solid #e5e7eb;
+}
+
+/* Hide 'Tout la journée' row label in list view */
+.fc-list-table .fc-list-event-time {
+  display: none !important;
+}
+
+/* 🗓️ LIST (Agenda) Day Section — Hover Effect */
+.fc-list-day {
+  transition: background 0.2s ease, transform 0.15s ease;
+  border-radius: 8px;
+}
+
+/* Hover color (soft blue tint, matches your Aqua theme) */
+.fc-list-day:hover {
+  background: #e22618; /* light blue hover */
+  color: #0c4a6e;
+  transform: translateY(-1px);
+  cursor: pointer;
+}
+
+/* Optional: change the inner text color when hovered */
+.fc-list-day:hover .fc-list-day-cushion {
+  color: #0c4a6e;
+}
+
+/* Make sure FullCalendar never covers modals */
+.fc,
+.fc-view-harness,
+.fc-popover {
+  z-index: 1 !important;
+}
+
+.aq-enrollment-list {
+  font-size: 0.75rem;
+  color: #475569;
+  margin-top: 2px;
+  font-style: italic;
+  display: block;
+  text-align: left;
+}
+
+.aq-enrollment-list {
+  font-size: 0.8rem;
+  color: #475569;
+  margin-top: 2px;
+  font-style: italic;
+  white-space: normal;
+  line-height: 1.3;
+}
+
+.fc .fc-daygrid-day-frame {
+  padding: 28px 10px 10px 10px; /* top, right, bottom, left */
+  border-radius: 12px;
+  width: 100%;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+}
+
+/* === Enrollment layout: auto columns & capped height === */
+.fc-timeGridDay-view .aq-enrollment-list {
+  position: relative !important;
+  display: flex !important;
+  flex-wrap: wrap;                     /* allow new columns */
+  gap: 3px 8px;                        /* spacing between rows/cols */
+  white-space: normal !important;
+  word-break: break-word;
+  overflow: hidden !important;         /* hide overflowed names */
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.15);
+  color: #f8fafc;
+  font-size: 11px;
+  line-height: 1.4;
+  max-height: 60px;                    /* limit vertical height */
+}
+
+/* 🧩 Each name as a badge */
+.fc-timeGridDay-view .aq-enrollment-list span {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  font-weight: 400;
+}
+
+/* 🧩 When list has "collapsed" state */
+.fc-timeGridDay-view .aq-enrollment-list.collapsed::after {
+  content: attr(data-more);
+  display: block;
+  text-align: right;
+  font-style: italic;
+  color: #fffb00;
+  cursor: pointer;
+  width: 100%;
+  margin-top: 2px;
+  font-size: 10px;
+}
+
+/* Tooltip style */
+.aq-student-tooltip {
+  position: absolute;
+  z-index: 1000;
+  background: #1e293b;
+  color: white;
+  font-size: 11px;
+  border-radius: 6px;
+  padding: 6px 8px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+  display: none;
+}
+
+
+/* Allow the event box to grow with its content */
+.fc-timegrid-event {
+  height: auto !important;
+  min-height: 28px;
+}
+
+/* Center event title and time in "Jour" (timeGridDay) view */
+.fc-timeGridDay-view .fc-event-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center !important;
+}
+
+/* Optional: make the font cleaner & more balanced */
+.fc-timeGridDay-view .fc-event-title {
+  font-weight: 600;
+  font-size: 1rem;
+  color: #004aad; /* A'QUA D'OR blue tone */
+}
+
+.fc-timeGridDay-view .fc-event-time {
+  font-size: 0.9rem;
+  color: #333;
+}
+
+
+/* === Center title + time for both "Jour" (Day) and "Agenda" (Week) views === */
+.fc-timeGridDay-view .fc-event-main,
+.fc-timeGridWeek-view .fc-event-main {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.9rem;
+  align-items: center;
+  justify-content: center;
+  text-align: center !important;
+  height: 100%;
+  padding: 4px;
+}
+
+.fc-timeGridDay-view .fc-event-title,
+.fc-timeGridWeek-view .fc-event-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #004aad; /* A'QUA D'OR blue */
+}
+
+.fc-timeGridDay-view .fc-event-time,
+.fc-timeGridWeek-view .fc-event-time {
+  font-size: 0.85rem;
+  color: #222;
+}
+
+
+
+/* Optional: add subtle text glow on hover */
+.fc-timeGridDay-view .fc-event:hover .fc-event-title,
+.fc-timeGridWeek-view .fc-event:hover .fc-event-title {
+  color: #003a8c;
+  text-shadow: 0 0 3px rgba(0, 74, 173, 0.3);
+}
+
+.fc-timegrid-slot-label {
+  text-align: center !important;
+  font-weight: 500;
+  color: #555;
+}
