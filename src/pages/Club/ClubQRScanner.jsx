@@ -1,6 +1,6 @@
 // src/pages/Club/ClubQRScanner.jsx
 import { useState, useEffect, useRef } from "react";
-import { QrReader } from "react-qr-reader";
+import { QrScanner } from "@yudiel/react-qr-scanner";
 import { supabase } from "../../lib/supabaseClient";
 
 export default function ClubQRScanner() {
@@ -204,11 +204,11 @@ export default function ClubQRScanner() {
         ) : (
           <div className="flex flex-col items-center space-y-4">
             <div className="w-[280px] h-[280px] rounded-xl overflow-hidden border-2 border-aquaBlue shadow-inner">
-              <QrReader
-                ref={scannerRef}
+              <QrScanner
+                onDecode={(result) => handleScan({ text: result })}
+                onError={(err) => console.error(err)}
                 constraints={{ facingMode: "environment" }}
-                onResult={(r) => handleScan(r)}
-                videoStyle={{
+                style={{
                   width: "100%",
                   height: "100%",
                   objectFit: "cover",

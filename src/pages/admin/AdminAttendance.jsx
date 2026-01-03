@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { supabase } from "../../lib/supabaseClient";
-import { QrReader } from "react-qr-reader";
+import { QrScanner } from "@yudiel/react-qr-scanner";
 import { formatDateFrSafe, formatMonth } from "../../lib/dateUtils";
 import { FaDollarSign } from "react-icons/fa";
 
@@ -559,11 +559,11 @@ const handleScan = async (result) => {
     ) : (
       <div className="flex flex-col items-center space-y-4">
         <div className="w-[320px] h-[320px] rounded-xl overflow-hidden border-2 border-aquaBlue shadow-inner">
-          <QrReader
-            ref={globalScannerRef}
+          <QrScanner
+            onDecode={(result) => handleScan({ text: result })}
+            onError={(err) => console.error(err)}
             constraints={{ facingMode: "environment" }}
-            onResult={(res) => res && handleScan(res)}
-            videoStyle={{
+            style={{
               width: "100%",
               height: "100%",
               objectFit: "cover",
@@ -830,11 +830,11 @@ const handleScan = async (result) => {
 )}
 
               <div className="w-[280px] h-[280px] rounded-lg overflow-hidden border-2 border-aquaBlue shadow-inner">
-                <QrReader
-                  ref={modalScannerRef}
+                <QrScanner
+                  onDecode={(result) => handleModalScan({ text: result })}
+                  onError={(err) => console.error(err)}
                   constraints={{ facingMode: "environment" }}
-                  onResult={(res) => res && handleModalScan(res)}
-                  videoStyle={{
+                  style={{
                     width: "100%",
                     height: "100%",
                     objectFit: "cover",
