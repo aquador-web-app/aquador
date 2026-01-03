@@ -253,7 +253,7 @@ const [overtimePricePer30, setOvertimePricePer30] = useState(0);
 
       {/* === PAGE CONTENT === */}
       <div
-        className="relative w-full min-h-[70vh] md:h-[80vh] py-20 flex items-center justify-center text-center px-4"
+        className="relative w-full min-h-[80svh] pt-[96px] pb-16 flex items-center justify-center text-center px-4"
         style={{
           backgroundImage: "url('/bgd.jpg')",
           backgroundSize: "cover",
@@ -266,14 +266,14 @@ const [overtimePricePer30, setOvertimePricePer30] = useState(0);
           <img
             src="/logo/aquador.png"
             alt="A'QUA D'OR Logo"
-            className="h-20 sm:h-24 md:h-32 mx-auto mb-6 drop-shadow-[0_6px_20px_rgba(0,0,0,0.6)]"
+            className="h-20 sm:h-24 md:h-32 max-w-[220px] mx-auto mb-6 object-contain drop-shadow-[0_6px_20px_rgba(0,0,0,0.6)]"
           />
 
-          <h1 className="text-white text-3xl sm:text-4xl md:text-5xl font-bold mb-4">
+          <h1 className="text-white text-3xl sm:text-4xl md:text-5xl font-bold mb-3 leading-tight">
             Bienvenue au Club A’QUA D’OR
           </h1>
 
-          <p className="text-white/90 text-base sm:text-lg md:text-xl mb-8">
+          <p className="text-white/90 text-base sm:text-lg md:text-xl mb-6">
             Le lieu idéal pour vos moments de détente, vos événements et vos
             rencontres.
           </p>
