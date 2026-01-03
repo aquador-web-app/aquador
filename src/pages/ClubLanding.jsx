@@ -228,21 +228,21 @@ const [overtimePricePer30, setOvertimePricePer30] = useState(0);
       )}
 
       {/* === HEADER === */}
-<header className="fixed top-0 left-0 w-full bg-white/40 backdrop-blur-md shadow z-50">
-  <div className="flex items-center justify-between py-3 px-6 relative">
+<header className="fixed top-0 left-0 w-full bg-white/70 backdrop-blur-md shadow z-50">
+  <div className="flex flex-col md:flex-row items-center gap-3 md:gap-0 md:justify-between py-3 px-4 md:px-6">
 
-    {/* LEFT — go to École portal */}
+    {/* École portal */}
     <Link
       to="/ecole"
-      className="bg-blue-500 text-white px-4 py-2 rounded-lg font-semibold shadow hover:bg-orange-600 transition"
+      className="w-full md:w-auto text-center bg-blue-500 text-white px-4 py-2 rounded-lg font-semibold shadow hover:bg-orange-600 transition"
     >
-      Accéder au portail de l’École A’QUA D’OR
+      Portail École
     </Link>
 
-    {/* RIGHT — Club sign-in */}
+    {/* Club login */}
     <Link
       to="/login"
-      className="bg-white text-blue-600 border border-blue-500 px-4 py-2 rounded-lg font-semibold shadow hover:bg-blue-100 transition"
+      className="w-full md:w-auto text-center bg-white text-blue-600 border border-blue-500 px-4 py-2 rounded-lg font-semibold shadow hover:bg-blue-100 transition"
     >
       Se connecter (Club)
     </Link>
@@ -253,7 +253,7 @@ const [overtimePricePer30, setOvertimePricePer30] = useState(0);
 
       {/* === PAGE CONTENT === */}
       <div
-        className="relative w-full h-[80vh] flex items-center justify-center text-center px-4"
+        className="relative w-full min-h-[70vh] md:h-[80vh] py-20 flex items-center justify-center text-center px-4"
         style={{
           backgroundImage: "url('/bgd.jpg')",
           backgroundSize: "cover",
@@ -266,21 +266,21 @@ const [overtimePricePer30, setOvertimePricePer30] = useState(0);
           <img
             src="/logo/aquador.png"
             alt="A'QUA D'OR Logo"
-            className="h-24 md:h-32 mx-auto mb-6 drop-shadow-[0_6px_20px_rgba(0,0,0,0.6)]"
+            className="h-20 sm:h-24 md:h-32 mx-auto mb-6 drop-shadow-[0_6px_20px_rgba(0,0,0,0.6)]"
           />
 
-          <h1 className="text-white text-4xl md:text-5xl font-bold mb-4">
+          <h1 className="text-white text-3xl sm:text-4xl md:text-5xl font-bold mb-4">
             Bienvenue au Club A’QUA D’OR
           </h1>
 
-          <p className="text-white/90 text-lg md:text-xl mb-8">
+          <p className="text-white/90 text-base sm:text-lg md:text-xl mb-8">
             Le lieu idéal pour vos moments de détente, vos événements et vos
             rencontres.
           </p>
 
           <Link
             to="/club/signup"
-            className="bg-aquaBlue text-white px-8 py-3 rounded-xl text-lg font-semibold hover:bg-orange-600 shadow-lg transition"
+            className="inline-block w-full sm:w-auto bg-aquaBlue text-white px-8 py-3 rounded-xl text-base sm:text-lg font-semibold hover:bg-orange-600 shadow-lg transition"
           >
             Souscrire à un plan de membership
           </Link>
