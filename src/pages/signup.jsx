@@ -19,7 +19,6 @@ export default function Signup() {
   const navigate = useNavigate()
   const [showPassword, setShowPassword] = useState(false)
   const [showDocsModal, setShowDocsModal] = useState(false);
-  const [docsSigned, setDocsSigned] = useState(false);
   const [signedDocs, setSignedDocs] = useState([]); // [{form_name, url}]
   const [err, setErr] = useState('')
   const [country, setCountry] = useState("HT");
@@ -57,9 +56,9 @@ useEffect(() => {
     e.preventDefault()
     setErr('')
 
-    if (!docsSigned) {
-      setErr("Veuillez d’abord signer les documents avant de continuer.")
-      return
+    if (signedDocs.length < 2) {
+      setErr("Veuillez signer les documents requis avant de continuer.");
+      return;
     }
 
     if (form.phone && !isValidPhoneNumber(form.phone)) {
@@ -326,36 +325,31 @@ if (!session?.access_token) {
 
           {/* Button area */}
 <div className="md:col-span-2">
-  {!docsSigned ? (
-    <button
-  type="button"
-  className="bg-blue-600 text-white px-6 py-3 rounded-xl text-lg font-semibold shadow hover:bg-orange-600 transition w-full"
-  onClick={async () => {
-    setErr("");
+  <button
+    type={signedDocs.length >= 2 ? "submit" : "button"}
+    className="bg-blue-600 text-white px-6 py-3 rounded-xl text-lg font-semibold shadow hover:bg-orange-600 transition w-full"
+    onClick={() => {
+      if (signedDocs.length < 2) {
+        setErr("");
 
-   // Validate required fields
-  if (!form.first_name || !form.last_name || !form.birth_date || !form.email) {
-    setErr("Veuillez remplir tous les champs requis.");
-    return;
-  }
+        // Optional but recommended validation before opening docs
+        if (!form.first_name || !form.last_name || !form.birth_date || !form.email) {
+          setErr("Veuillez remplir tous les champs requis.");
+          return;
+        }
 
-
-    // 3️⃣ Now open the modal safely
-    setShowDocsModal(true);
-  }}
->
-  Soumettre mon application
-</button>
-
-  ) : (
-    <button
-      className="bg-blue-600 text-white px-6 py-3 rounded-xl text-lg font-semibold shadow hover:bg-orange-600 transition w-full"
-      type="submit"
-    >
-      Créer mon compte
-    </button>
-  )}
+        setShowDocsModal(true);
+      }
+    }}
+  >
+    {signedDocs.length >= 2
+      ? "Créer mon compte"
+      : signedDocs.length > 0
+        ? "Continuer la signature des documents"
+        : "Signer les documents requis"}
+  </button>
 </div>
+
 
         </form>
 
@@ -366,7 +360,6 @@ if (!session?.access_token) {
             onClose={() => setShowDocsModal(false)}
             onDone={(results) => {
               setSignedDocs(results);
-              setDocsSigned(true);
               setShowDocsModal(false);
             }}
           />
