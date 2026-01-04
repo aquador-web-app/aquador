@@ -101,6 +101,19 @@ export default function SignupDocsModal({ fullName = "", signupType = "me", onCl
 const [logoUrl, setLogoUrl] = useState("");
 
 useEffect(() => {
+  const onKeyDown = (e) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  };
+
+  document.addEventListener("keydown", onKeyDown);
+  return () => document.removeEventListener("keydown", onKeyDown);
+}, []);
+
+
+useEffect(() => {
   (async () => {
     const { data } = supabase.storage.from("assets").getPublicUrl("aquador.png");
     const publicUrl = data?.publicUrl;
@@ -793,10 +806,8 @@ async function saveContent() {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-2">
       {/* backdrop */}
-      <div
-        className="absolute inset-0 bg-black/60"
-        onClick={() => onClose?.()}
-      />
+      <div className="absolute inset-0 bg-black/60" />
+
       <div className="relative bg-white w-full max-w-4xl max-h-[92vh] rounded-2xl shadow-xl flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b">
