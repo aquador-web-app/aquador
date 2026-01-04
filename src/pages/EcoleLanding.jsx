@@ -98,7 +98,7 @@ export default function EcoleLanding() {
               initial="hidden"
               animate="visible"
               exit="exit"
-              className="relative rounded-2xl overflow-hidden min-h-[60vh] flex items-center justify-center"
+              className="relative rounded-2xl overflow-hidden min-h-[60vh] flex items-center justify-center mt-4"
               style={{
                 backgroundImage: "url('/img/bgd.jpg')",
                 backgroundSize: "cover",

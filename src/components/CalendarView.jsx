@@ -910,8 +910,8 @@ setShowModal(false);
       <div className="flex justify-center px-3 md:px-6">
         <div className="aq-card w-full max-w-7xl">
           {/* Toolbar */}
-          <div className="flex justify-between items-center mb-4 flex-wrap gap-3">
-            <div className="flex items-center gap-2">
+          <div className="mb-4 grid grid-cols-1 md:grid-cols-[auto_1fr_auto] gap-3 items-center">
+            <div className="flex items-center gap-2 justify-center md:justify-start">
               <button
                 onClick={() => calendarRef.current?.getApi().prev()}
                 className="bg-white border rounded-full px-3 py-1 text-gray-700 shadow-sm hover:bg-gray-50 transition"
@@ -932,43 +932,48 @@ setShowModal(false);
               </button>
             </div>
 
-            <h2 className="font-semibold text-lg text-gray-800">
+            <h2 className="font-semibold text-base md:text-lg text-gray-800 text-center">
               {currentTitle.charAt(0).toUpperCase() + currentTitle.slice(1)}
             </h2>
 
-            <div className="flex gap-2 flex-wrap justify-end">
-              {[
-                { label: "Mois", view: "dayGridMonth" },
-                { label: "Semaine", view: "timeGridWeek" },
-                { label: "Jour", view: "timeGridDay" },
-                { label: "Agenda", view: "listWeek" },
-              ]
-                .filter(Boolean)
-                .map((v) => (
+            <div className="flex gap-2 justify-center md:justify-end overflow-x-auto md:overflow-visible">
+              <div className="flex gap-2 min-w-max">
+                {[
+                  { label: "Mois", view: "dayGridMonth" },
+                  { label: "Semaine", view: "timeGridWeek" },
+                  { label: "Jour", view: "timeGridDay" },
+                  { label: "Agenda", view: "listWeek" },
+                ].map((v) => (
                   <button
                     key={v.view}
                     onClick={() =>
                       calendarRef.current?.getApi().changeView(v.view)
                     }
-                    className="bg-white border rounded-full px-3 py-1 text-sm text-gray-700 shadow-sm hover:bg-gray-50 transition"
+                    className={`px-3 py-1 text-sm rounded-full border shadow-sm transition
+                      ${
+                        currentView === v.view
+                          ? "bg-blue-600 text-white"
+                          : "bg-white text-gray-700 hover:bg-gray-50"
+                      }`}
                   >
                     {v.label}
                   </button>
                 ))}
+              </div>
             </div>
           </div>
 
           <div className="aq-calendar-shell">
-  {currentView === "dayGridMonth" ? (
-    <div className="overflow-x-auto">
-      <div className="min-w-[900px]">
-        <FullCalendar {...calendarProps} />
-      </div>
-    </div>
-  ) : (
-    <FullCalendar {...calendarProps} />
-  )}
-</div>
+            {currentView === "dayGridMonth" ? (
+              <div className="overflow-x-auto">
+                <div className="min-w-[900px]">
+                  <FullCalendar {...calendarProps} />
+                </div>
+              </div>
+            ) : (
+              <FullCalendar {...calendarProps} />
+            )}
+          </div>
         </div>
 
         {/* Booking Modal */}
