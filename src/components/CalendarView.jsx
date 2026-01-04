@@ -149,6 +149,17 @@ const finalEstimate =
   const defaultDurationMinutes =
   form.booking_type === "full" ? 5 * 60 : 4 * 60;
 
+  useEffect(() => {
+  if (showModal) {
+    document.body.style.overflow = "hidden";
+  } else {
+    document.body.style.overflow = "";
+  }
+  return () => {
+    document.body.style.overflow = "";
+  };
+}, [showModal]);
+
 
 useEffect(() => {
   if (!form.start_time) return;
@@ -962,12 +973,10 @@ setShowModal(false);
 
         {/* Booking Modal */}
         {showModal && selectedSlot?.date instanceof Date && !isNaN(selectedSlot.date) && (
-          <div
-            className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[999]"
-            onClick={() => setShowModal(false)}
-          >
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[999]">
+
             <div
-              className="bg-white rounded-2xl shadow-2xl w-[95%] max-w-2xl relative overflow-hidden"
+              className="bg-white rounded-2xl shadow-2xl w-[95%] max-w-2xl max-h-[90vh] relative flex flex-col"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
@@ -997,7 +1006,7 @@ setShowModal(false);
 )}
 
 
-              <form onSubmit={submitBooking} className="p-6 space-y-5">
+              <form onSubmit={submitBooking} className="flex-1 overflow-y-auto p-6 space-y-5">
                 {/* Top info row: date + estimation (from DB) */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
@@ -1376,7 +1385,7 @@ setShowModal(false);
                 </div>
 
                 {/* Footer actions */}
-                <div className="flex items-center justify-end gap-3 pt-2">
+                <div className="sticky bottom-0 bg-white border-t px-6 py-4 flex items-center justify-end gap-3">
                   <button
                     type="button"
                     className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
