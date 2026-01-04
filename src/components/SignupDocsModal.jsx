@@ -96,6 +96,8 @@ export default function SignupDocsModal({ fullName = "", signupType = "me", onCl
   const [step, setStep] = useState(1); // 1=Reglements, 2=Accord, 3=Consentement
   const [saving, setSaving] = useState(false);
   const [uiError, setUiError] = useState("");
+  const contentRef = useRef(null);
+
 
   // top of component
 const [logoUrl, setLogoUrl] = useState("");
@@ -111,6 +113,24 @@ useEffect(() => {
   document.addEventListener("keydown", onKeyDown);
   return () => document.removeEventListener("keydown", onKeyDown);
 }, []);
+
+useEffect(() => {
+  if (contentRef.current) {
+    contentRef.current.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  }
+}, [step]);
+
+useEffect(() => {
+  if (uiError && contentRef.current) {
+    contentRef.current.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  }
+}, [uiError]);
 
 
 useEffect(() => {
@@ -825,7 +845,15 @@ async function saveContent() {
         </div>
 
         {/* Content scroll */}
-        <div className="overflow-auto px-4 sm:px-6 py-4 space-y-4">
+        <div
+          ref={contentRef}
+          className="overflow-auto px-4 sm:px-6 py-4 space-y-4"
+        >
+          {uiError && (
+          <div className="sticky top-0 z-20 mb-3 rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 shadow">
+            ⚠️ {uiError}
+          </div>
+        )}
           {/* Small form area (inputs) */}
           {step === 2 && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1089,13 +1117,6 @@ async function saveContent() {
               </>
             )}
           </div>
-
-          {/* Error */}
-          {uiError ? (
-            <div className="text-red-600 text-sm border border-red-200 bg-red-50 rounded-md px-3 py-2">
-              {uiError}
-            </div>
-          ) : null}
         </div>
 
         {/* Footer buttons */}
