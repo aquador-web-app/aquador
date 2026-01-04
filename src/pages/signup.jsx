@@ -69,24 +69,39 @@ useEffect(() => {
 
 
     try {
-      // The user was already created before modal.
-// So retrieve authenticated user instead:
+// 1️⃣ Create auth user
+const { data: authRes, error: authErr } = await supabase.auth.signUp({
+  email: form.email,
+  password: form.password,
+  options: {
+    data: {
+      first_name: form.first_name,
+      middle_name: form.middle_name,
+      last_name: form.last_name,
+      sex: form.sex,
+      phone: form.phone,
+      address: form.address,
+      birth_date: form.birth_date,
+      medical_note: form.medical_note,
+      first_lesson: form.first_lesson,
+      signup_type: form.signup_type,
+      referrer_code: refPrefill || null,
+    },
+  },
+});
+
+if (authErr) throw authErr;
+
+const uid = authRes.user.id;
+
 const {
   data: { session },
 } = await supabase.auth.getSession();
 
-if (!session?.user) {
-  setErr("Session non initialisée. Veuillez vous reconnecter.");
-  return;
+if (!session?.access_token) {
+  throw new Error("Session non disponible après création du compte.");
 }
 
-const uid = session.user.id;
-
-
-if (!uid) {
-  setErr("Impossible de récupérer l'utilisateur.");
-  return;
-}
       // Step 2: Generate unique referral_code
       let uniqueCode = baseCode.toUpperCase()
       let suffix = 0
@@ -101,8 +116,6 @@ if (!uid) {
         uniqueCode = `${baseCode.toUpperCase()}${suffix}`
       }
 
-      // Step 3: Update the profile with that referral code
-      await supabase.from('profiles').update({ referral_code: uniqueCode }).eq('id', uid)
       console.log('✅ Referral code saved to profile:', uniqueCode)
 
       // Step 4: Trigger the create-user Edge Function manually
@@ -129,7 +142,7 @@ if (!uid) {
       role: "student",
       signup_type: form.signup_type || "me",
       parent_id: null,
-      referral_code: "",
+      referral_code: uniqueCode, 
       referrer_code: refPrefill || null,
       referrer_user_id: null,
       first_lesson: form.first_lesson || "",
@@ -320,44 +333,11 @@ if (!uid) {
   onClick={async () => {
     setErr("");
 
-    // 1️⃣ Create the auth user BEFORE opening modal
-    const { data: authRes, error: authErr } = await supabase.auth.signUp({
-      email: form.email,
-      password: form.password,
-      options: {
-        data: {
-          first_name: form.first_name,
-          middle_name: form.middle_name,
-          last_name: form.last_name,
-          sex: form.sex,
-          phone: form.phone,
-          address: form.address,
-          birth_date: form.birth_date,
-          medical_note: form.medical_note,
-          first_lesson: form.first_lesson,
-          signup_type: form.signup_type,
-          referrer_code: refPrefill || null,
-        },
-      },
-    });
-
-    if (authErr) {
-      console.error("❌ Signup creation failed:", authErr);
-      setErr("Erreur lors de la création du compte.");
-      return;
-    }
-
-    // 2️⃣ Allow session to initialize
-    const {
-  data: { session },
-} = await supabase.auth.getSession();
-
-if (!session?.user) {
-  setErr(
-    "Compte créé. Veuillez vérifier votre email ou vous reconnecter pour continuer."
-  );
-  return;
-}
+   // Validate required fields
+  if (!form.first_name || !form.last_name || !form.birth_date || !form.email) {
+    setErr("Veuillez remplir tous les champs requis.");
+    return;
+  }
 
 
     // 3️⃣ Now open the modal safely

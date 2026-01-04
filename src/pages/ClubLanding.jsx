@@ -288,9 +288,17 @@ const [overtimePricePer30, setOvertimePricePer30] = useState(0);
       </div>
 
       <div className="max-w-6xl mx-auto mt-16 mb-20 px-4">
-        <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-4">
-          📅 Disponibilités & Activités du Club - Cliquer sur une date pour effectuer une réservation
-        </h2>
+        <div className="text-center mb-4 md:mb-6">
+  <h2 className="text-lg md:text-2xl font-semibold text-gray-800 dark:text-gray-100">
+    📅 Disponibilités & Activités 
+  </h2>
+
+  <p className="text-sm md:text-base text-gray-600 dark:text-gray-400 mt-1">
+    Cliquer sur une date pour effectuer une réservation
+  </p>
+</div>
+
+
 
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-4 border border-gray-200 dark:border-gray-700">
           <CalendarView
