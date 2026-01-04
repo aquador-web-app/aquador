@@ -113,94 +113,125 @@ setErr("Profil introuvable.");
 }
 
   return (
-    <div className="min-h-screen grid place-items-center p-20">
+  <div className="min-h-screen flex flex-col items-center justify-center px-4 py-6 sm:px-8 bg-gray-50">
+    
+    {/* Top navigation (responsive) */}
+    <div className="w-full max-w-5xl flex justify-between items-center mb-6">
       <Link
-            to="/ecole"
-            className="absolute left-4 top-11 -translate-y-1/2 bg-blue-500 text-white px-4 py-2 rounded-lg font-semibold shadow hover:bg-orange-600 transition"
-          >
-            Retour au portail de l'Ecole
-          </Link>
-          <Link
-            to="/club"
-            className="absolute right-4 top-11 -translate-y-1/2 bg-blue-500 text-white px-4 py-2 rounded-lg font-semibold shadow hover:bg-orange-600 transition"
-          >
-            Retour au portail du Club
-          </Link>
-      <div className="flex flex-col items-center py-1">
-          {/* Logo */}
-          <div className="p-4 border-gray-100 border-b flex flex-col items-center"></div>
-          <img
-            src="/logo/aquador.png"
-            alt="A'QUA D'OR Logo" className="h-20 w-20"></img>            
-            <p className="text-gray-500 text-sm">Accéder à votre Dashboard</p>
-                    
+        to="/ecole"
+        className="bg-blue-500 text-white px-3 py-2 rounded-lg text-sm sm:text-base font-semibold shadow hover:bg-orange-600 transition"
+      >
+        ← Portail École
+      </Link>
+
+      <Link
+        to="/club"
+        className="bg-blue-500 text-white px-3 py-2 rounded-lg text-sm sm:text-base font-semibold shadow hover:bg-orange-600 transition"
+      >
+        Portail Club →
+      </Link>
+    </div>
+
+    {/* Logo + subtitle */}
+    <div className="flex flex-col items-center mb-6">
+      <img
+        src="/logo/aquador.png"
+        alt="A'QUA D'OR Logo"
+        className="h-16 w-16 sm:h-20 sm:w-20 mb-2"
+      />
+      <p className="text-gray-500 text-sm text-center">
+        Accéder à votre Dashboard
+      </p>
+    </div>
+
+    {/* Login card */}
+    <div className="bg-white rounded-2xl shadow-lg p-6 sm:p-8 w-full max-w-md">
+      <h1 className="text-xl sm:text-2xl font-bold mb-4 text-center">
+        Connexion
+      </h1>
+
+      {err && (
+        <div className="mb-3 text-red-600 text-sm text-center">
+          {err}
+        </div>
+      )}
+
+      <form onSubmit={submit} className="space-y-4">
+        
+        {/* Email with dropdown */}
+        <div className="relative">
+          <label className="text-sm font-medium">Email</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            onFocus={() => setShowDropdown(true)}
+            onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
+            className="input w-full mt-1"
+          />
+
+          {showDropdown && savedAccounts.length > 0 && (
+            <ul className="absolute left-0 right-0 bg-white border rounded shadow z-10 max-h-40 overflow-y-auto">
+              {savedAccounts.map((acc) => (
+                <li
+                  key={acc.email}
+                  onClick={() => {
+                    setEmail(acc.email);
+                    setPassword(acc.password);
+                    setShowDropdown(false);
+                  }}
+                  className="px-3 py-2 hover:bg-blue-100 cursor-pointer text-sm"
+                >
+                  {acc.email}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* Password */}
+        <div>
+          <label className="text-sm font-medium">Mot de passe</label>
+          <div className="relative mt-1">
+            <input
+              type={show ? "text" : "password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="input w-full pr-10"
+            />
+            <button
+              type="button"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm"
+              onClick={() => setShow((s) => !s)}
+            >
+              {show ? "🙈" : "👁️"}
+            </button>
           </div>
-      <div className="bg-white rounded-2xl shadow-lg p-6 max-w-md w-full">
-        <h1 className="text-xl font-bold mb-4">Connexion</h1>
-        {err && <div className="mb-3 text-red-600">{err}</div>}
-        <form onSubmit={submit} className="space-y-3">
-          <div className="relative">
-  <label>Email</label>
-  <input
-    type="email"
-    value={email}
-    onChange={(e) => setEmail(e.target.value)}
-    onFocus={() => setShowDropdown(true)}
-    onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
-    className="input w-full"
-  />
+        </div>
 
-  {showDropdown && savedAccounts.length > 0 && (
-    <ul className="absolute left-0 right-0 bg-white border rounded shadow z-10 max-h-40 overflow-y-auto">
-      {savedAccounts.map((acc) => (
-        <li
-          key={acc.email}
-          onClick={() => {
-            setEmail(acc.email);
-            setPassword(acc.password);
-            setShowDropdown(false);
-          }}
-          className="px-3 py-2 hover:bg-blue-100 cursor-pointer"
+        {/* Submit */}
+        <button className="btn btn-primary w-full py-2 text-base">
+          Se connecter
+        </button>
+      </form>
+
+      {/* Links */}
+      <div className="text-center mt-4 text-sm">
+        Pas de compte ?{" "}
+        <Link to="/signup" className="text-aquaBlue hover:underline">
+          Créer un compte
+        </Link>
+      </div>
+
+      <div className="text-center mt-3">
+        <Link
+          to="/forgot-password"
+          className="text-blue-600 hover:underline text-sm"
         >
-          {acc.email}
-        </li>
-      ))}
-    </ul>
-  )}
-</div>
-
-<div>
-  <label>Password</label>
-  <div className="relative">
-  <input
-    type={show ? 'text' : 'password'}
-    value={password}
-    onChange={(e) => setPassword(e.target.value)}
-    className="input w-full"
-  />
-  <button
-                type="button"
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-gray-500"
-                onClick={() => setShow((s) => !s)}
-              >
-                {show ? '🙈' : '👁️'}
-              </button>
-              </div>  
-</div>
-          <button className="btn btn-primary w-full">Se connecter</button>
-        </form>
-        <div className="text-center mt-3 text-sm">
-          Pas de compte ?{' '}
-          <Link to="/signup" className="text-aquaBlue hover:underline">
-            Créer un compte
-          </Link>
-        </div>
-        <div className="text-center mt-4">
-          <a href="/forgot-password" className="text-blue-600 hover:underline">
-            Mot de passe oublié ?
-          </a>
-        </div>
+          Mot de passe oublié ?
+        </Link>
       </div>
     </div>
-  )
+  </div>
+);
 }
