@@ -964,16 +964,25 @@ setShowModal(false);
           </div>
 
           <div className="aq-calendar-shell">
-            {currentView === "dayGridMonth" ? (
-              <div className="overflow-x-auto">
-                <div className="min-w-[900px]">
-                  <FullCalendar {...calendarProps} />
-                </div>
-              </div>
-            ) : (
-              <FullCalendar {...calendarProps} />
-            )}
-          </div>
+  <div
+    className={
+      currentView === "dayGridMonth"
+        ? "overflow-x-auto"
+        : "overflow-x-hidden"
+    }
+  >
+    <div
+      className={
+        currentView === "dayGridMonth"
+          ? "min-w-[900px]"
+          : "min-w-0"
+      }
+    >
+      <FullCalendar {...calendarProps} />
+    </div>
+  </div>
+</div>
+
         </div>
 
         {/* Booking Modal */}
