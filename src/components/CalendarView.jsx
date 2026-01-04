@@ -949,7 +949,8 @@ setShowModal(false);
                     onClick={() =>
                       calendarRef.current?.getApi().changeView(v.view)
                     }
-                    className={`px-3 py-1 text-sm rounded-full border shadow-sm transition
+                    className={`px-2 py-[2px] text-[11px] sm:px-3 sm:py-1 sm:text-sm
+                      rounded-full border shadow-sm transition whitespace-nowrap
                       ${
                         currentView === v.view
                           ? "bg-blue-600 text-white"
@@ -964,25 +965,24 @@ setShowModal(false);
           </div>
 
           <div className="aq-calendar-shell">
-  <div
-    className={
-      currentView === "dayGridMonth"
-        ? "overflow-x-auto"
-        : "overflow-x-hidden"
-    }
-  >
-    <div
-      className={
-        currentView === "dayGridMonth"
-          ? "min-w-[900px]"
-          : "min-w-0"
-      }
-    >
-      <FullCalendar {...calendarProps} />
-    </div>
-  </div>
-</div>
-
+            <div
+              className={
+                ["dayGridMonth", "timeGridWeek"].includes(currentView)
+                  ? "overflow-x-auto"
+                  : "overflow-x-hidden"
+              }
+            >
+              <div
+                className={
+                  ["dayGridMonth", "timeGridWeek"].includes(currentView)
+                    ? "min-w-[900px]"
+                    : "min-w-0"
+                }
+              >
+                <FullCalendar {...calendarProps} />
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Booking Modal */}
