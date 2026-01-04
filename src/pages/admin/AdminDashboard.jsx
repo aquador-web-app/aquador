@@ -675,8 +675,8 @@ function isEcoleTabVisibleToAssistant(tabId) {
   </h3>
 
   {/* Hover list (same style as Répartition) */}
-  <div className="pointer-events-none absolute inset-0 flex items-center justify-center z-20">
-    <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+  <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+    <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-auto">
       <div className="bg-white/95 backdrop-blur border border-gray-200 rounded-xl shadow-2xl px-4 py-3 w-72 max-h-72 overflow-y-auto">
         <p className="font-semibold text-gray-800 mb-2 text-center">
           Signataires ({consentSigned.count})
