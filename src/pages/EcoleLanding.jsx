@@ -89,7 +89,7 @@ export default function EcoleLanding() {
       </header>
 
       {/* ================= MAIN ================= */}
-      <main className="flex-grow pt-36 px-4 sm:px-6 md:px-10">
+      <main className="flex-grow pt-[8.5rem] md:pt-[6.5rem] px-4 sm:px-6 md:px-10">
         <AnimatePresence mode="wait">
           {activeTab === "home" && (
             <motion.section

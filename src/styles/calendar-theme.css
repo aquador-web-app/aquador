@@ -589,3 +589,24 @@
   font-weight: 500;
   color: #555;
 }
+
+/* ===== FullCalendar responsive header ===== */
+.fc .fc-toolbar {
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.fc .fc-toolbar-chunk {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+/* Mobile-specific tightening */
+@media (max-width: 480px) {
+  .fc .fc-button {
+    padding: 0.35rem 0.55rem;
+    font-size: 0.75rem;
+  }
+}
