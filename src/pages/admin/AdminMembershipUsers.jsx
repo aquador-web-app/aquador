@@ -105,6 +105,7 @@ export default function AdminMembershipUsers() {
   }, []);
 
   async function handleDelete(profile) {
+    if (loading) return;
   if (
     !window.confirm(
       `⚠️ SUPPRESSION DÉFINITIVE ⚠️
@@ -128,12 +129,27 @@ Confirmer la suppression de : ${profile.main_full_name} ?`
 
     const profileId = profile.id;
     const authId = profile.auth_user_id;
+    
 
    // 1️⃣ Fetch family IDs BEFORE deleting anything
 const { data: famRows } = await supabase
   .from("club_profile_families")
   .select("id")
   .eq("club_profile_id", profileId);
+
+  // 2️⃣ Delete QR tokens (MAIN + FAMILY)
+  const { error: qrError } = await supabase
+  .from("club_membership_qr_tokens")
+  .delete()
+  .in(
+    "profile_id",
+    [
+      profileId,
+      ...(famRows?.map(f => f.id) || [])
+    ]
+  );
+
+  if (qrError) throw qrError;
 
 // 2️⃣ Delete club invoices for the MAIN member
 await supabase
