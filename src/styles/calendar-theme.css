@@ -610,3 +610,13 @@
     font-size: 0.75rem;
   }
 }
+
+.aq-calendar-shell {
+  position: relative;
+  z-index: 0;
+}
+
+.aq-calendar-shell * {
+  pointer-events: auto;
+}
+
