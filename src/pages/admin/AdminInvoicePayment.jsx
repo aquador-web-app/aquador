@@ -313,25 +313,6 @@ export default function AdminInvoicePayment() {
       .eq("id", invoiceId);
     if (invErr) throw invErr;
 
-    // 5️⃣ Regenerate PDF (optional)
-    try {
-      const { data: session } = await supabase.auth.getSession();
-
-      await fetch(
-        `${import.meta.env.VITE_SUPABASE_FUNCTIONS_URL}/generate-invoice-pdf`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session?.session?.access_token}`,
-          },
-          body: JSON.stringify({ invoice_id: invoiceId, force_regen: true }),
-        }
-      );
-    } catch (pdfErr) {
-      console.warn("⚠️ PDF regeneration failed:", pdfErr.message);
-    }
-
     await showAlert("✅ Paiement annulé et facture mise à jour !");
     fetchPayments();
     fetchInvoices();
