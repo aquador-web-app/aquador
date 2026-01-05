@@ -115,22 +115,32 @@ useEffect(() => {
 }, []);
 
 useEffect(() => {
-  if (contentRef.current) {
-    contentRef.current.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    });
-  }
+  if (!contentRef.current) return;
+
+  // Force immediate jump (mobile-safe)
+  contentRef.current.scrollTop = 0;
+
+  // Then reinforce after layout settles (critical for mobile)
+  requestAnimationFrame(() => {
+    if (contentRef.current) {
+      contentRef.current.scrollTop = 0;
+    }
+  });
 }, [step]);
 
+
 useEffect(() => {
-  if (uiError && contentRef.current) {
-    contentRef.current.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    });
-  }
+  if (!uiError || !contentRef.current) return;
+
+  contentRef.current.scrollTop = 0;
+
+  requestAnimationFrame(() => {
+    if (contentRef.current) {
+      contentRef.current.scrollTop = 0;
+    }
+  });
 }, [uiError]);
+
 
 
 useEffect(() => {
@@ -847,7 +857,7 @@ async function saveContent() {
         {/* Content scroll */}
         <div
           ref={contentRef}
-          className="overflow-auto px-4 sm:px-6 py-4 space-y-4"
+          className="overflow-auto overscroll-contain px-4 sm:px-6 py-4 space-y-4"
         >
           {uiError && (
           <div className="sticky top-0 z-20 mb-3 rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 shadow">
