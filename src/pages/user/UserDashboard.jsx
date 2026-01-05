@@ -62,6 +62,19 @@ export default function UserDashboard() {
   const [isClubMember, setIsClubMember] = useState(false);
   const [profile, setProfile] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const isMobile = () => window.innerWidth < 768;
+
+const goToTab = (tab) => {
+  setActiveTab(tab);
+  if (isMobile()) setSidebarOpen(false);
+};
+
+const goToTabAnd = (tab, fn) => {
+  setActiveTab(tab);
+  if (typeof fn === "function") fn();
+  if (isMobile()) setSidebarOpen(false);
+};
+
 
   // States
   const [activeTab, setActiveTab] = useState("overview")
@@ -703,7 +716,9 @@ useEffect(() => {
   {/* RIGHT COLUMN — Buttons */}
   <div className="flex justify-center md:justify-center items-center gap-4 mt-4 md:mt-0">
     <button
-      onClick={() => {setActiveTab("profile");
+      onClick={() => {
+  setActiveTab("profile");
+  closeSidebarOnMobile();
     setShowAddChildForm(true); // 👈 immediately open the form
   }}
       className="px-5 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow hover:bg-blue-700 transition-all"
@@ -1249,12 +1264,15 @@ if (!membershipReady) return <div>Loading...</div>;
     ☰
   </button>
 
-  <span className="font-semibold">
-    A'QUA D'OR
-  </span>
+  <img
+    src="/logo/aquador.png"
+    alt="A'QUA D'OR"
+    className="h-8 w-auto"
+  />
 
   <div className="w-6" />
 </div>
+
 
 {/* Overlay */}
 {sidebarOpen && (
@@ -1292,7 +1310,7 @@ if (!membershipReady) return <div>Loading...</div>;
     <>
             <li
               onClick={() => {
-  setActiveTab("overview");
+  goToTab("overview");
   if (window.innerWidth < 768) {
     setSidebarOpen(false);
   }
@@ -1305,7 +1323,7 @@ if (!membershipReady) return <div>Loading...</div>;
               <FaHome className="mr-2" /> Aperçu
             </li>         
             <li
-              onClick={() => setActiveTab("profile")}
+              onClick={() => goToTab("profile")}
               className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-left ${
                 activeTab === "profile"
                   ? "bg-aquaBlue text-white"
@@ -1316,7 +1334,7 @@ if (!membershipReady) return <div>Loading...</div>;
             </li>      
             {user?.role !== "influencer" && (
   <li
-    onClick={() => setActiveTab("invoices")}
+    onClick={() => goToTab("invoices")}
     className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-left ${
       activeTab === "invoices"
         ? "bg-aquaBlue text-white"
@@ -1344,7 +1362,7 @@ if (!membershipReady) return <div>Loading...</div>;
   {openClasses && (
     <div className="ml-6 mt-2 flex flex-col space-y-2">
       <button
-        onClick={() => setActiveTab("enrollments")}
+        onClick={() => goToTabAnd("enrollments", () => setOpenClasses(true))}
         className={`flex items-center gap-2 text-left px-2 py-1 rounded ${
           activeTab === "enrollments"
             ? "bg-aquaBlue text-white"
@@ -1355,7 +1373,7 @@ if (!membershipReady) return <div>Loading...</div>;
       </button>
 
       <button
-        onClick={() => setActiveTab("courses")}
+        onClick={() => goToTabAnd("courses", () => setOpenClasses(true))}
         className={`flex items-center gap-2 text-left px-2 py-1 rounded ${
           activeTab === "courses"
             ? "bg-aquaBlue text-white"
@@ -1368,7 +1386,7 @@ if (!membershipReady) return <div>Loading...</div>;
   )}
 </li>
 <li
-  onClick={() => setActiveTab("attendance")}
+  onClick={() => goToTab("attendance")}
   className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-left ${
     activeTab === "attendance"
       ? "bg-aquaBlue text-white"
@@ -1379,7 +1397,7 @@ if (!membershipReady) return <div>Loading...</div>;
 </li>
 
             <li
-              onClick={() => setActiveTab("bulletins")}
+              onClick={() => goToTab("bulletins")}
               className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-left ${
               activeTab === "bulletins" ? "bg-aquaBlue text-white" : "text-gray-100 hover:bg-orange-700"
             }`}
@@ -1387,7 +1405,7 @@ if (!membershipReady) return <div>Loading...</div>;
               <FaFileDownload className="mr-2" /> Rapports
             </li>
             <li
-              onClick={() => setActiveTab("referrals")}
+              onClick={() => goToTab("referrals")}
               className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-left ${
               activeTab === "referrals" ? "bg-aquaBlue text-white" : "text-gray-100 hover:bg-orange-700"
             }`}
@@ -1413,7 +1431,7 @@ if (!membershipReady) return <div>Loading...</div>;
   {openCommissions && (
     <div className="ml-6 mt-2 flex flex-col space-y-2">
       <button
-        onClick={() => setActiveTab("commissions")}
+        onClick={() => goToTabAnd("commissions", () => setOpenCommissions(true))}
         className={`flex items-center gap-2 text-left px-2 py-1 rounded ${
           activeTab === "commissions"
             ? "bg-aquaBlue text-white"
@@ -1424,7 +1442,7 @@ if (!membershipReady) return <div>Loading...</div>;
       </button>
 
       <button
-        onClick={() => setActiveTab("commissions-requests")}
+        onClick={() => goToTabAnd("commissions-requests", () => setOpenCommissions(true))}
         className={`flex items-center gap-2 text-left px-2 py-1 rounded ${
           activeTab === "commissions-requests"
             ? "bg-aquaBlue text-white"
@@ -1457,7 +1475,7 @@ if (!membershipReady) return <div>Loading...</div>;
   {openBoutique && (
     <div className="ml-6 mt-2 flex flex-col space-y-2">
       <button
-        onClick={() => setActiveTab("boutique")}
+        onClick={() => goToTabAnd("boutique", () => setOpenBoutique(true))}
         className={`flex items-center gap-2 text-left px-2 py-1 rounded ${
           activeTab === "boutique"
             ? "bg-aquaBlue text-white"
@@ -1468,7 +1486,7 @@ if (!membershipReady) return <div>Loading...</div>;
       </button>
 
       <button
-        onClick={() => setActiveTab("boutique-invoices")}
+        onClick={() => goToTabAnd("boutique-invoices", () => setOpenBoutique(true))}
         className={`flex items-center gap-2 text-left px-2 py-1 rounded ${
           activeTab === "boutique-invoices"
             ? "bg-aquaBlue text-white"
@@ -1493,7 +1511,7 @@ if (!membershipReady) return <div>Loading...</div>;
 
     {/* ALWAYS visible */}
     <li
-      onClick={() => setActiveTab("club-overview")}
+      onClick={() => goToTab("club-overview")}
       className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-left ${
         activeTab === "club-overview"
           ? "bg-aquaBlue text-white"
@@ -1507,7 +1525,7 @@ if (!membershipReady) return <div>Loading...</div>;
     {clubStatus === "active" && (
       <>
         <li
-          onClick={() => setActiveTab("club-profile")}
+          onClick={() => goToTab("club-profile")}
           className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-left ${
             activeTab === "club-profile"
               ? "bg-aquaBlue text-white"
@@ -1518,7 +1536,7 @@ if (!membershipReady) return <div>Loading...</div>;
         </li>
 
         <li
-          onClick={() => setActiveTab("club-invoices")}
+          onClick={() => goToTab("club-invoices")}
           className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-left ${
             activeTab === "club-invoices"
               ? "bg-aquaBlue text-white"
@@ -1529,7 +1547,7 @@ if (!membershipReady) return <div>Loading...</div>;
         </li>
 
         <li
-          onClick={() => setActiveTab("club-boutique")}
+          onClick={() => goToTab("club-boutique")}
           className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-left ${
             activeTab === "club-boutique"
               ? "bg-aquaBlue text-white"
@@ -1540,7 +1558,7 @@ if (!membershipReady) return <div>Loading...</div>;
         </li>
 
         <li
-          onClick={() => setActiveTab("calendar")}
+          onClick={() => goToTab("calendar")}
           className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-left ${
             activeTab === "calendar"
               ? "bg-aquaBlue text-white"
@@ -1551,7 +1569,7 @@ if (!membershipReady) return <div>Loading...</div>;
         </li>
 
         <li
-          onClick={() => setActiveTab("visits")}
+          onClick={() => goToTab("visits")}
           className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-left ${
             activeTab === "visits"
               ? "bg-aquaBlue text-white"
@@ -1562,7 +1580,7 @@ if (!membershipReady) return <div>Loading...</div>;
         </li>
 
         <li
-          onClick={() => setActiveTab("club-referrals")}
+          onClick={() => goToTab("club-referrals")}
           className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-left ${
             activeTab === "club-referrals"
               ? "bg-aquaBlue text-white"
