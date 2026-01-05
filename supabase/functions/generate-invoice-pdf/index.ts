@@ -555,6 +555,14 @@ const pdfBuffer = await fetchPdfBufferWithRetry(compiledHtml);
         .update({ pdf_url: pdfUrl })
         .eq("id", mainInvoice.id);
 
+        console.log(
+  "🔁 PDF regenerated — overwriting pdf_url for invoice:",
+  mainInvoice.id,
+  "→",
+  pdfUrl
+);
+
+
       console.log("👶 Child PDF done. Regenerating parent PDF INLINE...");
 
 
@@ -736,6 +744,14 @@ const parentPdfBuffer = await fetchPdfBufferWithRetry(compiledHtmlParent);
           .update({ pdf_url: parentPdfUrl })
           .in("id", familyInvoicesParent.map((inv) => inv.id));
 
+          console.log(
+  "🔁 PDF regenerated — overwriting pdf_url for parent family invoices:",
+  familyInvoicesParent.map(inv => inv.id),
+  "→",
+  parentPdfUrl
+);
+
+
         console.log("✅ Parent PDF URL updated on family invoices");
       }
 
@@ -751,6 +767,14 @@ const parentPdfBuffer = await fetchPdfBufferWithRetry(compiledHtmlParent);
       .from("invoices")
       .update({ pdf_url: pdfUrl })
       .in("id", familyInvoices.map((inv) => inv.id));
+
+      console.log(
+  "🔁 PDF regenerated — overwriting pdf_url for parent invoices:",
+  familyInvoices.map(inv => inv.id),
+  "→",
+  pdfUrl
+);
+
 
     return new Response(
       JSON.stringify({ success: true, pdf_url: pdfUrl }),
