@@ -167,6 +167,7 @@ function compileTemplate(templateHtml, invoice, payments = [], LOGO_URL, SIGN_UR
   const paid = Number(invoice.paid_total || 0);
   const balance = total - paid;
   const docTitle = paid > 0 ? "Reçu" : "Facture";
+  
 
   // Items
   let itemsHTML = "";
@@ -263,39 +264,58 @@ function compileTemplate(templateHtml, invoice, payments = [], LOGO_URL, SIGN_UR
 
 serve(async (req) => {
   let invoice_id: string | null = null;
-  if (req.method === "OPTIONS")
+
+  if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
+  }
 
   try {
+    // ✅ Parse request ONCE
     const body = await req.json();
-invoice_id = body.invoice_id;
+    invoice_id = body.invoice_id;
+    const source = body.source || "on_demand";
 
-    if (!invoice_id)
+    if (!invoice_id) {
       return new Response(JSON.stringify({ error: "Missing invoice_id" }), {
         status: 400,
         headers: corsHeaders,
       });
+    }
 
-    console.log("🧾 Generating unified invoice PDF for:", invoice_id);
+    console.log("🧾 Generating unified invoice PDF for:", invoice_id, "source:", source);
 
     // === Fetch invoice ===
     const { data: mainInvoice, error: invErr } = await supabase
-      .from("invoices").select("*").eq("id", invoice_id).maybeSingle();
-    if (invErr || !mainInvoice)
+      .from("invoices")
+      .select("*")
+      .eq("id", invoice_id)
+      .maybeSingle();
+
+    if (invErr || !mainInvoice) {
       throw new Error("Invoice not found");
+    }
 
-    // 🚫 Do not generate a NEW invoice PDF if the main invoice already has payments
-if (Number(mainInvoice.paid_total || 0) > 0) {
-  console.log(
-    "⛔ Main invoice already has payments — aborting generation:",
-    mainInvoice.invoice_no
-  );
+    // ✅ Monthly-only rule (THIS IS NOW PERFECT)
+    if (
+      source === "monthly" &&
+      Number(mainInvoice.paid_total || 0) > 0
+    ) {
+      console.log(
+        "⛔ Monthly run: invoice already has payments — skipping:",
+        mainInvoice.invoice_no
+      );
 
-  return new Response(
-    JSON.stringify({ skipped: true, reason: "invoice_has_payments" }),
-    { status: 200, headers: corsHeaders }
-  );
-}
+      return new Response(
+        JSON.stringify({
+          skipped: true,
+          reason: "invoice_has_payments",
+          source,
+        }),
+        { status: 200, headers: corsHeaders }
+      );
+    }
+
+
 
 // 🚫 Do not generate a NEW invoice PDF if the invoice total (solde) is zero
 if (Number(mainInvoice.total || 0) <= 0) {
@@ -309,7 +329,6 @@ if (Number(mainInvoice.total || 0) <= 0) {
     { status: 200, headers: corsHeaders }
   );
 }
-
 
     // 🚦 FIX 3 — GLOBAL PDF LOCK CHECK (CORRECTED)
 const { data: busy } = await supabase
@@ -327,7 +346,21 @@ if (busy && busy.length > 0) {
   );
 }
 
+// 🔐 FIX 3 — ACQUIRE GLOBAL PDF LOCK (ATOMIC + VERIFIED)
+const { data: lockRows } = await supabase
+  .from("invoices")
+  .update({ pdf_generating: true })
+  .eq("id", invoice_id)
+  .is("pdf_generating", false)
+  .select("id");
 
+if (!lockRows || lockRows.length === 0) {
+  console.log("⏸️ Invoice already locked — aborting");
+  return new Response(
+    JSON.stringify({ error: "PDF generator busy, retry later" }),
+    { status: 429, headers: corsHeaders }
+  );
+}
 
     // === Determine if this invoice belongs to a child or parent ===
     const { data: profile } = await supabase
@@ -405,19 +438,26 @@ if (busy && busy.length > 0) {
     let compiledHtml = "";
 
     for (const inv of familyInvoices) {
-// 🚫 HARD RULE: skip invoices with payments OR zero total
-if (
-  Number(inv.paid_total || 0) > 0 ||
-  Number(inv.total || 0) <= 0
-) {
-  console.log(
-    "⏭️ Skipping invoice (paid or zero total):",
-    inv.invoice_no
-  );
-  continue;
-}
+  // 🚫 Skip PAID invoices ONLY during MONTHLY runs
+  if (
+    source === "monthly" &&
+    Number(inv.paid_total || 0) > 0
+  ) {
+    console.log(
+      "⏭️ Monthly run: skipping paid invoice:",
+      inv.invoice_no
+    );
+    continue;
+  }
 
-
+  // 🚫 Always skip zero-total invoices
+  if (Number(inv.total || 0) <= 0) {
+    console.log(
+      "⏭️ Skipping zero-total invoice:",
+      inv.invoice_no
+    );
+    continue;
+  }
 
 // ========================================================================
 
@@ -451,11 +491,13 @@ const { data: payments } = await supabase
 
       // Merge profile fields into invoice object
       const freshInvoice = {
-        ...(latestInv || inv),
-        full_name: prof?.full_name || inv.full_name,
-        child_full_name: prof?.child_full_name || inv.child_full_name,
-        address: prof?.address || inv.address
-      };
+  ...inv,                // 🔥 KEEP ORIGINAL INVOICE (descriptions & amounts)
+  ...(latestInv || {}),  // only overlay computed fields that exist
+  full_name: prof?.full_name || inv.full_name,
+  child_full_name: prof?.child_full_name || inv.child_full_name,
+  address: prof?.address || inv.address,
+};
+
 
       compiledHtml += compileTemplate(
         tmpl.body,
@@ -482,26 +524,7 @@ const { data: payments } = await supabase
 
     const pdfName = `${safeClientName}/${safeInvNo}_${safeMonthYear}.pdf`;
 
-   // 🔐 FIX 3 — ACQUIRE GLOBAL PDF LOCK (ATOMIC + VERIFIED)
-const { data: lockRows } = await supabase
-  .from("invoices")
-  .update({ pdf_generating: true })
-  .eq("id", invoice_id)
-  .is("pdf_generating", false)
-  .select("id");
-
-if (!lockRows || lockRows.length === 0) {
-  console.log("⏸️ Invoice already locked — aborting");
-  return new Response(
-    JSON.stringify({ error: "PDF generator busy, retry later" }),
-    { status: 429, headers: corsHeaders }
-  );
-}
-
-
-
-
-
+  
     // === Convert to PDF ===
     console.log("🚀 Sending HTML to Puppeteer (with retry)");
 await sleep(1500); // 🔥 critical throttle
@@ -578,6 +601,7 @@ const pdfBuffer = await fetchPdfBufferWithRetry(compiledHtml);
           ...(childrenProfilesParent?.map((c) => c.id) || []),
         ];
 
+
         const { data: familyInvoicesRawParent, error: famErrParent } = await supabase
           .from("invoices")
           .select("*")
@@ -612,17 +636,27 @@ const pdfBuffer = await fetchPdfBufferWithRetry(compiledHtml);
         const SIGN_URL_PARENT = sigDataParent?.publicUrl || "";
 
         for (const inv of familyInvoicesParent) {
-          // 🚫 HARD RULE: skip invoices with payments OR zero total
-if (
-  Number(inv.paid_total || 0) > 0 ||
-  Number(inv.total || 0) <= 0
-) {
-  console.log(
-    "⏭️ Skipping invoice (paid or zero total):",
-    inv.invoice_no
-  );
-  continue;
-}
+  // 🚫 Skip PAID invoices ONLY during MONTHLY runs
+  if (
+    source === "monthly" &&
+    Number(inv.paid_total || 0) > 0
+  ) {
+    console.log(
+      "⏭️ Monthly run: skipping paid invoice:",
+      inv.invoice_no
+    );
+    continue;
+  }
+
+  // 🚫 Always skip zero-total invoices
+  if (Number(inv.total || 0) <= 0) {
+    console.log(
+      "⏭️ Skipping zero-total invoice:",
+      inv.invoice_no
+    );
+    continue;
+  }
+
 
           const { data: payments } = await supabase
             .from("payments")
@@ -641,10 +675,11 @@ if (
             .maybeSingle();
 
           const freshInvoiceParent = {
-            ...(latestInvParentRpc || inv),
+            ...inv,                          // 🔥 KEEP ORIGINAL INVOICE
+            ...(latestInvParentRpc || {}),   // overlay computed fields only
             full_name: profParent?.full_name || inv.full_name,
             child_full_name: profParent?.child_full_name || inv.child_full_name,
-            address: profParent?.address || inv.address
+            address: profParent?.address || inv.address,
           };
 
           compiledHtmlParent += compileTemplate(

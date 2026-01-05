@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef  } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { normalizeISODate, formatDateFrSafe, formatCurrencyUSD } from "../../lib/dateUtils";
 import { useGlobalAlert } from "../../components/GlobalAlert";
@@ -14,8 +14,6 @@ function dayLabel(row) {
   if (row.start_date) return FRENCH_DAYS[new Date(row.start_date).getDay()];
   return "—";
 } 
-
-
 
 // Build hour range like "08h-09h" or "08h-10h"
 // Uses session.start_time and the plan duration resolved from plan_id (or the joined plan)
@@ -258,7 +256,8 @@ setSeriesByCourse(seriesMap);
 
 
   // Add this outside the function (module-level)
-let hourWarningShown = false;
+const hourWarningShown = useRef(false);
+
 
 // robust handling for keys like "<seriesUUID>-first" or "<seriesUUID>-second"
 function toggleHour(which) {
@@ -282,9 +281,9 @@ function toggleHour(which) {
     if (!has) {
       // rule: can't select second unless first is selected for the same series
       if (isSecond && !prev.includes(`${base}${FIRST}`)) {
-        if (!hourWarningShown) {
-          hourWarningShown = true;
-          setTimeout(() => (hourWarningShown = false), 400); // reset after short delay
+        if (!hourWarningShown.current) {
+          hourWarningShown.current = true;
+          setTimeout(() => (hourWarningShown.current = false), 400);
           alert(
             "Il est impératif de choisir la première tranche d'heure si vous choisissez 1 heure par séance."
           );
@@ -412,8 +411,6 @@ async function loadInvoices() {
 if (overrideEnabled && overridePlanId) {
   plan = publicPlans.find(p => p.id === overridePlanId);
 } else {
-  const durationNeeded = selectedHours.length === 2 ? 2 : 1;
-
   plan = publicPlans.find(
     (p) =>
       Number(p.duration_hours) === durationNeeded &&
@@ -502,17 +499,23 @@ const { data, error } = await supabase.rpc("create_enrollment_with_invoice", {
     if (error) throw error;
 
     // If the RPC returns invoice_id, trigger PDF generation
-const invId = Array.isArray(data) ? data[0]?.invoice_id : data?.invoice_id
+const invId = Array.isArray(data) ? data[0]?.invoice_id : data?.invoice_id;
+
 if (invId) {
-  const { error: pdfErr } = await supabase.functions.invoke('generate-invoice-pdf', {
-    body: { invoice_id: invId }
-  });
-  await loadInvoices();
+  const { error: pdfErr } = await supabase.functions.invoke(
+    "generate-invoice-pdf",
+    {
+      body: {
+        invoice_id: invId,   // ✅ CORRECT
+        source: "on_demand",
+      },
+    }
+  );
+
   if (pdfErr) {
-    console.error('PDF generation error:', pdfErr)
+    console.error("PDF generation error:", pdfErr);
   }
 }
-
 
     const displayedPrice = effectivePrice || plan.price;
 
@@ -897,12 +900,14 @@ const getCurrentDur = (row) =>
   onChange={async (ev) => {
     const newDur = Number(ev.target.value);
     // find a plan of the same course (or general) with the chosen duration
-    const candidate =
-      publicPlans.find(p => p.id === e.plan_id && p.duration_hours === newDur) ||
-      publicPlans.find(p =>
-        p.duration_hours === newDur &&
-        (p.course_id ? p.course_id === e.course_id : true)
-      );
+    const courseType = courses.find(c => c.id === e.course_id)?.course_type;
+
+const candidate = publicPlans.find(
+  (p) =>
+    Number(p.duration_hours) === newDur &&
+    p.course_type === courseType
+);
+
 
     if (!candidate) {
       alert("Aucun plan trouvé pour cette durée.");

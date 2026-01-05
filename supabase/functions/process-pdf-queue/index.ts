@@ -36,29 +36,12 @@ serve(async () => {
         },
         body: JSON.stringify({
           invoice_id: job.invoice_id,
-          force_regen: true,
+          source: "monthly", // 🔥 REQUIRED
         }),
       });
 
       if (!res.ok) {
         throw new Error(await res.text());
-      }
-
-      const payload = await res.json();
-
-      const pdfUrl = payload?.pdf_url;
-      if (!pdfUrl) {
-        throw new Error("PDF generated but no pdf_url returned");
-      }
-
-      // ✅ Inject PDF URL into invoice
-      const { error: invErr } = await supabase
-        .from("invoices")
-        .update({ pdf_url: pdfUrl })
-        .eq("id", job.invoice_id);
-
-      if (invErr) {
-        throw new Error(`Failed to update invoice pdf_url: ${invErr.message}`);
       }
 
       // ✅ Mark job done ONLY after invoice is updated
