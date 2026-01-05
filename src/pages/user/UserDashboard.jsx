@@ -61,6 +61,7 @@ export default function UserDashboard() {
   const [isSchoolMember, setIsSchoolMember] = useState(false);
   const [isClubMember, setIsClubMember] = useState(false);
   const [profile, setProfile] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // States
   const [activeTab, setActiveTab] = useState("overview")
@@ -1239,8 +1240,41 @@ if (!membershipReady) return <div>Loading...</div>;
 
   return (
     <div className="flex h-screen bg-gray-100">
+      {/* Mobile header */}
+<div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-gray-950 text-white flex items-center justify-between px-4 py-3">
+  <button
+    onClick={() => setSidebarOpen(true)}
+    className="text-2xl"
+  >
+    ☰
+  </button>
+
+  <span className="font-semibold">
+    A'QUA D'OR
+  </span>
+
+  <div className="w-6" />
+</div>
+
+{/* Overlay */}
+{sidebarOpen && (
+  <div
+    className="fixed inset-0 bg-black/50 z-40 md:hidden"
+    onClick={() => setSidebarOpen(false)}
+  />
+)}
+
       {/* Sidebar */}
-      <aside className="w-64 bg-gray-950 shadow-lg flex flex-col">
+      <aside
+  className={`
+    fixed md:static inset-y-0 left-0 z-50
+    w-64 bg-gray-950 shadow-lg flex flex-col
+    transform transition-transform duration-300
+    ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
+    md:translate-x-0
+  `}
+>
+
         <div className="p-4 border-gray-100 border-b flex flex-col items-center">
           <img src="/logo/aquador.png" alt="Logo A'QUA D'OR" className="h-10 w-10" />
           <h1 className="text-2xl font-bold text-aquaBlue">A'QUA D'OR</h1>    
@@ -1257,7 +1291,13 @@ if (!membershipReady) return <div>Loading...</div>;
             {isSchoolMember && (
     <>
             <li
-              onClick={() => setActiveTab("overview")}
+              onClick={() => {
+  setActiveTab("overview");
+  if (window.innerWidth < 768) {
+    setSidebarOpen(false);
+  }
+}}
+
               className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-left ${
               activeTab === "overview" ? "bg-aquaBlue text-white" : "text-gray-100 hover:bg-orange-700"
             }`}
@@ -1553,7 +1593,10 @@ if (!membershipReady) return <div>Loading...</div>;
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 p-6 overflow-y-auto">{renderContent()}</main>
+      <main className="flex-1 pt-20 md:pt-6 px-4 md:p-6 overflow-y-auto">
+  {renderContent()}
+</main>
+
 
       {/* Confirmation Modal */}
       {showSignOutConfirm && (
