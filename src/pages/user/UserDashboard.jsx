@@ -1267,7 +1267,8 @@ if (!membershipReady) return <div>Loading...</div>;
   <img
     src="/logo/aquador.png"
     alt="A'QUA D'OR"
-    className="h-8 w-auto"
+    className="h-12 w-auto cursor-pointer"
+    onClick={() => goToTab("overview")}
   />
 
   <div className="w-6" />
