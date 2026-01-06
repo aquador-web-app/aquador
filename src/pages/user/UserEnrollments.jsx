@@ -518,7 +518,7 @@ setStartDate("");
     </div>
 
     <span className="text-xs font-semibold text-teal-700 bg-teal-100 px-2 py-0.5 rounded-full">
-      <span className="font-normal">(1h)</span> {formatCurrencyUSD(price1h)} 
+      {formatCurrencyUSD(price1h)} <span className="font-normal">(1h)</span>
     </span>
   </label>
 
@@ -545,7 +545,7 @@ setStartDate("");
       </div>
 
       <span className="text-xs font-semibold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
-        <span className="font-normal">(2h)</span> {formatCurrencyUSD(price2h)} 
+        {formatCurrencyUSD(price2h)} <span className="font-normal">(2h)</span>
       </span>
     </label>
   )}
