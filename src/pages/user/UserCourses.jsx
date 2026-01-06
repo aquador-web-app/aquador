@@ -215,10 +215,18 @@ useEffect(() => {
                   );
 
                   if (error) {
-                    alert("Erreur : " + error.message);
-                  } else {
-                    alert(data);
-                    // Reload enrollments
+                    await showAlert(`❌ ${error.message}`);
+                    return;
+                  }
+
+                  if (typeof data === "string" && data.startsWith("❌")) {
+                    await showAlert(data);
+                    return;
+                  }
+
+                  await showAlert(data);
+
+                  // Reload enrollments
                     const { data: newEnrolls } = await supabase
                       .from("enrollments")
                       .select(
@@ -233,7 +241,6 @@ useEffect(() => {
                       )
                       .eq("profile_id", selectedProfile.id);
                     setEnrollments(newEnrolls || []);
-                  }
                 }}
                 className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-xs"
               >
