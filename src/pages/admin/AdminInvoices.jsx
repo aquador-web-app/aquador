@@ -706,22 +706,29 @@ function FamilyBlock({
                     <Td>{formatDateFrSafe(inv.due_date)}</Td>
                     <Td>{formatDateFrSafe(paidDates[inv.invoice_id])}</Td>
                     <Td>
-                      {(() => {
-                        const url = getPdfLink(inv, supabase);
-                        return url ? (
-                          <a
-                            href={url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-blue-600 underline"
-                          >
-                            PDF
-                          </a>
-                        ) : (
-                          "—"
-                        );
-                      })()}
-                    </Td>
+  {(() => {
+    const url = getPdfLink(inv, supabase);
+    if (!url) return "—";
+
+    return (
+      <button
+        onClick={async () => {
+          try {
+            // Force revalidation on mobile browsers
+            await fetch(url, { method: "HEAD", cache: "no-store" });
+          } catch (_) {}
+
+          // Open same file, same name, but bypass cache
+          window.open(`${url}?refresh=${Date.now()}`, "_blank");
+        }}
+        className="text-blue-600 underline"
+      >
+        PDF
+      </button>
+    );
+  })()}
+</Td>
+
                     <Td>
   {inv.proof_url ? (
     inv.proof_url.match(/\.(jpg|jpeg|png)$/i) ? (
