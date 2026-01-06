@@ -155,21 +155,21 @@ useEffect(() => {
       </div>
 
       {/* Enrollment Table */}
-      <div className="bg-white p-4 rounded-lg shadow">
+      <div className="hidden md:block bg-white p-4 rounded-lg shadow">
         <table className="min-w-full text-sm border-collapse">
-  <thead className="bg-aquaBlue text-white">
-    <tr>
-      <th className="px-4 py-2 text-left">Cours</th>
-      <th className="px-4 py-2 text-left">Jour</th>
-      <th className="px-4 py-2 text-left">Heure</th>
-      <th className="px-4 py-2 text-left">Début</th>
-      <th className="px-4 py-2 text-left">Statut</th>
-      <th className="px-4 py-2 text-left">Action</th>
-    </tr>
-  </thead>
-  <tbody>
-    {enrollments.map((e) => (
-      <>
+        <thead className="bg-aquaBlue text-white">
+          <tr>
+            <th className="px-4 py-2 text-left">Cours</th>
+            <th className="px-4 py-2 text-left">Jour</th>
+            <th className="px-4 py-2 text-left">Heure</th>
+            <th className="px-4 py-2 text-left">Début</th>
+            <th className="px-4 py-2 text-left">Statut</th>
+            <th className="px-4 py-2 text-left">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {enrollments.map((e) => (
+            <>
         <tr
           key={e.id}
           className="border-t hover:bg-gray-50 cursor-pointer"
@@ -279,6 +279,121 @@ useEffect(() => {
 </table>
 
       </div>
+      {/* 📱 Mobile cards */}
+<div className="md:hidden space-y-4">
+  {enrollments.map((e) => {
+    const isExpanded = expandedCourse === e.course_id;
+
+    return (
+      <div
+        key={e.id}
+        className="bg-white rounded-xl shadow p-4 space-y-3 border"
+      >
+        {/* Header */}
+        <div
+          className="flex justify-between items-start cursor-pointer"
+          onClick={() => toggleExpand(e.course_id)}
+        >
+          <div>
+            <p className="text-sm font-semibold text-blue-700">
+              {e.courses?.name}
+            </p>
+            <p className="text-xs text-gray-500">
+              {dayLabel(e.sessions?.day_of_week)} ·{" "}
+              {e.sessions?.start_time?.slice(0, 5)}–
+              {addHoursToTimeStr(
+                e.sessions?.start_time,
+                e.plans?.duration_hours
+              )}
+            </p>
+          </div>
+
+          <span
+            className={`px-3 py-1 rounded-full text-xs font-medium ${
+              e.status === "active"
+                ? "bg-green-100 text-green-700"
+                : "bg-gray-100 text-gray-700"
+            }`}
+          >
+            {e.status}
+          </span>
+        </div>
+
+        {/* Meta */}
+        <div className="text-xs text-gray-600">
+          <div>
+            <b>Début :</b> {formatDateFrSafe(e.start_date)}
+          </div>
+          <div>
+            <b>Plan :</b> {e.plans?.name}
+          </div>
+        </div>
+
+        {/* Actions */}
+        {e.status === "active" && (
+          <button
+            className="w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg text-sm"
+            onClick={async () => {
+              const wantsCancel = await showConfirm(
+                `Voulez-vous vraiment annuler l'enregistrement à ${e.courses?.name}?`
+              );
+              if (!wantsCancel) return;
+
+              const { data, error } = await supabase.rpc("cancel_enrollment", {
+                p_enrollment_id: e.id,
+                p_user_id: selectedProfile.id,
+              });
+
+              if (error || data?.startsWith("❌")) {
+                await showAlert(error?.message || data);
+                return;
+              }
+
+              await showAlert(data);
+
+              const { data: refreshed } = await supabase
+                .from("enrollments")
+                .select(
+                  `
+                  id, status, start_date, profile_id,
+                  session_id, course_id, plan_id,
+                  profiles:profile_id ( full_name ),
+                  courses:course_id ( name ),
+                  plans:plan_id ( name, duration_hours ),
+                  sessions:session_id ( day_of_week, start_time )
+                `
+                )
+                .eq("profile_id", selectedProfile.id);
+
+              setEnrollments(refreshed || []);
+            }}
+          >
+            Annuler l'inscription
+          </button>
+        )}
+
+        {/* Expanded sessions */}
+        {isExpanded && (
+          <div className="border-t pt-3 space-y-2">
+            <SessionsListMobile
+              sessionGroup={e.session_group}
+              enrollmentStart={e.start_date}
+              planDuration={e.plans?.duration_hours}
+              userStartTime={e.sessions?.start_time}
+            />
+          </div>
+        )}
+      </div>
+    );
+  })}
+
+  {!enrollments.length && (
+    <p className="text-center text-gray-500 italic">
+      Aucune inscription trouvée
+    </p>
+  )}
+</div>
+
     </div>
   );
 }
@@ -303,6 +418,66 @@ function SessionsList({ sessionGroup, enrollmentStart, planDuration, userStartTi
   };
   fetchSessions();
 }, [sessionGroup, enrollmentStart]);
+
+function SessionsListMobile({
+  sessionGroup,
+  enrollmentStart,
+  planDuration,
+  userStartTime,
+}) {
+  const [sessions, setSessions] = useState([]);
+
+  useEffect(() => {
+    if (!sessionGroup) return;
+
+    supabase
+      .from("sessions")
+      .select("id, day_of_week, start_date, status")
+      .eq("session_group", sessionGroup)
+      .gte("start_date", enrollmentStart)
+      .neq("status", "deleted")
+      .order("start_date")
+      .then(({ data }) => setSessions(data || []));
+  }, [sessionGroup, enrollmentStart]);
+
+  const dayLabel = (d) =>
+    ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"][
+      (d - 1 + 7) % 7
+    ];
+
+  return (
+    <div className="space-y-2">
+      {sessions.map((s, i) => (
+        <div
+          key={s.id}
+          className="flex justify-between items-center bg-gray-50 rounded-lg px-3 py-2 text-xs"
+        >
+          <div>
+            <div className="font-medium">
+              {dayLabel(s.day_of_week)} ·{" "}
+              {formatDateFrSafe(i === 0 ? enrollmentStart : s.start_date)}
+            </div>
+            <div className="text-gray-500">
+              {userStartTime?.slice(0, 5)}–
+              {addHoursToTimeStr(userStartTime, planDuration)}
+            </div>
+          </div>
+
+          <span
+            className={`px-2 py-0.5 rounded-full ${
+              s.status === "cancelled"
+                ? "bg-red-100 text-red-700"
+                : "bg-green-100 text-green-700"
+            }`}
+          >
+            {s.status === "cancelled" ? "Annulée" : "Active"}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 
 
   const dayLabel = (d) =>
