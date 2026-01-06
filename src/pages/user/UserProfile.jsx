@@ -304,7 +304,7 @@ function timeRangeWithFallback(start_time, end_time, duration_hours) {
         <div className="flex flex-col sm:flex-row sm:items-center gap-4">
     {/* Left side: avatar + profile info */}
     <div className="flex items-center gap-6">
-      <div className="w-20 h-20 rounded-full bg-white text-aquaBlue flex items-center justify-center text-2xl font-bold">
+      <div className="hidden sm:flex w-20 h-20 rounded-full bg-white text-aquaBlue items-center justify-center text-2xl font-bold">
         {profile.first_name?.[0]}
         {profile.last_name?.[0]}
       </div>
@@ -388,7 +388,7 @@ function timeRangeWithFallback(start_time, end_time, duration_hours) {
 
       {/* Infos */}
 {tab === "infos" && (
-  <div className="bg-white p-6 rounded-2xl shadow space-y-6 max-w-lg mx-auto">
+  <div className="bg-white p-4 sm:p-6 rounded-2xl shadow space-y-6 w-full sm:max-w-lg mx-auto">
     {/* Contact Info */}
     <div className="space-y-4">
       <h2 className="text-lg font-semibold text-gray-700 border-b pb-2">
@@ -397,7 +397,7 @@ function timeRangeWithFallback(start_time, end_time, duration_hours) {
 
       {/* Email */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-        <label className="font-medium text-gray-600 w-32">Email :</label>
+        <label className="font-medium text-gray-600 w-full sm:w-32">Email :</label>
         <input
           type="email"
           value={profile.email || ""}
@@ -410,7 +410,7 @@ function timeRangeWithFallback(start_time, end_time, duration_hours) {
 
       {/* Téléphone */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-        <label className="font-medium text-gray-600 w-32">Téléphone :</label>
+        <label className="font-medium text-gray-600 w-full sm:w-32">Téléphone :</label>
         <input
           type="tel"
           value={profile.phone || ""}
@@ -423,7 +423,7 @@ function timeRangeWithFallback(start_time, end_time, duration_hours) {
       </div>
       {/* Adresse */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-        <label className="font-medium text-gray-600 w-32">Adresse :</label>
+        <label className="font-medium text-gray-600 w-full sm:w-32">Adresse :</label>
         <input
           type="address"
           value={profile.address || ""}
@@ -649,7 +649,7 @@ function timeRangeWithFallback(start_time, end_time, duration_hours) {
           </div>
         )}
         {tab === "documents" && (
-  <div className="bg-white p-4 rounded-2xl shadow">
+  <div className="bg-white p-4 sm:p-6 rounded-2xl shadow w-full sm:max-w-lg mx-auto">
     <h3 className="font-semibold mb-3">Documents signés</h3>
 
     {loadingDocs ? (
@@ -657,7 +657,7 @@ function timeRangeWithFallback(start_time, end_time, duration_hours) {
     ) : docs.length ? (
       <ul className="divide-y">
         {docs.map((doc, idx) => (
-          <li key={idx} className="flex justify-between items-center py-2">
+          <li key={idx} className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 py-2">
             <span className="text-gray-800">{doc.name}</span>
             <a
               href={doc.url}
