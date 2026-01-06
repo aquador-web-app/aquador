@@ -109,7 +109,7 @@ useEffect(() => {
     return <div className="p-6 text-red-600">Profil introuvable.</div>;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-6">
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-700 to-orange-400 text-white rounded-2xl shadow-lg py-8 px-6 text-center space-y-4">
         <h2 className="text-3xl font-bold tracking-wide drop-shadow-sm">
@@ -132,7 +132,7 @@ useEffect(() => {
             const p = selectable.find((x) => x.id === e.target.value);
             setSelectedProfile(p || null);
           }}
-          className="w-50 bg-white text-gray-700 border-none rounded-lg px-4 py-2 text-sm font-medium shadow focus:ring-4 focus:ring-blue-200 transition text-center"
+          className="w-full sm:w-50 bg-white text-gray-700 border-none rounded-lg px-4 py-2 text-sm font-medium shadow focus:ring-4 focus:ring-blue-200 transition text-center"
         >
           {selectable.map((p) => (
             <option key={p.id} value={p.id} className="text-center">
@@ -155,8 +155,8 @@ useEffect(() => {
       </div>
 
       {/* Enrollment Table */}
-      <div className="hidden md:block bg-white p-4 rounded-lg shadow">
-        <table className="min-w-full text-sm border-collapse">
+      <div className="hidden md:block bg-white p-4 rounded-lg shadow overflow-x-auto">
+        <table className="min-w-[900px] text-sm border-collapse">
         <thead className="bg-aquaBlue text-white">
           <tr>
             <th className="px-4 py-2 text-left">Cours</th>
@@ -242,7 +242,7 @@ useEffect(() => {
                       .eq("profile_id", selectedProfile.id);
                     setEnrollments(newEnrolls || []);
                 }}
-                className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-xs"
+                className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-xs sm:text-xs"
               >
                 Annuler enregistrement
               </button>
@@ -333,7 +333,9 @@ useEffect(() => {
         {e.status === "active" && (
           <button
             className="w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg text-sm"
-            onClick={async () => {
+            onClick={async (ev) => {
+              ev.stopPropagation();
+
               const wantsCancel = await showConfirm(
                 `Voulez-vous vraiment annuler l'enregistrement à ${e.courses?.name}?`
               );
@@ -344,7 +346,7 @@ useEffect(() => {
                 p_user_id: selectedProfile.id,
               });
 
-              if (error || data?.startsWith("❌")) {
+              if (error || (typeof data === "string" && data.startsWith("❌"))) {
                 await showAlert(error?.message || data);
                 return;
               }
@@ -355,12 +357,12 @@ useEffect(() => {
                 .from("enrollments")
                 .select(
                   `
-                  id, status, start_date, profile_id,
-                  session_id, course_id, plan_id,
+                  id, status, start_date, enrolled_at, profile_id,
+                  session_id, session_group, course_id, plan_id,
                   profiles:profile_id ( full_name ),
                   courses:course_id ( name ),
-                  plans:plan_id ( name, duration_hours ),
-                  sessions:session_id ( day_of_week, start_time )
+                  plans:plan_id ( id, name, price, duration_hours ),
+                  sessions:session_id ( id, day_of_week, start_time )
                 `
                 )
                 .eq("profile_id", selectedProfile.id);
@@ -374,8 +376,8 @@ useEffect(() => {
 
         {/* Expanded sessions */}
         {isExpanded && (
-          <div className="border-t pt-3 space-y-2">
-            <SessionsListMobile
+          <div className="border-t pt-3">
+            <SessionsList
               sessionGroup={e.session_group}
               enrollmentStart={e.start_date}
               planDuration={e.plans?.duration_hours}
@@ -419,66 +421,6 @@ function SessionsList({ sessionGroup, enrollmentStart, planDuration, userStartTi
   fetchSessions();
 }, [sessionGroup, enrollmentStart]);
 
-function SessionsListMobile({
-  sessionGroup,
-  enrollmentStart,
-  planDuration,
-  userStartTime,
-}) {
-  const [sessions, setSessions] = useState([]);
-
-  useEffect(() => {
-    if (!sessionGroup) return;
-
-    supabase
-      .from("sessions")
-      .select("id, day_of_week, start_date, status")
-      .eq("session_group", sessionGroup)
-      .gte("start_date", enrollmentStart)
-      .neq("status", "deleted")
-      .order("start_date")
-      .then(({ data }) => setSessions(data || []));
-  }, [sessionGroup, enrollmentStart]);
-
-  const dayLabel = (d) =>
-    ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"][
-      (d - 1 + 7) % 7
-    ];
-
-  return (
-    <div className="space-y-2">
-      {sessions.map((s, i) => (
-        <div
-          key={s.id}
-          className="flex justify-between items-center bg-gray-50 rounded-lg px-3 py-2 text-xs"
-        >
-          <div>
-            <div className="font-medium">
-              {dayLabel(s.day_of_week)} ·{" "}
-              {formatDateFrSafe(i === 0 ? enrollmentStart : s.start_date)}
-            </div>
-            <div className="text-gray-500">
-              {userStartTime?.slice(0, 5)}–
-              {addHoursToTimeStr(userStartTime, planDuration)}
-            </div>
-          </div>
-
-          <span
-            className={`px-2 py-0.5 rounded-full ${
-              s.status === "cancelled"
-                ? "bg-red-100 text-red-700"
-                : "bg-green-100 text-green-700"
-            }`}
-          >
-            {s.status === "cancelled" ? "Annulée" : "Active"}
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-
 
   const dayLabel = (d) =>
     ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"][
@@ -496,6 +438,7 @@ function SessionsListMobile({
   };
 
   return (
+    <div className="overflow-x-auto">
     <table className="min-w-full text-sm bg-gray-50">
       <thead>
         <tr className="text-gray-600 border-b">
@@ -541,5 +484,6 @@ function SessionsListMobile({
         )}
       </tbody>
     </table>
+    </div>
   );
 }
