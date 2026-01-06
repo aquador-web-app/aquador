@@ -715,14 +715,23 @@ export default function UserInvoices({ userId, initialTab = "factures" }) {
           </td>
           <td className="px-3 py-2 whitespace-nowrap">
             {f.pdf_url ? (
-              <a
-                href={f.pdf_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 text-blue-600 hover:text-blue-800"
-              >
-                <FaFilePdf /> Ouvrir
-              </a>
+              <button
+  onClick={async () => {
+    if (!f.pdf_url) return;
+
+    // Force revalidation on mobile
+    try {
+      await fetch(f.pdf_url, { method: "HEAD", cache: "no-store" });
+    } catch (_) {}
+
+    // Cache-busted open (same file, same name)
+    window.open(`${f.pdf_url}?refresh=${Date.now()}`, "_blank");
+  }}
+  className="flex items-center gap-2 text-blue-600 hover:text-blue-800"
+>
+  <FaFilePdf /> Ouvrir
+</button>
+
             ) : (
               <span className="text-gray-400">—</span>
             )}
