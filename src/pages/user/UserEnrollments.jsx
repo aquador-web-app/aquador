@@ -517,12 +517,13 @@ setStartDate("");
       </span>
     </div>
 
-    <span className="bg-teal-100 text-teal-700 px-3 py-1 rounded-full flex flex-col items-center leading-tight">
-  <span className="text-xs font-semibold">
-    {formatCurrencyUSD(price1h)}
+    <span className="w-20 h-10 flex flex-col items-center justify-center rounded-full bg-teal-100 text-teal-700 shrink-0">
+  <span className="text-xs font-semibold leading-none whitespace-nowrap">
+    {formatCurrencyUSD(price1h).replace(" ", "\u00A0")}
   </span>
-  <span className="text-[10px] font-normal">(1h)</span>
+  <span className="text-[10px] leading-none">(1h)</span>
 </span>
+
 
   </label>
 
@@ -548,12 +549,13 @@ setStartDate("");
         </span>
       </div>
 
-      <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full flex flex-col items-center leading-tight">
-  <span className="text-xs font-semibold">
-    {formatCurrencyUSD(price2h)}
+      <span className="w-20 h-10 flex flex-col items-center justify-center rounded-full bg-blue-100 text-blue-700 shrink-0">
+  <span className="text-xs font-semibold leading-none whitespace-nowrap">
+    {formatCurrencyUSD(price2h).replace(" ", "\u00A0")}
   </span>
-  <span className="text-[10px] font-normal">(2h)</span>
+  <span className="text-[10px] leading-none">(2h)</span>
 </span>
+
 
     </label>
   )}
