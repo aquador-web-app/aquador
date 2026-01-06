@@ -297,7 +297,7 @@ const sessionsData = allSessions.filter((s) => {
         animate={{ opacity: 1, y: 0 }}
       >
         <h2 className="text-2xl font-bold text-gray-800 flex items-center justify-center gap-2">
-          <FaQrcode className="text-aquaBlue" /> Mon code de présence
+          <FaQrcode className="text-aquaBlue" /> Section présence
         </h2>
 
         {/* Dropdown or static full name */}
@@ -328,7 +328,7 @@ const sessionsData = allSessions.filter((s) => {
           <img
             src={selectedProfile.qr_code_url}
             alt="QR Code"
-            className="mx-auto w-40 h-40 border border-gray-200 rounded-xl mt-3"
+            className="hidden md:block mx-auto w-40 h-40 border border-gray-200 rounded-xl mt-3"
           />
         ) : (
           <p className="text-gray-500 italic mt-3">Aucun code disponible</p>
@@ -336,11 +336,11 @@ const sessionsData = allSessions.filter((s) => {
       </motion.div>
 
       {/* === Sessions Table === */}
-      <div className="bg-white p-4 rounded-lg shadow">
+      <div className="hidden md:block bg-white p-4 rounded-lg shadow overflow-x-auto">
         <h3 className="text-lg font-bold text-gray-800 mb-4">
           Liste des séances
         </h3>
-        <table className="min-w-full text-sm border-collapse">
+        <table className="min-w-[1000px] text-sm border-collapse">
           <thead className="bg-aquaBlue text-white">
             <tr>
               <th className="px-4 py-2 text-left">Cours</th>
@@ -431,6 +431,103 @@ const sessionsData = allSessions.filter((s) => {
           </tbody>
         </table>
       </div>
+      {/* 📱 Mobile attendance cards */}
+<div className="md:hidden space-y-4">
+  {sessions.length === 0 && (
+    <p className="text-center text-gray-500 italic">
+      Aucune séance trouvée
+    </p>
+  )}
+
+  {sessions.map((s) => (
+    <div
+      key={s.session_id}
+      className="bg-white rounded-xl shadow p-4 border space-y-3"
+    >
+      {/* Header */}
+      <div className="flex justify-between items-start">
+        <div>
+          <p className="font-semibold text-blue-700">
+            {s.course_name || "—"}
+          </p>
+          <p className="text-xs text-gray-500">
+            {dayLabel(s.day_of_week)} · {formatDateFrSafe(s.start_date)}
+          </p>
+          <p className="text-xs text-gray-500">
+            {s.start_time?.slice(0, 5)}–
+            {addHoursToTimeStr(s.start_time, s.duration_hours)}
+          </p>
+        </div>
+
+        <span
+          className={`px-3 py-1 rounded-full text-xs font-medium ${
+            s.attendance_status === "absent"
+              ? "bg-red-100 text-red-700"
+              : s.attendance_status === "present"
+              ? "bg-green-100 text-green-700"
+              : "bg-gray-100 text-gray-700"
+          }`}
+        >
+          {s.attendance_status === "absent"
+            ? "Absent"
+            : s.attendance_status === "present"
+            ? "Présent"
+            : "Non marqué"}
+        </span>
+      </div>
+
+      {/* Check-in / out */}
+      <div className="text-xs text-gray-600 flex justify-between">
+        <div>
+          <b>Entrée :</b>{" "}
+          {s.check_in_time
+            ? new Date(s.check_in_time).toLocaleTimeString("fr-FR", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : "—"}
+        </div>
+        <div>
+          <b>Sortie :</b>{" "}
+          {s.check_out_time
+            ? new Date(s.check_out_time).toLocaleTimeString("fr-FR", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : "—"}
+        </div>
+      </div>
+
+      {/* Action */}
+      <div>
+        {s.attendance_status === "absent" && s.marked_by === "user" ? (
+          <button
+            onClick={() =>
+              markAbsent(s.enrollment_id, s.start_date, "absent")
+            }
+            className="w-full bg-gray-600 hover:bg-gray-700 text-white py-2 rounded-lg text-sm"
+          >
+            Annuler l’absence
+          </button>
+        ) : s.attendance_status === "unmarked" ? (
+          <button
+            onClick={() =>
+              markAbsent(s.enrollment_id, s.start_date, "unmarked")
+            }
+            className="w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg text-sm"
+          >
+            Marquer absent
+          </button>
+        ) : (
+          <p className="text-center text-gray-400 text-sm italic">
+            Action non disponible
+          </p>
+        )}
+      </div>
+    </div>
+  ))}
+</div>
+
     </div>
   );
 }
