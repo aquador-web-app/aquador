@@ -204,6 +204,27 @@ if (courseMode === "aquafitness") {
   ) || null;
 }, [plans, selectedHours, selectedCourse, courseMode]);
 
+const price1h = useMemo(() => {
+  return (
+    plans.find(
+      (p) =>
+        p.is_public &&
+        Number(p.duration_hours) === 1 &&
+        p.course_type === courseMode
+    )?.price || 0
+  );
+}, [plans, courseMode]);
+
+const price2h = useMemo(() => {
+  return (
+    plans.find(
+      (p) =>
+        p.is_public &&
+        Number(p.duration_hours) === 2 &&
+        p.course_type === courseMode
+    )?.price || 0
+  );
+}, [plans, courseMode]);
 
 
   let warningShown = false;
@@ -365,14 +386,14 @@ if (courseMode === "aquafitness") {
   const courseSeries = selectedCourse ? (seriesByCourse[selectedCourse.id] || []) : [];
 
   return (
-    <div className="max-w-3xl mx-auto p-6">
+    <div className="max-w-3xl mx-auto p-4 sm:p-6">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-gradient-to-br from-blue-600 to-teal-400 text-white rounded-2xl shadow-xl p-6 mb-6"
+        className="bg-gradient-to-br from-blue-600 to-teal-400 text-white rounded-2xl shadow-xl p-4 sm:p-6 mb-6"
       >
-        <h2 className="text-3xl font-bold mb-2 text-center">S'enregistrer dans une classe</h2>
+        <h2 className="text-2xl sm:text-3xl font-bold mb-2 text-center">S'enregistrer dans une classe</h2>
 
         {/* Parent/children selector */}
 {(() => {
@@ -385,14 +406,14 @@ if (courseMode === "aquafitness") {
   // If more than one choice, show dropdown
   if (selectable.length > 1) {
     return (
-      <div className="flex justify-center mt-3">
+      <div className="flex justify-center mt-3 px-2">
         <select
           value={selectedProfile?.id || ""}
           onChange={(e) => {
             const p = selectable.find((x) => x.id === e.target.value);
             setSelectedProfile(p || null);
           }}
-          className="w-60 bg-white text-gray-700 border-none rounded-lg px-4 py-2 text-sm font-medium shadow focus:ring-4 focus:ring-blue-200 transition text-center"
+          className="w-full sm:w-60 bg-white text-gray-700 border-none rounded-lg px-4 py-2 text-sm font-medium shadow focus:ring-4 focus:ring-blue-200 transition text-center"
         >
           {selectable.map((p) => (
             <option key={p.id} value={p.id} className="text-center">
@@ -413,7 +434,7 @@ if (courseMode === "aquafitness") {
       {!successInfo ? (
         <motion.form
           onSubmit={handleSubmit}
-          className="bg-white rounded-2xl shadow-md p-6 space-y-6"
+          className="bg-white rounded-2xl shadow-md p-4 sm:p-6 space-y-6"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
         >
@@ -461,38 +482,75 @@ setStartDate("");
 
 
                   return (
-                    <div key={ser.id} className="border rounded-lg p-3">
-                      <div className="font-medium text-gray-700 mb-2">
-                        {dayName} : {firstStart} - {secondEnd}
-                      </div>
+                    <div
+  key={ser.id}
+  className="rounded-xl border bg-white p-4 shadow-sm space-y-3"
+>
+  {/* Header */}
+  <div className="flex justify-between items-center">
+    <div>
+      <p className="text-sm font-semibold text-gray-800">{dayName}</p>
+      <p className="text-xs text-gray-500">
+        {firstStart} – {secondEnd}
+      </p>
+    </div>
+  </div>
 
-                      <label className="inline-flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={selectedHours.includes(`${ser.key}-first`)}
-                          onChange={() => toggleHour(`${ser.key}-first`)}
-                          className="accent-teal-600"
-                        />
-                        {dayName} {firstStart} - {firstEnd}
-                        <span className="text-xs text-gray-600">
-                          (1h → {formatCurrencyUSD((plans.find((p) => p.duration_hours === 1) || {}).price || 0)})
-                        </span>
-                      </label>
-                      {duration === 2 && (
-                      <label className="inline-flex items-center gap-2 ml-6">
-                        <input
-                          type="checkbox"
-                          checked={selectedHours.includes(`${ser.key}-second`)}
-                          onChange={() => toggleHour(`${ser.key}-second`)}
-                          className="accent-teal-600"
-                        />
-                        {dayName} {firstEnd} - {secondEnd}
-                        <span className="text-xs text-gray-600">
-                          (2h total → {formatCurrencyUSD((plans.find((p) => p.duration_hours === 2) || {}).price || 0)})
-                        </span>
-                      </label>
-                      )}
-                    </div>
+  {/* First hour */}
+  <label
+    className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 cursor-pointer transition
+      ${
+        selectedHours.includes(`${ser.key}-first`)
+          ? "border-teal-500 bg-teal-50"
+          : "border-gray-200 hover:bg-gray-50"
+      }`}
+  >
+    <div className="flex items-center gap-3">
+      <input
+        type="checkbox"
+        checked={selectedHours.includes(`${ser.key}-first`)}
+        onChange={() => toggleHour(`${ser.key}-first`)}
+        className="accent-teal-600"
+      />
+      <span className="text-sm font-medium">
+        {firstStart} – {firstEnd}
+      </span>
+    </div>
+
+    <span className="text-xs font-semibold text-teal-700 bg-teal-100 px-2 py-0.5 rounded-full">
+      <span className="font-normal">(1h)</span> {formatCurrencyUSD(price1h)} 
+    </span>
+  </label>
+
+  {/* Second hour */}
+  {duration === 2 && (
+    <label
+      className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 cursor-pointer transition
+        ${
+          selectedHours.includes(`${ser.key}-second`)
+            ? "border-blue-500 bg-blue-50"
+            : "border-gray-200 hover:bg-gray-50"
+        }`}
+    >
+      <div className="flex items-center gap-3">
+        <input
+          type="checkbox"
+          checked={selectedHours.includes(`${ser.key}-second`)}
+          onChange={() => toggleHour(`${ser.key}-second`)}
+          className="accent-blue-600"
+        />
+        <span className="text-sm">
+          {firstEnd} – {secondEnd}
+        </span>
+      </div>
+
+      <span className="text-xs font-semibold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
+        <span className="font-normal">(2h)</span> {formatCurrencyUSD(price2h)} 
+      </span>
+    </label>
+  )}
+</div>
+
                   );
                 })}
               </div>
@@ -548,7 +606,7 @@ setStartDate("");
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="bg-white rounded-2xl shadow-md p-6 text-center"
+          className="bg-white rounded-2xl shadow-md p-4 sm:p-6 text-center"
         >
           <h3 className="text-2xl font-bold text-green-600 mb-3">✅ Inscription réussie !</h3>
           <p className="text-gray-700">
@@ -558,7 +616,7 @@ setStartDate("");
             Montant: <b>{formatCurrencyUSD(successInfo.price)}</b>
           </p>
           <button
-            className="mt-6 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+            className="mt-6 w-full sm:w-auto bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
             onClick={() => setSuccessInfo(null)}
           >
             Nouvelle inscription
