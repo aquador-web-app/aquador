@@ -14,6 +14,7 @@ import {
   formatCurrencyUSD,
 } from "../../lib/dateUtils";
 
+
 export default function UserProfile({ userId, onAddChild }) {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState(null);
@@ -297,10 +298,10 @@ function timeRangeWithFallback(start_time, end_time, duration_hours) {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-6">
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-600 to-orange-600 text-white rounded-xl p-6 shadow-lg">
-        <div className="flex items-center">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
     {/* Left side: avatar + profile info */}
     <div className="flex items-center gap-6">
       <div className="w-20 h-20 rounded-full bg-white text-aquaBlue flex items-center justify-center text-2xl font-bold">
@@ -354,7 +355,7 @@ function timeRangeWithFallback(start_time, end_time, duration_hours) {
       {/* Right side: Add Person button */}
     <button
   onClick={() => onAddChild && onAddChild()}
-  className="ml-auto bg-white text-blue-600 px-4 py-2 rounded-lg shadow hover:bg-gray-100 font-medium"
+  className="self-start sm:ml-auto bg-white text-blue-600 px-4 py-2 rounded-lg shadow hover:bg-gray-100 font-medium"
 >
   + Ajouter une personne
 </button>
@@ -362,7 +363,7 @@ function timeRangeWithFallback(start_time, end_time, duration_hours) {
 </div>
 
       {/* Tabs */}
-      <div className="flex gap-4 border-b mb-4">
+      <div className="flex gap-2 sm:gap-4 border-b mb-4 overflow-x-auto whitespace-nowrap">
         {[
           { id: "infos", label: "Infos" },
           { id: "enrollments", label: "Inscriptions" },
@@ -374,7 +375,7 @@ function timeRangeWithFallback(start_time, end_time, duration_hours) {
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`pb-2 px-3 ${
+            className={`pb-2 px-3 shrink-0 ${
               tab === t.id
                 ? "border-b-2 border-blue-600 text-blue-600 font-semibold"
                 : "text-gray-500"
@@ -395,7 +396,7 @@ function timeRangeWithFallback(start_time, end_time, duration_hours) {
       </h2>
 
       {/* Email */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <label className="font-medium text-gray-600 w-32">Email :</label>
         <input
           type="email"
@@ -408,7 +409,7 @@ function timeRangeWithFallback(start_time, end_time, duration_hours) {
       </div>
 
       {/* Téléphone */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <label className="font-medium text-gray-600 w-32">Téléphone :</label>
         <input
           type="tel"
@@ -421,7 +422,7 @@ function timeRangeWithFallback(start_time, end_time, duration_hours) {
         />
       </div>
       {/* Adresse */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <label className="font-medium text-gray-600 w-32">Adresse :</label>
         <input
           type="address"
@@ -515,6 +516,7 @@ function timeRangeWithFallback(start_time, end_time, duration_hours) {
         <h3 className="text-lg font-semibold text-gray-700 mb-3">
           Factures — {profile.full_name}
         </h3>
+       <div className="overflow-x-auto">
         <table className="min-w-full text-sm bg-white shadow rounded">
           <colgroup>
             <col className="w-[140px]" />
@@ -569,6 +571,7 @@ function timeRangeWithFallback(start_time, end_time, duration_hours) {
           </tbody>
         </table>
       </div>
+    </div>
     )}
 
     {/* Children */}
@@ -592,6 +595,7 @@ function timeRangeWithFallback(start_time, end_time, duration_hours) {
 
       {/* Referrals */}
       {tab === "referrals" && (
+       <div className="overflow-x-auto">
         <table className="min-w-full text-sm bg-white shadow rounded">
           <thead className="bg-gray-50">
             <tr>
@@ -617,6 +621,7 @@ function timeRangeWithFallback(start_time, end_time, duration_hours) {
             )}
           </tbody>
         </table>
+       </div>
       )}
 
         {/* Family */}
@@ -709,6 +714,7 @@ function ChildInvoices({ childId }) {
     return <p className="text-sm text-gray-500 italic">Aucune facture</p>;
 
   return (
+  <div className="overflow-x-auto">
     <table className="min-w-full text-sm bg-white shadow rounded">
       <thead className="bg-aquaBlue text-white">
         <tr>
@@ -740,6 +746,7 @@ function ChildInvoices({ childId }) {
         ))}
       </tbody>
     </table>
+  </div>
   );
 }
 
@@ -811,6 +818,7 @@ function EnrollmentTable({ profileId }) {
     return <p className="text-sm text-gray-500 italic">Aucune inscription</p>;
 
   return (
+  <div className="overflow-x-auto">
     <table className="min-w-full text-sm bg-white shadow rounded">
       <thead className="bg-aquaBlue text-white">
         <tr>
@@ -853,6 +861,7 @@ function EnrollmentTable({ profileId }) {
         })}
       </tbody>
     </table>
+  </div>
   );
 }
 
