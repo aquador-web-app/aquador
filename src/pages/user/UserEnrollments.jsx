@@ -517,9 +517,13 @@ setStartDate("");
       </span>
     </div>
 
-    <span className="text-xs font-semibold text-teal-700 bg-teal-100 px-2 py-0.5 rounded-full">
-      {formatCurrencyUSD(price1h)} <span className="font-normal">(1h)</span>
-    </span>
+    <span className="bg-teal-100 text-teal-700 px-3 py-1 rounded-full flex flex-col items-center leading-tight">
+  <span className="text-xs font-semibold">
+    {formatCurrencyUSD(price1h)}
+  </span>
+  <span className="text-[10px] font-normal">(1h)</span>
+</span>
+
   </label>
 
   {/* Second hour */}
@@ -544,9 +548,13 @@ setStartDate("");
         </span>
       </div>
 
-      <span className="text-xs font-semibold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
-        {formatCurrencyUSD(price2h)} <span className="font-normal">(2h)</span>
-      </span>
+      <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full flex flex-col items-center leading-tight">
+  <span className="text-xs font-semibold">
+    {formatCurrencyUSD(price2h)}
+  </span>
+  <span className="text-[10px] font-normal">(2h)</span>
+</span>
+
     </label>
   )}
 </div>
