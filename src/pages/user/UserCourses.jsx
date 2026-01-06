@@ -444,8 +444,8 @@ function SessionsList({ sessionGroup, enrollmentStart, planDuration, userStartTi
         <tr className="text-gray-600 border-b">
           <th className="w-60 px-6 py-2 text-left"></th>
           <th className="px-6 py-2 text-left">Jour</th>
-          <th className="px-6 py-2 text-left">Date</th>
           <th className="px-6 py-2 text-left">Heure</th>
+          <th className="px-6 py-2 text-left">Date</th>
           <th className="px-6 py-2 text-left">Statut</th>
         </tr>
       </thead>
