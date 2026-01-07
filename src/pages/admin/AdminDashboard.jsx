@@ -77,6 +77,8 @@ function SidebarBtn({ id, icon, label }) {
 
 function SidebarSub({ id, label }) {
   const { activeTab, setActiveTab } = window.__ADMIN_CTX__;
+  const isActive = activeTab === id;
+
   return (
     <button
       onClick={() => {
@@ -85,11 +87,24 @@ function SidebarSub({ id, label }) {
           window.__ADMIN_CLOSE_SIDEBAR__?.();
         }
       }}
+      className={`
+        text-left w-full
+        px-3 py-2
+        rounded-lg
+        text-sm
+        transition
+        ${
+          isActive
+            ? "bg-aquaBlue text-white"
+            : "text-gray-200 hover:bg-orange-700"
+        }
+      `}
     >
       {label}
     </button>
   );
 }
+
 
 function SubGroup({ title, prefix, children }) {
   const { activeTab, setActiveTab } = window.__ADMIN_CTX__;
