@@ -1059,7 +1059,12 @@ window.__ADMIN_CLOSE_SIDEBAR__ = () => setSidebarOpen(false);
     ☰
   </button>
 
-  <span className="font-semibold">Admin Dashboard</span>
+  <img
+    src="/logo/aquador.png"
+    alt="A'QUA D'OR"
+    className="h-12 w-auto cursor-pointer"
+    onClick={() => setActiveTab("overview")}
+  />
 
   <div className="w-6" />
 </div>
