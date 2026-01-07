@@ -459,15 +459,16 @@ function timeRangeWithFallback(start_time, end_time, duration_hours) {
         </span>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-col sm:flex-row gap-2">
         <input
           value={referralLink}
           readOnly
-          className="flex-1 border border-gray-300 px-3 py-2 rounded-lg text-sm bg-gray-50"
+          className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm bg-gray-50 break-all"
         />
+
         <button
           onClick={() => navigator.clipboard.writeText(referralLink)}
-          className="px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm transition"
+          className="self-center sm:self-auto px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm transition"
         >
           Copier
         </button>
@@ -657,13 +658,19 @@ function timeRangeWithFallback(start_time, end_time, duration_hours) {
     ) : docs.length ? (
       <ul className="divide-y">
         {docs.map((doc, idx) => (
-          <li key={idx} className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 py-2">
-            <span className="text-gray-800">{doc.name}</span>
+          <li
+            key={idx}
+            className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 py-3"
+          >
+            <span className="text-gray-800 text-sm break-all">
+              {doc.name}
+            </span>
+
             <a
               href={doc.url}
               target="_blank"
               rel="noreferrer"
-              className="text-blue-600 underline"
+              className="text-blue-600 underline text-sm w-fit"
             >
               Ouvrir
             </a>
