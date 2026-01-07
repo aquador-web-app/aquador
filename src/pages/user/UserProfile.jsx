@@ -197,11 +197,18 @@ try {
         .select("id, full_name, birth_date, is_active")
         .eq("parent_id", userId);
 
-      const { data: parentData } = await supabase
-        .from("profiles_with_unpaid")
-        .select("id, full_name, email, is_active")
-        .eq("id", p?.parent_id)
-        .maybeSingle();
+      let parentData = null;
+
+      if (p?.parent_id) {
+        console.log("ℹ️ No parent_id — user is a primary profile");
+        const { data } = await supabase
+          .from("profiles_with_unpaid")
+          .select("id, full_name, email, is_active")
+          .eq("id", p.parent_id)
+          .maybeSingle();
+
+        parentData = data;
+      }
 
       setProfile(p);
       setInvoices(invs || []);

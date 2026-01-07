@@ -626,7 +626,7 @@ const fetchCommissionRequests = async () => {
     .from("commission_requests")
     .select("*")
     .eq("user_id", user.id)
-    .order("created_at", { ascending: false })
+    .order("requested_at", { ascending: false })
     .limit(5);
 
   if (!error) setCommissionRequests(data);

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, Fragment } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { formatDateFrSafe } from "../../lib/dateUtils";
 import { useGlobalAlert } from "../../components/GlobalAlert";
@@ -169,7 +169,7 @@ useEffect(() => {
         </thead>
         <tbody>
           {enrollments.map((e) => (
-            <>
+            <Fragment key={e.id}>
         <tr
           key={e.id}
           className="border-t hover:bg-gray-50 cursor-pointer"
@@ -265,7 +265,7 @@ useEffect(() => {
             </td>
           </tr>
         )}
-      </>
+      </Fragment>
     ))}
 
     {!enrollments.length && (
