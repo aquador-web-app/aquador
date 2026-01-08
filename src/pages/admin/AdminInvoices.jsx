@@ -74,78 +74,25 @@ function invoiceItems(inv) {
  * - Only shows students & influencers
  */
 export default function AdminInvoices() {
-  const [activeTab, setActiveTab] = useState("invoices");
+    /** Build latest paid date per invoice (from payments) */
+  const attachPaidDates = async (invList) => {
+    const ids = Array.from(new Set(invList.map((i) => i.invoice_id))).filter(Boolean);
+    if (!ids.length) return;
 
-  // Month filter (state + options built from current data)
-const [monthFilter, setMonthFilter] = useState("");
+    const { data, error } = await supabase
+      .from("payments")
+      .select("invoice_id, created_at")
+      .in("invoice_id", ids)
+      .order("created_at", { ascending: false });
 
-
-  /** INVOICES STATE */
-  const [allInvoices, setAllInvoices] = useState([]);
-  const [paidDates, setPaidDates] = useState({});
-  const [invoiceItemsById, setInvoiceItemsById] = useState({});
-  const [expandingInvoice, setExpandingInvoice] = useState({});
-  const [expandingFamily, setExpandingFamily] = useState({});
-  const [nameFilter, setNameFilter] = useState("");
-
-
-  const nameOptions = useMemo(() => {
-  const set = new Set();
-  for (const inv of allInvoices) {
-    if (inv.child_full_name) set.add(inv.child_full_name);
-  }
-  return Array.from(set).sort();
-}, [allInvoices]);
-
-  
-  const monthOptions = useMemo(() => {
-  if (!allInvoices?.length) return [];
-
-  const map = new Map();
-
-  for (const inv of allInvoices) {
-    const raw = inv.month;
-    if (!raw) continue;
-
-    // Raw like "2025-11-01" → take year and month directly
-    const [year, month] = raw.split("-");
-    const key = `${year}-${month}`;
-
-    // Month names in French, manually mapped (no Date constructor)
-    const monthNames = [
-      "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
-      "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"
-    ];
-    const label = `${monthNames[parseInt(month, 10) - 1]} ${year}`;
-
-    map.set(key, label);
-  }
-
-  // sort newest first
-  return Array.from(map.entries())
-    .sort((a, b) => (a[0] < b[0] ? 1 : -1))
-    .map(([value, label]) => ({ value, label }));
-}, [allInvoices]);
-
-
-
-
-  // Filters (client-side)
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [startDate, setStartDate] = useState(null);
-  const [endDate, setEndDate] = useState(null);
-
-  // Pagination (families)
-  const PAGE_SIZE = 20;
-  const [page, setPage] = useState(1);
-
-  /** PAYMENTS / FEES / CREDITS STATE */
-  const [payments, setPayments] = useState([]);
-  const [fees, setFees] = useState([]);
-  const [credits, setCredits] = useState([]);
-
-  /** Load everything on mount (global view) */
-  useEffect(() => {
+    if (!error && data) {
+      const latest = {};
+      for (const p of data) {
+        if (!latest[p.invoice_id]) latest[p.invoice_id] = p.created_at;
+      }
+      setPaidDates(latest);
+    }
+  };
   // ---- INVOICES (base table + manual join to profiles) ----
   const loadInvoices = async () => {
     const { data, error } = await supabase
@@ -228,6 +175,80 @@ const [monthFilter, setMonthFilter] = useState("");
     attachPaidDates(filtered);
   };
 
+  
+  const [activeTab, setActiveTab] = useState("invoices");
+
+  // Month filter (state + options built from current data)
+const [monthFilter, setMonthFilter] = useState("");
+
+
+  /** INVOICES STATE */
+  const [allInvoices, setAllInvoices] = useState([]);
+  const [paidDates, setPaidDates] = useState({});
+  const [invoiceItemsById, setInvoiceItemsById] = useState({});
+  const [expandingInvoice, setExpandingInvoice] = useState({});
+  const [expandingFamily, setExpandingFamily] = useState({});
+  const [nameFilter, setNameFilter] = useState("");
+
+
+  const nameOptions = useMemo(() => {
+  const set = new Set();
+  for (const inv of allInvoices) {
+    if (inv.child_full_name) set.add(inv.child_full_name);
+  }
+  return Array.from(set).sort();
+}, [allInvoices]);
+
+  
+  const monthOptions = useMemo(() => {
+  if (!allInvoices?.length) return [];
+
+  const map = new Map();
+
+  for (const inv of allInvoices) {
+    const raw = inv.month;
+    if (!raw) continue;
+
+    // Raw like "2025-11-01" → take year and month directly
+    const [year, month] = raw.split("-");
+    const key = `${year}-${month}`;
+
+    // Month names in French, manually mapped (no Date constructor)
+    const monthNames = [
+      "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
+      "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"
+    ];
+    const label = `${monthNames[parseInt(month, 10) - 1]} ${year}`;
+
+    map.set(key, label);
+  }
+
+  // sort newest first
+  return Array.from(map.entries())
+    .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+    .map(([value, label]) => ({ value, label }));
+}, [allInvoices]);
+
+
+
+
+  // Filters (client-side)
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [startDate, setStartDate] = useState(null);
+  const [endDate, setEndDate] = useState(null);
+
+  // Pagination (families)
+  const PAGE_SIZE = 20;
+  const [page, setPage] = useState(1);
+
+  /** PAYMENTS / FEES / CREDITS STATE */
+  const [payments, setPayments] = useState([]);
+  const [fees, setFees] = useState([]);
+  const [credits, setCredits] = useState([]);
+
+  /** Load everything on mount (global view) */
+  useEffect(() => {
+  loadInvoices();   // ✅ ADD THIS LINE
   // ---- PAYMENTS (drop inexistent columns, handle errors) ----
   const loadPayments = async () => {
     const { data, error } = await supabase
@@ -274,32 +295,13 @@ const [monthFilter, setMonthFilter] = useState("");
     setCredits(data || []);
   };
 
-  loadInvoices();
   loadPayments();
   loadFees();
   loadCredits();
 }, []);
 
 
-  /** Build latest paid date per invoice (from payments) */
-  const attachPaidDates = async (invList) => {
-    const ids = Array.from(new Set(invList.map((i) => i.invoice_id))).filter(Boolean);
-    if (!ids.length) return;
 
-    const { data, error } = await supabase
-      .from("payments")
-      .select("invoice_id, created_at")
-      .in("invoice_id", ids)
-      .order("created_at", { ascending: false });
-
-    if (!error && data) {
-      const latest = {};
-      for (const p of data) {
-        if (!latest[p.invoice_id]) latest[p.invoice_id] = p.created_at;
-      }
-      setPaidDates(latest);
-    }
-  };
 
   /** Client-side filters for invoices */
 const filteredInvoices = useMemo(() => {
@@ -432,7 +434,7 @@ const lastRow = Math.min(page * PAGE_SIZE, totalFamilies);
     if (invoiceItemsById[invoiceId]) return;
     const { data } = await supabase
       .from("invoice_items")
-      .select("id, description, amount, paid, type, created_at")
+      .select("id, description, amount, paid, reverted, type, created_at")
       .eq("invoice_id", invoiceId)
       .order("created_at", { ascending: true });
     if (data) {
@@ -530,6 +532,7 @@ const lastRow = Math.min(page * PAGE_SIZE, totalFamilies);
                   toggleExpandInvoice={toggleExpandInvoice}
                   invoiceItemsById={invoiceItemsById}
                   paidDates={paidDates}
+                  reloadInvoices={loadInvoices}
                 />
               ))}
             </div>
@@ -618,6 +621,7 @@ function FamilyBlock({
   toggleExpandInvoice,
   invoiceItemsById,
   paidDates,
+  reloadInvoices,
 }) {
   const open = !!expandingFamily[family.familyId];
 
@@ -680,11 +684,44 @@ function FamilyBlock({
                       {invoiceItems(inv).length ? (
                         <div className="space-y-1 max-h-28 overflow-auto pr-1">
                           {invoiceItems(inv).map((it, idx) => (
-                            <div key={idx} className="flex justify-between gap-3">
-                              <span className="text-gray-700">{it.d || "—"}</span>
-                              <span className="font-medium">{formatCurrencyUSD(it.a)}</span>
-                            </div>
-                          ))}
+  <div key={idx} className="flex justify-between gap-3 items-center">
+    <span className="text-gray-700">
+      {it.d}
+    </span>
+
+    <div className="flex items-center gap-3">
+      <span className="font-medium">
+        {formatCurrencyUSD(it.a)}
+      </span>
+
+      <button
+        onClick={async () => {
+          if (!confirm(`Revert "${it.d}" ?`)) return;
+
+          const { error } = await supabase.rpc(
+            "revert_invoice_slot",
+            {
+              p_invoice_id: inv.invoice_id,
+              p_slot: idx + 1,              // 🔑 THIS IS CRITICAL
+              p_description: it.d,
+              p_amount: it.a,
+            }
+          );
+
+          if (!error) {
+            await reloadInvoices();
+          } else {
+            alert(error.message);
+          }
+        }}
+        className="text-xs text-red-600 hover:underline"
+      >
+        Revert
+      </button>
+    </div>
+  </div>
+))}
+
                         </div>
                       ) : (
                         "—"
@@ -767,10 +804,54 @@ function FamilyBlock({
     {invoiceItemsById[inv.invoice_id]?.length ? (
       <ul className="text-sm text-gray-700 list-disc pl-5">
         {invoiceItemsById[inv.invoice_id].map((it) => (
-          <li key={it.id}>
-            {it.description} — {fmtUSD(it.amount)} {it.paid ? "✅" : "❌"}
-          </li>
-        ))}
+  <li
+    key={it.id}
+    className={`flex justify-between items-center ${
+      it.reverted ? "line-through text-gray-400" : ""
+    }`}
+  >
+    <span>
+      {it.description} — {fmtUSD(it.amount)}
+      {it.paid ? " ✅" : ""}
+    </span>
+
+    {!it.reverted && (
+      <button
+        onClick={async () => {
+          if (!confirm("Revert this invoice item?")) return;
+
+          const { error } = await supabase.rpc(
+            "revert_invoice_item",
+            { p_item_id: it.id }
+          );
+
+          if (!error) {
+            // refresh items
+            const { data } = await supabase
+              .from("invoice_items")
+              .select("id, description, amount, paid, reverted, created_at")
+              .eq("invoice_id", inv.invoice_id)
+              .order("created_at");
+
+            setInvoiceItemsById((prev) => ({
+              ...prev,
+              [inv.invoice_id]: data || [],
+            }));
+
+            // refresh invoice row
+            await reloadInvoices();
+          } else {
+            alert(error.message);
+          }
+        }}
+        className="text-xs text-red-600 hover:underline"
+      >
+        Revert
+      </button>
+    )}
+  </li>
+))}
+
       </ul>
     ) : invoiceItems(inv).length ? (
       <ul className="text-sm text-gray-700 list-disc pl-5">
