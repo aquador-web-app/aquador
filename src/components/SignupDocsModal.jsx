@@ -57,6 +57,7 @@ async function sendHTMLToPDFAndUpload({ html, formName, fullName, outputPath }) 
       body: JSON.stringify({
         user_id: "anonymous",
         full_name: safeFull,
+        safe_name: safeFull,
         documents: [
           {
             form_name: safeForm,     // 👈 sanitized
