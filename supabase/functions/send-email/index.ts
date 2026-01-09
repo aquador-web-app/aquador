@@ -317,6 +317,13 @@ const mergeVars = {
   total: invoice?.total != null ? formatCurrencyUSD(invoice.total) : "",
   due_date: invoice?.due_date ? formatDateFrSafe(invoice.due_date) : "",
   month: invoice?.month ? formatMonth(invoice.month) : "",
+  start_date: enrollment?.start_date
+    ? formatDateFrSafe(enrollment.start_date)
+    : "",
+
+  session_time: enrollment?.sessions?.start_time
+    ? enrollment.sessions.start_time.slice(0, 5)
+    : "",
 
   balance:
     invoice && invoice.total != null && invoice.paid_total != null
