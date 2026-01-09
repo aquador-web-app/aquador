@@ -267,6 +267,8 @@ if (e.invoice_id) {
 
         await new Promise((resolve) => setTimeout(resolve, 600)); // throttle
 
+
+
 // ==========================
 // 🔥 FETCH INVOICE FOR TEMPLATE VARIABLES
 // ==========================
@@ -285,6 +287,22 @@ if (e.invoice_id) {
     invoice = invoiceRow;
   }
 }
+
+// 🔥 FALLBACK: resolve profile from email (for enrollment emails)
+if (!profileCheck && e.email) {
+  const { data: profByEmail, error } = await supabase
+    .from("profiles")
+    .select("id, parent_id, full_name")
+    .eq("email", e.email)
+    .maybeSingle();
+
+  if (error) {
+    console.error("❌ Profile lookup by email failed:", error);
+  } else {
+    profileCheck = profByEmail;
+  }
+}
+
 
 // ✅ Resolve attachment dynamically:
 // 1) prefer attachment_url stored in queue (manual/system cases)
@@ -305,6 +323,35 @@ if (!resolvedAttachmentUrl) {
 
   continue;
 }
+
+// ==========================
+// 🏊 FETCH ACTIVE ENROLLMENT (SCHOOL)
+// ==========================
+let enrollment = null;
+
+if (profileCheck?.id) {
+  const { data: enr, error: enrErr } = await supabase
+    .from("enrollments")
+    .select(`
+      start_date,
+      enrolled_at,
+      sessions:session_id (
+        start_time
+      )
+    `)
+    .eq("profile_id", profileCheck.id)
+    .eq("status", "active")
+    .order("enrolled_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (enrErr) {
+    console.error("❌ Enrollment fetch error:", enrErr);
+  } else {
+    enrollment = enr;
+  }
+}
+
 
 // ==========================
 // 🧩 BUILD MERGE VARIABLES
