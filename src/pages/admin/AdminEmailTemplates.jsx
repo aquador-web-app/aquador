@@ -247,7 +247,8 @@ if (user.source === "club") {
         sessions:session_id ( id, day_of_week, start_time )
       `)
       .eq("profile_id", user.id)
-      .order("created_at", { ascending: false })
+      .eq("status", "active")              // 🔥 CRITICAL
+      .order("enrolled_at", { ascending: false }) // 🔥 CORRECT ORDER
       .limit(1)
       .maybeSingle();
 
@@ -320,10 +321,7 @@ group_names:
 
 };
 
-
-
-
-    let html = body || "";
+   let html = body || "";
 
 const livePlaceholders = extractPlaceholders(body);
 
