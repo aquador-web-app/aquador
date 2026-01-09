@@ -325,10 +325,13 @@ group_names:
 
     let html = body || "";
 
-placeholders.forEach((ph) => {
+const livePlaceholders = extractPlaceholders(body);
+
+livePlaceholders.forEach((ph) => {
   const regex = new RegExp(`{{\\s*${ph}\\s*}}`, "g");
   html = html.replace(regex, sample[ph] ?? "");
 });
+
 
 
     setPreviewHtml(html);
