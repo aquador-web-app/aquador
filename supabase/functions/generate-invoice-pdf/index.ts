@@ -315,8 +315,6 @@ serve(async (req) => {
       );
     }
 
-
-
 // 🚫 Do not generate a NEW invoice PDF if the invoice total (solde) is zero
 if (Number(mainInvoice.total || 0) <= 0) {
   console.log(
@@ -349,7 +347,10 @@ if (busy && busy.length > 0) {
 // 🔐 FIX 3 — ACQUIRE GLOBAL PDF LOCK (ATOMIC + VERIFIED)
 const { data: lockRows } = await supabase
   .from("invoices")
-  .update({ pdf_generating: true })
+  .update({
+    pdf_url: null,
+    pdf_generating: true,
+  })
   .eq("id", invoice_id)
   .is("pdf_generating", false)
   .select("id");
