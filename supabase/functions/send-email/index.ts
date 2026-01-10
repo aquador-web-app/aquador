@@ -83,7 +83,6 @@ function applyVars(template, vars = {}) {
 }
 
 
-
 // === Utility: Send an email via Resend (with optional attachment) ===
 async function sendWithResend(toInput, subject, html, attachmentUrl = null) {
   // ✅ Normalize recipients: accept single email, array, or undefined
@@ -217,7 +216,7 @@ serve(async (req) => {
 
     const { data: pending, error } = await supabase
   .from("email_queue")
-  .select("id, email, subject, body, attachment_url, invoice_id")
+  .select("id, email, subject, body, attachment_url, invoice_id, variables, kind, user_id")
   .eq("status", "pending")
   .limit(10);
 
@@ -230,8 +229,20 @@ serve(async (req) => {
       });
     }
 
+
     let sentCount = 0;
     for (const e of pending) {
+      let varsFromQueue = {};
+
+try {
+  if (typeof e.variables === "string") {
+    varsFromQueue = JSON.parse(e.variables);
+  } else if (typeof e.variables === "object" && e.variables !== null) {
+    varsFromQueue = e.variables;
+  }
+} catch (err) {
+  console.warn("⚠️ Failed to parse queue variables:", err);
+}
       try {
         let profileCheck = null;
 
@@ -307,49 +318,22 @@ if (!profileCheck && e.email) {
 // ✅ Resolve attachment dynamically:
 // 1) prefer attachment_url stored in queue (manual/system cases)
 // 2) otherwise use invoice.pdf_url (monthly async case)
-const resolvedAttachmentUrl = e.attachment_url || invoice?.pdf_url || null;
+// 🔎 Resolve attachment ONLY if required
+const needsPdf = ["InvoiceIssued", "InvoiceReminder"].includes(e.kind);
 
-// ✅ If PDF is still not ready, DO NOT send yet.
-// Leave it as pending so the next cron run will try again.
-if (!resolvedAttachmentUrl) {
-  console.warn("⏳ PDF not ready yet — keeping email pending:", e.id);
+const resolvedAttachmentUrl =
+  e.attachment_url || invoice?.pdf_url || null;
+
+if (needsPdf && !resolvedAttachmentUrl) {
+  console.warn("⏳ Waiting for PDF for email:", e.id);
   await supabase
     .from("email_queue")
     .update({
-      // optional: record why it’s waiting
-      last_error: "PDF not ready yet (pdf_url is null)",
+      last_error: "Waiting for PDF",
     })
     .eq("id", e.id);
 
   continue;
-}
-
-// ==========================
-// 🏊 FETCH ACTIVE ENROLLMENT (SCHOOL)
-// ==========================
-let enrollment = null;
-
-if (profileCheck?.id) {
-  const { data: enr, error: enrErr } = await supabase
-    .from("enrollments")
-    .select(`
-      start_date,
-      enrolled_at,
-      sessions:session_id (
-        start_time
-      )
-    `)
-    .eq("profile_id", profileCheck.id)
-    .eq("status", "active")
-    .order("enrolled_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (enrErr) {
-    console.error("❌ Enrollment fetch error:", enrErr);
-  } else {
-    enrollment = enr;
-  }
 }
 
 
@@ -357,37 +341,35 @@ if (profileCheck?.id) {
 // 🧩 BUILD MERGE VARIABLES
 // ==========================
 const mergeVars = {
-  name: profileCheck?.full_name || "",
-  full_name: profileCheck?.full_name || "",
+  ...(varsFromQueue || {}),
+
+  name: varsFromQueue?.full_name || profileCheck?.full_name || "",
+  full_name: varsFromQueue?.full_name || profileCheck?.full_name || "",
+  email: e.email,
 
   invoice_no: invoice?.invoice_no || "",
   total: invoice?.total != null ? formatCurrencyUSD(invoice.total) : "",
   due_date: invoice?.due_date ? formatDateFrSafe(invoice.due_date) : "",
   month: invoice?.month ? formatMonth(invoice.month) : "",
-  start_date: enrollment?.start_date
-    ? formatDateFrSafe(enrollment.start_date)
-    : "",
-
-  session_time: enrollment?.sessions?.start_time
-    ? enrollment.sessions.start_time.slice(0, 5)
-    : "",
-
-  balance:
-    invoice && invoice.total != null && invoice.paid_total != null
-      ? formatCurrencyUSD(Number(invoice.total) - Number(invoice.paid_total))
-      : "",
-
-  email: e.email,
 };
+
 
 // ==========================
 // 🔥 APPLY TEMPLATE VARIABLES
 // ==========================
-const subjectFinal = applyVars(e.subject || "(no subject)", mergeVars);
-let interpolatedBody = applyVars(e.body || "(no content)", mergeVars);
+// 1️⃣ Apply variables ONLY ONCE to raw template
+const bodyWithVars = applyVars(e.body || "(no content)", mergeVars);
 
-let wrappedHtml = renderEmailTemplate(interpolatedBody, mergeVars.full_name);
-wrappedHtml = applyVars(wrappedHtml, mergeVars);
+// 2️⃣ Wrap the already-interpolated body
+let wrappedHtml = renderEmailTemplate(
+  bodyWithVars,
+  mergeVars.full_name
+);
+
+// 3️⃣ Subject replacement
+const subjectFinal = applyVars(e.subject || "(no subject)", mergeVars);
+
+console.log("🧪 BODY BEFORE SEND:", bodyWithVars);
 
 // ==========================
 // 📤 SEND EMAIL (WITH RESOLVED ATTACHMENT)
@@ -396,7 +378,7 @@ await sendWithResend(
   e.email,
   subjectFinal,
   wrappedHtml,
-  resolvedAttachmentUrl
+  needsPdf ? resolvedAttachmentUrl : null
 );
 
 

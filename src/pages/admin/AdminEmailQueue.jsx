@@ -54,6 +54,7 @@ export default function AdminEmailQueue() {
           email: row.email,         // 🔥 REQUIRED
           subject: row.subject,     // 🔥 REQUIRED
           body: row.body,           // 🔥 REQUIRED
+          variables: row.variables, 
         }),
       }
     );
@@ -80,7 +81,7 @@ export default function AdminEmailQueue() {
     let query = supabase
       .from("email_queue")
       .select(
-        "id, invoice_id, user_id, email, subject, body, status, kind, created_at, sent_at",
+        "id, invoice_id, user_id, email, subject, body, variables, status, kind, created_at, sent_at",
         { count: "exact" }
       )
       .order("created_at", { ascending: false })

@@ -160,7 +160,11 @@ export default function AdminDashboard() {
   const [unpaidInvoices, setUnpaidInvoices] = useState({ count: 0, total: 0 })
   const [attendance, setAttendance] = useState({ percent: 0, total: 0 })
   const [commissions, setCommissions] = useState(0)
-  const [newUsers, setNewUsers] = useState({ current: 0, last: 0 });
+  const [newUsers, setNewUsers] = useState({
+  current: 0,
+  last: 0,
+  users: [],
+});
   const [birthdays, setBirthdays] = useState([]);
   const [sessions, setSessions] = useState([]);
   const [tab, setTab] = useState("users"); // 'users' | 'finance'
@@ -255,32 +259,35 @@ if (commErr) {
 }
 
 
-    // 6) New users for current month + note for last month
+// 6) New users (current month) + names
 const firstDayThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 const firstDayNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+const firstDayPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
 
-// Count new users this month
-const { count: thisMonthCount } = await supabase
+// 👉 Current month users (with names)
+const { data: newUsersRows, error: newUsersErr } = await supabase
   .from("profiles_with_unpaid")
-  .select("*", { count: "exact", head: true })
+  .select("id, full_name")
   .gte("created_at", getHaitiISOString(firstDayThisMonth))
   .lt("created_at", getHaitiISOString(firstDayNextMonth))
+  .order("full_name", { ascending: true });
 
-
-// Count previous month total (for the small note)
-const firstDayPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+// 👉 Previous month count (note only)
 const { count: prevMonthCount } = await supabase
   .from("profiles_with_unpaid")
   .select("*", { count: "exact", head: true })
   .gte("created_at", getHaitiISOString(firstDayPrevMonth))
-  .lt("created_at", getHaitiISOString(firstDayThisMonth))
+  .lt("created_at", getHaitiISOString(firstDayThisMonth));
 
-
-// Save both
 setNewUsers({
-  current: thisMonthCount || 0,
+  current: newUsersRows?.length || 0,
   last: prevMonthCount || 0,
+  users: (newUsersRows || []).map(u => ({
+    id: u.id,
+    name: u.full_name,
+  })),
 });
+
 
 // 7) Consentement signé
 const { data: consentRows, error: consErr } = await supabase
@@ -746,16 +753,48 @@ function isEcoleTabVisibleToAssistant(tabId) {
 
   {/* Nouveaux inscrits (mois en cours) */}
 <motion.div
-  className="relative bg-white rounded-2xl p-6 border border-gray-100 shadow-sm hover:shadow-xl cursor-pointer transition-all"
+  className="relative group bg-white rounded-2xl p-6 border border-gray-100 shadow-sm hover:shadow-xl cursor-pointer transition-all"
   whileHover={{ scale: 1.03, y: -3 }}
 >
   <div className="absolute top-0 left-0 h-1 w-full bg-gradient-to-r from-purple-500 to-indigo-400 rounded-t-2xl"></div>
+
   <p className="text-gray-500 font-medium">Nouveaux inscrits (mois en cours)</p>
-  <h3 className="text-3xl font-bold text-purple-600">{newUsers.current}</h3>
+  <h3 className="text-3xl font-bold text-purple-600">
+    {newUsers.current}
+  </h3>
   <p className="text-sm text-gray-500 mt-1">
     Mois précédent : <b>{newUsers.last}</b>
   </p>
+
+  {/* Hover list */}
+  <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+    <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-auto">
+      <div className="bg-white/95 backdrop-blur border border-gray-200 rounded-xl shadow-2xl px-4 py-3 w-72 max-h-72 overflow-y-auto">
+        <p className="font-semibold text-gray-800 mb-2 text-center">
+          Nouveaux inscrits ({newUsers.current})
+        </p>
+
+        {newUsers.users.length === 0 ? (
+          <p className="text-sm text-gray-600 italic text-center">
+            Aucun nouvel inscrit ce mois
+          </p>
+        ) : (
+          <ul className="text-sm text-gray-700 space-y-1">
+            {newUsers.users.map(u => (
+              <li
+                key={u.id}
+                className="bg-gray-50 px-3 py-1 rounded-md"
+              >
+                {u.name}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  </div>
 </motion.div>
+
       </div>
       <br />
       <div className="bg-white shadow rounded-lg p-6">
