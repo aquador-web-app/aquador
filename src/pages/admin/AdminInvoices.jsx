@@ -319,7 +319,6 @@ if (nameFilter) {
 if (monthFilter) {
   base = base.filter((inv) => monthKeyOf(inv) === monthFilter);
 }
-base.sort((a, b) => (a.month < b.month ? 1 : -1));
 
 
   // 💰 apply status + date range filters
@@ -368,10 +367,19 @@ const families = useMemo(() => {
       acc[key].invoices.push(inv);
       return acc;
     }, {});
-    return Object.values(groupedByMonth);
+
+    // 🔑 SORT NAMES ASC inside each month
+    return Object.values(groupedByMonth).map((fam) => ({
+      ...fam,
+      invoices: [...fam.invoices].sort((a, b) =>
+        a.child_full_name.localeCompare(b.child_full_name, "fr", {
+          sensitivity: "base",
+        })
+      ),
+    }));
   }
 
-  // Otherwise group by family + month (e.g., "PARENT_ID–2025-12")
+  // Default: group by family + month
   const grouped = filteredInvoices.reduce((acc, row) => {
     const parent = row.parent_id_explicit || row.user_id;
     const key = `${parent}-${monthKeyOf(row)}`;
@@ -387,25 +395,39 @@ const families = useMemo(() => {
     acc[key].invoices.push(row);
     return acc;
   }, {});
-  return Object.values(grouped);
+
+  // 🔑 SORT NAMES ASC inside each month
+  return Object.values(grouped).map((fam) => ({
+    ...fam,
+    invoices: [...fam.invoices].sort((a, b) =>
+      a.child_full_name.localeCompare(b.child_full_name, "fr", {
+        sensitivity: "base",
+      })
+    ),
+  }));
 }, [filteredInvoices, nameFilter]);
+
 
 
 /** ✅ Sort families by latest invoice month (descending) */
 const sortedFamilies = useMemo(() => {
   if (!families.length) return [];
+
   return [...families].sort((a, b) => {
-    const latestA = a.invoices.reduce(
-      (max, inv) => (inv.month > max ? inv.month : max),
-      ""
-    );
-    const latestB = b.invoices.reduce(
-      (max, inv) => (inv.month > max ? inv.month : max),
-      ""
-    );
-    return latestA < latestB ? 1 : -1; // newest first
+    // 1️⃣ month DESC
+    const monthA = a.invoices[0]?.month || "";
+    const monthB = b.invoices[0]?.month || "";
+    if (monthA !== monthB) {
+      return monthA < monthB ? 1 : -1;
+    }
+
+    // 2️⃣ family name ASC (THIS WAS MISSING)
+    return a.familyName.localeCompare(b.familyName, "fr", {
+      sensitivity: "base",
+    });
   });
 }, [families]);
+
 
 /** ✅ Count total families */
 const totalFamilies = sortedFamilies.length;
@@ -673,7 +695,13 @@ function FamilyBlock({
               </tr>
             </thead>
             <tbody>
-              {family.invoices.map((inv) => {
+              {[...family.invoices]
+                .sort((a, b) =>
+                  a.child_full_name.localeCompare(b.child_full_name, "fr", {
+                    sensitivity: "base",
+                  }) 
+                )
+                .map((inv) => {
                 const balance = (inv.total || 0) - (inv.paid_total || 0);
                 return (
                   <tr key={inv.invoice_id} className="border-b align-top">
@@ -690,7 +718,7 @@ function FamilyBlock({
     </span>
 
     <div className="flex items-center gap-3">
-      <span className="font-medium">
+      <span className="font-medium"> 
         {formatCurrencyUSD(it.a)}
       </span>
 
