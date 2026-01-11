@@ -645,9 +645,9 @@ console.log("Enrollments fetched", ens, ensErr);
                       <Td>
                         {pdf ? (
                           <a
-                            href={pdf}
+                            href={`${pdf}?v=${Date.now()}`}
                             target="_blank"
-                            rel="noreferrer"
+                            rel="noopener noreferrer"
                             className="text-blue-600 underline"
                           >
                             PDF
