@@ -369,37 +369,45 @@ console.log("♻️ Child invoice UPDATED (trigger invoice reused):", {
 
     const monthMain = firstOfNextMonth();
 
-    const { data: existingInvoice } = await supabaseAdmin
-      .from("invoices")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("month", monthMain)
-      .maybeSingle();
+// 🚫 children_only → NO registration invoice for parent
+if (signup_type !== "children_only") {
 
-    if (!existingInvoice) {
-      const { error: invErr } = await supabaseAdmin.from("invoices").insert([
-        {
-          user_id: userId,
-          full_name: fullName,
-          invoice_no: invoiceNoMain,
-          description1: "Frais d'inscription",
-          amount1: 60,
-          total: 60,
-          paid_total: 0,
-          status: "pending",
-          due_date: endOfThisMonth(),
-          issued_at: new Date().toISOString(),
-          signup_type,
-          month: monthMain,
-          household_sequence: 0,
-          address: address || null,
-        },
-      ]);
-      if (invErr) throw new Error(`Invoice creation error: ${invErr.message}`);
-      console.log("✅ Invoice created (main):", invoiceNoMain);
-    } else {
-      console.log("✅ Invoice already exists for main user — skipping creation.");
-    }
+  const { data: existingRegistration } = await supabaseAdmin
+    .from("invoices")
+    .select("id")
+    .eq("user_id", userId)
+    .ilike("description1", "%inscription%")
+    .maybeSingle();
+
+  if (!existingRegistration) {
+    const { error: invErr } = await supabaseAdmin.from("invoices").insert([
+      {
+        user_id: userId,
+        full_name: fullName,
+        invoice_no: invoiceNoMain,
+        description1: "Frais d'inscription",
+        amount1: 60,
+        total: 60,
+        paid_total: 0,
+        status: "pending",
+        due_date: endOfThisMonth(),
+        issued_at: new Date().toISOString(),
+        signup_type,
+        household_sequence: 0,
+        address: address || null,
+      },
+    ]);
+
+    if (invErr) throw new Error(`Invoice creation error: ${invErr.message}`);
+    console.log("✅ ONE-TIME registration invoice created");
+  } else {
+    console.log("⏭️ Registration fee already exists — skipping");
+  }
+
+} else {
+  console.log("🚫 children_only → skipping parent registration invoice");
+}
+
 
     console.log("✅ User setup complete for:", userId);
     return new Response(JSON.stringify({ success: true, user_id: userId }), {
