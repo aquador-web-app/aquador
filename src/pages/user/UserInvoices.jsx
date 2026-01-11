@@ -13,6 +13,7 @@ import {
   FaChevronDown,
 } from "react-icons/fa";
 import PaymentPage from "../../components/payments/PaymentPage";
+import { useGlobalAlert } from "../../components/GlobalAlert";
 
 // ---------- Helpers ----------
 const frVariants = {
@@ -55,6 +56,7 @@ export default function UserInvoices({ userId, initialTab = "factures" }) {
   const [activeTab, setActiveTab] = useState(initialTab);
   const [monthFilter, setMonthFilter] = useState("");
   const [loading, setLoading] = useState(false);
+  const { showAlert} = useGlobalAlert();
 
   // payment states (unchanged behavior)
   const [selectedMethod, setSelectedMethod] = useState(null);
@@ -220,7 +222,7 @@ export default function UserInvoices({ userId, initialTab = "factures" }) {
     const handleSubmit = async () => {
   if (selectedMethod === "cash" || selectedMethod === "virement") {
     if (!selectedInvoice?.length) {
-      alert("Veuillez sélectionner au moins une facture.");
+      showAlert("Veuillez sélectionner au moins une facture.");
       return;
     }
 
@@ -228,7 +230,7 @@ export default function UserInvoices({ userId, initialTab = "factures" }) {
 
     const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
     if (sessionError || !sessionData?.session) {
-      alert("Session expirée. Veuillez vous reconnecter.");
+      showAlert("Session expirée. Veuillez vous reconnecter.");
       setSubmitting(false);
       return;
     }
@@ -254,7 +256,7 @@ export default function UserInvoices({ userId, initialTab = "factures" }) {
         proofUrl = pub?.publicUrl || null;
       } catch (err) {
         console.error("Erreur téléversement:", err);
-        alert("Erreur lors du téléversement de la preuve.");
+        showAlert("Erreur lors du téléversement de la preuve.");
         setSubmitting(false);
         return;
       }
@@ -273,12 +275,34 @@ export default function UserInvoices({ userId, initialTab = "factures" }) {
     const totalToPay = Number(customAmount) > 0 ? Number(customAmount) : totalRemaining;
 
     if (totalToPay > totalRemaining) {
-      alert(
+      showAlert(
         `Le montant total (${formatCurrencyUSD(totalToPay)}) ne peut pas dépasser le total restant (${formatCurrencyUSD(totalRemaining)}).`
       );
       setSubmitting(false);
       return;
     }
+
+    // 🔒 Prevent double pending payment for same invoice(s)
+const { data: existingPending, error: pendingErr } = await supabase
+  .from("payments")
+  .select("id, invoice_id")
+  .in("invoice_id", selectedInvoice)
+  .eq("approved", false);
+
+if (pendingErr) {
+  showAlert("Erreur de vérification des paiements existants.");
+  setSubmitting(false);
+  return;
+}
+
+if (existingPending && existingPending.length > 0) {
+  showAlert(
+    "⛔ Vous avez déjà une demande de paiement en cours pour cette facture. Veuillez attendre sa validation."
+  );
+  setSubmitting(false);
+  return;
+}
+
 
     // 🔥 FIFO Distribution Logic
     let remainingToDistribute = totalToPay;
@@ -309,7 +333,7 @@ export default function UserInvoices({ userId, initialTab = "factures" }) {
 
       if (payErr) {
         console.error("Erreur création paiement:", payErr);
-        alert("Erreur enregistrement paiement: " + payErr.message);
+        showAlert("Erreur enregistrement paiement: " + payErr.message);
         setSubmitting(false);
         return;
       }
@@ -478,9 +502,14 @@ export default function UserInvoices({ userId, initialTab = "factures" }) {
 
             <button
               onClick={handleSubmit}
-              className="px-6 py-3 rounded-lg font-semibold shadow text-white bg-aquaBlue hover:bg-blue-700 transition"
+              disabled={submitting}
+              className={`px-6 py-3 rounded-lg font-semibold shadow text-white transition ${
+                submitting
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-aquaBlue hover:bg-blue-700"
+              }`}
             >
-              Soumettre
+              {submitting ? "Traitement..." : "Soumettre"}
             </button>
           </div>
         )}
