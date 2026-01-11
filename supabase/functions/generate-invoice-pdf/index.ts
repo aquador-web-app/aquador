@@ -295,6 +295,16 @@ serve(async (req) => {
       throw new Error("Invoice not found");
     }
 
+    // === Fetch profile ONCE + determine family root (REQUIRED BEFORE LOCKS)
+const { data: profile } = await supabase
+  .from("profiles_with_unpaid")
+  .select("id, parent_id, full_name")
+  .eq("id", mainInvoice.user_id)
+  .maybeSingle();
+
+const familyRootId = profile?.parent_id ?? mainInvoice.user_id;
+
+
     // ✅ Monthly-only rule (THIS IS NOW PERFECT)
     if (
       source === "monthly" &&
@@ -329,20 +339,32 @@ if (Number(mainInvoice.total || 0) <= 0) {
 }
 
     // 🚦 FIX 3 — GLOBAL PDF LOCK CHECK (CORRECTED)
-const { data: busy } = await supabase
+const { data: busyFamily } = await supabase
   .from("invoices")
   .select("id")
   .eq("pdf_generating", true)
-  .neq("id", invoice_id) // 🔥 DO NOT BLOCK YOURSELF
+  .neq("id", invoice_id)
+  .in(
+    "user_id",
+    (
+      await supabase
+        .from("profiles_with_unpaid")
+        .select("id")
+        .or(
+          `id.eq.${familyRootId},parent_id.eq.${familyRootId}`
+        )
+    ).data?.map(p => p.id) || []
+  )
   .limit(1);
 
-if (busy && busy.length > 0) {
-  console.log("⏸️ Another PDF generation already running — aborting");
+if (busyFamily && busyFamily.length > 0) {
+  console.log("⏸️ Family PDF generation already running — aborting");
   return new Response(
-    JSON.stringify({ error: "PDF generator busy, retry later" }),
+    JSON.stringify({ error: "Family PDF generation in progress" }),
     { status: 429, headers: corsHeaders }
   );
 }
+
 
 // 🔐 FIX 3 — ACQUIRE GLOBAL PDF LOCK (ATOMIC + VERIFIED)
 const { data: lockRows } = await supabase
@@ -362,13 +384,6 @@ if (!lockRows || lockRows.length === 0) {
     { status: 429, headers: corsHeaders }
   );
 }
-
-    // === Determine if this invoice belongs to a child or parent ===
-    const { data: profile } = await supabase
-      .from("profiles_with_unpaid")
-      .select("id, parent_id, full_name")
-      .eq("id", mainInvoice.user_id)
-      .maybeSingle();
 
     let familyIds = [];
 
