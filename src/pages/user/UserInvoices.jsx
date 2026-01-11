@@ -21,6 +21,16 @@ const frVariants = {
   expand: { height: "auto", opacity: 1, transition: { duration: 0.25 } },
 };
 
+function sanitizeName(name) {
+  return String(name || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9_-]/g, "-")
+    .replace(/-+/g, "-")
+    .toLowerCase();
+}
+
+
 function sumRemaining(inv) {
   const t = Number(inv?.total || 0);
   const p = Number(inv?.paid_total || 0);
@@ -49,142 +59,7 @@ function groupByMonth(rows) {
 
 // =====================================================
 
-export default function UserInvoices({ userId, initialTab = "factures" }) {
-  const [profile, setProfile] = useState(null);
-  const [children, setChildren] = useState([]);
-  const [invoices, setInvoices] = useState([]);
-  const [activeTab, setActiveTab] = useState(initialTab);
-  const [monthFilter, setMonthFilter] = useState("");
-  const [loading, setLoading] = useState(false);
-  const { showAlert} = useGlobalAlert();
-
-  // payment states (unchanged behavior)
-  const [selectedMethod, setSelectedMethod] = useState(null);
-  const [selectedInvoice, setSelectedInvoice] = useState([]); // keep array for checkboxes
-  const [showCardModal, setShowCardModal] = useState(false);
-
-  // UI state: month sections + row details collapses
-  const [openMonths, setOpenMonths] = useState(() => new Set());
-  const [openRows, setOpenRows] = useState(() => new Set()); // invoice.id
-
-  // ───────────────────────────────────────────────────
-  // Load parent and children
-  useEffect(() => {
-    (async () => {
-      const { data: parent } = await supabase
-        .from("profiles_with_unpaid")
-        .select("id, full_name, email, signup_type")
-        .eq("id", userId)
-        .maybeSingle();
-
-      const { data: kids } = await supabase
-        .from("profiles_with_unpaid")
-        .select("id, full_name")
-        .eq("parent_id", userId);
-
-      setProfile(parent || null);
-      setChildren(kids || []);
-    })();
-  }, [userId]);
-
-  // Fetch invoices for ALL family (parent + children)
-  useEffect(() => {
-    if (!profile) return;
-    (async () => {
-      setLoading(true);
-      const familyIds = [userId, ...(children || []).map((c) => c.id)];
-      const { data, error } = await supabase
-        .from("invoices")
-        .select(`
-          id, invoice_no, user_id, month,
-          description1, amount1, description2, amount2,
-          description3, amount3, description4, amount4,
-          description5, amount5, description6, amount6,
-          description7, amount7, total, paid_total, status,
-          due_date, issued_at, pdf_url
-        `)
-        .in("user_id", familyIds)
-        .order("issued_at", { ascending: false });
-
-      if (error) console.error("Erreur chargement factures:", error);
-      setInvoices(data || []);
-      setLoading(false);
-    })();
-  }, [profile, children, userId]);
-
-  // ───────────────────────────────────────────────────
-  // Month options (from all invoices we show in current tab)
-  const monthsAvailable = useMemo(() => {
-    const months = Array.from(new Set(invoices.map((i) => i.month))).filter(Boolean);
-    return months.sort((a, b) => new Date(b) - new Date(a));
-  }, [invoices]);
-
-  const ownerMap = useMemo(() => buildOwnerMap(profile, children), [profile, children]);
-
-  // Filter by month
-  const monthFiltered = useMemo(
-    () => (monthFilter ? invoices.filter((i) => i.month === monthFilter) : invoices),
-    [monthFilter, invoices]
-  );
-
-  // Split by status + ensure FAMILY scope for both tabs
-  const familyIds = useMemo(
-    () => [profile?.id, ...(children || []).map((c) => c.id)].filter(Boolean),
-    [profile, children]
-  );
-
-  const factures = useMemo(
-    () =>
-      monthFiltered.filter(
-        (i) => familyIds.includes(i.user_id) && i.status !== "paid"
-      ),
-    [monthFiltered, familyIds]
-  );
-
-  // Avoid obvious dummies in Reçus: keep paid/partial and hide totally empty lines
-  const recus = useMemo(
-    () =>
-      monthFiltered.filter(
-        (i) =>
-          familyIds.includes(i.user_id) &&
-          (i.status === "paid" || i.status === "partial") &&
-          ((Number(i.total) || 0) > 0 || (Number(i.paid_total) || 0) > 0)
-      ),
-    [monthFiltered, familyIds]
-  );
-
-  // Group by month (collapsed by default)
-  const factureMonths = useMemo(() => groupByMonth(factures), [factures]);
-  const recuMonths = useMemo(() => groupByMonth(recus), [recus]);
-
-  // Toggle helpers
-  const toggleMonth = (key) =>
-    setOpenMonths((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-
-  const toggleRow = (id) =>
-    setOpenRows((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-
-    function sanitizeName(name) {
-  return String(name || "")
-    .normalize("NFD") // remove accents
-    .replace(/[\u0300-\u036f]/g, "") // strip diacritics
-    .replace(/[^a-zA-Z0-9_-]/g, "-") // keep safe characters only
-    .replace(/-+/g, "-") // avoid double dashes
-    .toLowerCase();
-}
-
-  // ───────────────────────────────────────────────────
-  // Payment UI (unchanged logic; still supports family multi-select)
+// Payment UI (unchanged logic; still supports family multi-select)
   function PaymentOptions({
     profile,
     children,
@@ -195,11 +70,16 @@ export default function UserInvoices({ userId, initialTab = "factures" }) {
     setSelectedMethod,
     userId,
     setActiveTab,
+    setShowCardModal,
   }) {
     const [file, setFile] = useState(null);
     const [submitting, setSubmitting] = useState(false);
     const [notification, setNotification] = useState("");
     const [customAmount, setCustomAmount] = useState("");
+    const { showAlert } = useGlobalAlert();
+  
+
+
 
     const allProfiles = [profile, ...children];
     const allIds = allProfiles.map((p) => p.id);
@@ -219,12 +99,20 @@ export default function UserInvoices({ userId, initialTab = "factures" }) {
     const formatInvoiceLabel = (inv) =>
       `${ownerOf(inv.user_id)} — ${inv.invoice_no} (${formatCurrencyUSD(sumRemaining(inv))} restant)`;
 
+    
     const handleSubmit = async () => {
   if (selectedMethod === "cash" || selectedMethod === "virement") {
     if (!selectedInvoice?.length) {
       showAlert("Veuillez sélectionner au moins une facture.");
       return;
     }
+
+    if (selectedMethod === "virement" && !file) {
+  showAlert("Veuillez joindre une preuve de virement.");
+  setSubmitting(false);
+  return;
+}
+
 
     setSubmitting(true);
 
@@ -263,10 +151,13 @@ export default function UserInvoices({ userId, initialTab = "factures" }) {
     }
 
         // ✅ Get all unpaid invoices selected
-    const unpaidInvoices = invoices.filter((inv) => selectedInvoice.includes(inv.id));
+    const selectedUnpaidInvoices = invoices.filter((inv) =>
+  selectedInvoice.includes(inv.id)
+);
+
 
     // ✅ Calculate total remaining
-    const totalRemaining = unpaidInvoices.reduce(
+    const totalRemaining = selectedUnpaidInvoices.reduce(
       (sum, inv) => sum + Math.max(Number(inv.total) - Number(inv.paid_total), 0),
       0
     );
@@ -307,7 +198,7 @@ if (existingPending && existingPending.length > 0) {
     // 🔥 FIFO Distribution Logic
     let remainingToDistribute = totalToPay;
 
-    for (const inv of unpaidInvoices) {
+    for (const inv of selectedUnpaidInvoices) {
       if (remainingToDistribute <= 0) break;
 
       const invRemaining = Math.max(Number(inv.total) - Number(inv.paid_total), 0);
@@ -367,7 +258,7 @@ if (existingPending && existingPending.length > 0) {
         : "Votre virement a été soumis. 🏦 Un responsable validera la preuve prochainement."
     );
 
-    setTimeout(() => setActiveTab("factures"), 2500);
+    setActiveTab("factures");
     setSubmitting(false);
     setFile(null);
     setSelectedInvoice([]);
@@ -523,7 +414,133 @@ if (existingPending && existingPending.length > 0) {
     );
   }
 
-  const renderCardPayment = () => {
+export default function UserInvoices({ userId, initialTab = "factures" }) {
+  const [profile, setProfile] = useState(null);
+  const [children, setChildren] = useState([]);
+  const [invoices, setInvoices] = useState([]);
+  const [activeTab, setActiveTab] = useState(initialTab);
+  const [monthFilter, setMonthFilter] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { showAlert} = useGlobalAlert();
+
+  // payment states (unchanged behavior)
+  const [selectedMethod, setSelectedMethod] = useState(null);
+  const [selectedInvoice, setSelectedInvoice] = useState([]); // keep array for checkboxes
+  const [showCardModal, setShowCardModal] = useState(false);
+
+  // UI state: month sections + row details collapses
+  const [openMonths, setOpenMonths] = useState(() => new Set());
+  const [openRows, setOpenRows] = useState(() => new Set()); // invoice.id
+
+  // ───────────────────────────────────────────────────
+  // Load parent and children
+  useEffect(() => {
+    (async () => {
+      const { data: parent } = await supabase
+        .from("profiles_with_unpaid")
+        .select("id, full_name, email, signup_type")
+        .eq("id", userId)
+        .maybeSingle();
+
+      const { data: kids } = await supabase
+        .from("profiles_with_unpaid")
+        .select("id, full_name")
+        .eq("parent_id", userId);
+
+      setProfile(parent || null);
+      setChildren(kids || []);
+    })();
+  }, [userId]);
+
+  // Fetch invoices for ALL family (parent + children)
+  useEffect(() => {
+    if (!profile) return;
+    (async () => {
+      setLoading(true);
+      const familyIds = [userId, ...(children || []).map((c) => c.id)];
+      const { data, error } = await supabase
+        .from("invoices")
+        .select(`
+          id, invoice_no, user_id, month,
+          description1, amount1, description2, amount2,
+          description3, amount3, description4, amount4,
+          description5, amount5, description6, amount6,
+          description7, amount7, total, paid_total, status,
+          due_date, issued_at, pdf_url
+        `)
+        .in("user_id", familyIds)
+        .order("issued_at", { ascending: false });
+
+      if (error) console.error("Erreur chargement factures:", error);
+      setInvoices(data || []);
+      setLoading(false);
+    })();
+  }, [profile, children, userId]);
+
+  // ───────────────────────────────────────────────────
+  // Month options (from all invoices we show in current tab)
+  const monthsAvailable = useMemo(() => {
+    const months = Array.from(new Set(invoices.map((i) => i.month))).filter(Boolean);
+    return months.sort((a, b) => new Date(b) - new Date(a));
+  }, [invoices]);
+
+  const ownerMap = useMemo(() => buildOwnerMap(profile, children), [profile, children]);
+
+  // Filter by month
+  const monthFiltered = useMemo(
+    () => (monthFilter ? invoices.filter((i) => i.month === monthFilter) : invoices),
+    [monthFilter, invoices]
+  );
+
+  // Split by status + ensure FAMILY scope for both tabs
+  const familyIds = useMemo(
+    () => [profile?.id, ...(children || []).map((c) => c.id)].filter(Boolean),
+    [profile, children]
+  );
+
+  const factures = useMemo(
+    () =>
+      monthFiltered.filter(
+        (i) => familyIds.includes(i.user_id) && i.status !== "paid"
+      ),
+    [monthFiltered, familyIds]
+  );
+
+  // Avoid obvious dummies in Reçus: keep paid/partial and hide totally empty lines
+  const recus = useMemo(
+    () =>
+      monthFiltered.filter(
+        (i) =>
+          familyIds.includes(i.user_id) &&
+          (i.status === "paid" || i.status === "partial") &&
+          ((Number(i.total) || 0) > 0 || (Number(i.paid_total) || 0) > 0)
+      ),
+    [monthFiltered, familyIds]
+  );
+
+  // Group by month (collapsed by default)
+  const factureMonths = useMemo(() => groupByMonth(factures), [factures]);
+  const recuMonths = useMemo(() => groupByMonth(recus), [recus]);
+
+  // Toggle helpers
+  const toggleMonth = (key) =>
+    setOpenMonths((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  const toggleRow = (id) =>
+    setOpenRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+   // ───────────────────────────────────────────────────
+    const renderCardPayment = () => {
     const allProfiles = [profile, ...children];
     const allIds = allProfiles.map((p) => p.id);
     const unpaidInvoices = invoices.filter(
@@ -896,6 +913,7 @@ if (existingPending && existingPending.length > 0) {
               setSelectedMethod={setSelectedMethod}
               userId={userId}
               setActiveTab={setActiveTab}
+              setShowCardModal={setShowCardModal}
             />
           )
         ) : activeTab === "factures" ? (
