@@ -13,6 +13,8 @@ import {
   formatMonth,
   formatCurrencyUSD,
 } from "../../lib/dateUtils";
+import { sanitizeFullName } from "../../lib/sanitizeFullName";
+
 
 
 export default function UserProfile({ userId, onAddChild }) {
@@ -49,7 +51,7 @@ useEffect(() => {
     try {
       setLoadingDocs(true);
       // match where you actually store them
-      const folder = profile.full_name.replace(/\s+/g, "_");
+      const folder = sanitizeFullName(profile.full_name);
       const { data, error } = await supabase.storage.from("signed_docs").list(folder, { limit: 100 });
 
       if (error) throw error;

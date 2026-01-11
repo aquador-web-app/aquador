@@ -2,18 +2,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import SignaturePad from "./SignaturePad";
+import { sanitizeFullName } from "../lib/sanitizeFullName";
+
+
 
 
 /**
  * Utilities
  */
-function sanitizeFileName(str) {
-  return String(str || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\s+/g, "_")
-    .replace(/[^\w\-./]/g, "");
-}
 
 function formatDateFrSafe(d = new Date()) {
   try {
@@ -33,55 +29,43 @@ function formatDateFrSafe(d = new Date()) {
   }
 }
 
+
 /**
  * Edge function endpoint that renders HTML -> PDF and uploads it to storage.
  * This must exist server-side as agreed earlier.
  * Body we send: { html, formName, fullName, path }
  * Returns: { url }
  */
-async function sendHTMLToPDFAndUpload({ html, formName, fullName, outputPath }) {
+async function sendHTMLToPDFAndUpload({ html, formName, fullName, safeName }) {
   const endpoint = `${import.meta.env.VITE_SUPABASE_FUNCTIONS_URL}/sign-documents`;
-  try {
-    // ✅ sanitize both formName and fullName before sending
-    const safeForm = sanitizeFileName(formName);
-    const safeFull = sanitizeFileName(fullName || "Utilisateur");
-    const safeOutputPath = sanitizeFileName(outputPath || `${safeFull}/${safeForm}_signed.pdf`);
 
-    const res = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-      },
-      body: JSON.stringify({
-        user_id: "anonymous",
-        full_name: safeFull,
-        safe_name: safeFull,
-        documents: [
-          {
-            form_name: safeForm,     // 👈 sanitized
-            html_content: html,
-          },
-        ],
-      }),
-    });
 
-    if (!res.ok) {
-      const txt = await res.text().catch(() => "");
-      throw new Error(`PDF service error (${res.status}): ${txt || "unknown"}`);
-    }
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({
+  user_id: "anonymous",
+  full_name: fullName,      // 👈 display (keeps accents)
+  safe_name: safeName,      // 👈 storage-safe
+  documents: [
 
-    const data = await res.json().catch(() => ({}));
-    if (!data?.results?.[0]?.url) {
-      throw new Error("No URL returned by PDF service");
-    }
-    return data.results[0].url;
-  } catch (err) {
-    console.error("❌ sendHTMLToPDFAndUpload error:", err);
-    throw err;
-  }
+        {
+          form_name: formName,
+          html_content: html,
+        },
+      ],
+    }),
+  });
+
+  if (!res.ok) throw new Error("PDF service error");
+
+  const data = await res.json();
+  return data.results[0].url;
 }
+
 
 
 
@@ -94,6 +78,15 @@ async function sendHTMLToPDFAndUpload({ html, formName, fullName, outputPath }) 
  *  - onDone(results: Array<{form_name, url}>): void
  */
 export default function SignupDocsModal({ fullName = "", signupType = "me", onClose, onDone }) {
+
+  const safeName = useMemo(
+  () => sanitizeFullName(fullName || "utilisateur"),
+  [fullName]
+);
+if (!safeName || safeName.length < 2) {
+  throw new Error("Nom invalide pour la génération des documents.");
+}
+
   const [step, setStep] = useState(1); // 1=Reglements, 2=Accord, 3=Consentement
   const [saving, setSaving] = useState(false);
   const [uiError, setUiError] = useState("");
@@ -477,7 +470,7 @@ Des frais d’adhésion annuels de USD 30.00 devront être versés au début de 
 
     return wrapHTML(
       CONSENT_TEXT
-        .replaceAll("{{NOM_COMPLET}}", fullName || "")
+        .replaceAll("{{NOM_COMPLET}}", escapeHtml(fullName || ""))
         .replace("{{TABLE_NOMS}}", bodyRows || `<tr><td style="border:1px solid #999; padding:6px;">—</td></tr>`)
         .replace("{{SIGNATURE_ADULTE}}", imgTag(consentSignature, "signature"))
         .replaceAll("{{DATE_DU_JOUR}}", nowDate)
@@ -623,15 +616,13 @@ Des frais d’adhésion annuels de USD 30.00 devront être versés au début de 
     }
     try {
       setSaving(true);
-      const safeFull = sanitizeFileName(fullName || "Utilisateur");
-      const outputPath = `signed_docs/${safeFull}/Accord_du_participant_signed.pdf`;
       const html = renderAccordHTML();
       const url = await sendHTMLToPDFAndUpload({
-        html,
-        formName: "Accord du participant",
-        fullName,
-        outputPath,
-      });
+  html,
+  formName: "Accord du participant",
+  fullName,
+  safeName: safeName,
+});
       setResults((r) => [...r, { form_name: "Accord du participant", url }]);
       // Next
       setStep(3);
@@ -642,33 +633,6 @@ Des frais d’adhésion annuels de USD 30.00 devront être versés au début de 
     }
   }
 
-  async function saveConsent() {
-    setUiError("");
-    if (!consentSignature) return setUiError("Veuillez signer le consentement.");
-    if (needParentSection && !consentParentSignature) {
-      return setUiError("Signature du parent/tuteur requise pour les mineurs.");
-    }
-    try {
-      setSaving(true);
-      const safeFull = sanitizeFileName(fullName || "Utilisateur");
-      const outputPath = `signed_docs/${safeFull}/Formulaire_de_consentement_signed.pdf`;
-      const html = renderConsentHTML();
-      const url = await sendHTMLToPDFAndUpload({
-        html,
-        formName: "Formulaire de consentement",
-        fullName,
-        outputPath,
-      });
-      setResults((r) => [...r, { form_name: "Formulaire de consentement", url }]);
-      // Next
-      onDone?.([...results, { form_name: "Formulaire de consentement", url }]);
-      onClose?.();
-    } catch (err) {
-      setUiError(err.message || String(err));
-    } finally {
-      setSaving(false);
-    }
-  }
 
   async function uploadRulesIdIfAny(folder) {
     if (!rulesIdFile) {
@@ -676,7 +640,6 @@ Des frais d’adhésion annuels de USD 30.00 devront être versés au début de 
 }
     const file = rulesIdFile;
     const ext = (file.name?.split(".").pop() || "bin").toLowerCase();
-    const safeFull = sanitizeFileName(fullName || "Utilisateur");
     const path = `${folder}/ID_${Date.now()}.${ext}`;
     const { error } = await supabase.storage
       .from("signed_docs")
@@ -696,15 +659,13 @@ Des frais d’adhésion annuels de USD 30.00 devront être versés au début de 
     setSaving(true);
     console.log("🧾 Starting Règlements signing...");
 
-    const safeFull = sanitizeFileName(fullName || "Utilisateur");
-    const folder = `${safeFull}`;
-    const outputPath = `signed_docs/${safeFull}/Reglements_signed.pdf`;
+
 
      // 1️⃣ Upload ID file (mandatory)
     let idUrl = null;
     try {
       console.log("🪪 Uploading ID file...");
-      idUrl = await uploadRulesIdIfAny(folder);
+      idUrl = await uploadRulesIdIfAny(safeName);
       console.log("✅ ID uploaded:", idUrl);
     } catch (idErr) {
       console.error("❌ ID upload failed:", idErr);
@@ -717,15 +678,15 @@ Des frais d’adhésion annuels de USD 30.00 devront être versés au début de 
     console.log("🧩 Generating Règlements PDF...");
     const html = renderRulesHTML();
     let pdfUrl;
-    try {
-      pdfUrl = await sendHTMLToPDFAndUpload({
-        html,
-        formName: "Règlements",
-        fullName,
-        outputPath,
-      });
-      console.log("✅ PDF generated:", pdfUrl);
-    } catch (pdfErr) {
+try {
+  pdfUrl = await sendHTMLToPDFAndUpload({
+    html,
+    formName: "Règlements",
+    fullName,
+    safeName: safeName,
+  });
+  console.log("✅ PDF generated:", pdfUrl);
+} catch (pdfErr) {
       console.error("❌ PDF generation failed:", pdfErr);
       setUiError("Erreur lors de la création du PDF des règlements.");
       setSaving(false);
@@ -806,16 +767,14 @@ async function saveContent() {
   try {
     setSaving(true);
 
-    const safeFull = sanitizeFileName(fullName || "Utilisateur");
-    const outputPath = `signed_docs/${safeFull}/Formulaire_de_consentement_signed.pdf`;
-
     const html = renderConsentHTML();
     const url = await sendHTMLToPDFAndUpload({
-      html,
-      formName: "Formulaire de consentement",
-      fullName,
-      outputPath,
-    });
+  html,
+  formName: "Formulaire de consentement",
+  fullName,
+  safeName: safeName,
+});
+
 
     setResults((r) => [...r, { form_name: "Formulaire de consentement", url }]);
 
