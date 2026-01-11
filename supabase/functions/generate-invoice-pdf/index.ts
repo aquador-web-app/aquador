@@ -771,6 +771,34 @@ const parentPdfBuffer = await fetchPdfBufferWithRetry(compiledHtmlParent);
         console.log("✅ Parent PDF URL updated on family invoices");
       }
 
+// 🔁 FAN-OUT: trigger next sibling invoice if needed
+// ⚠️ CHILD FLOW ONLY — do NOT run during parent calls
+
+const { data: pendingSiblings } = await supabase
+  .from("invoices")
+  .select("id")
+  .eq("user_id", profile.parent_id)
+  .eq("month", mainInvoice.month)
+  .is("pdf_url", null)
+  .is("pdf_generating", false) 
+  .neq("id", mainInvoice.id)
+  .limit(1);
+
+if (pendingSiblings?.length) {
+  const nextInvoiceId = pendingSiblings[0].id;
+
+  console.log("🔁 Triggering next sibling PDF:", nextInvoiceId);
+
+  // fire-and-forget, lock will serialize
+  fetch(req.url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      invoice_id: nextInvoiceId,
+      source: source,
+    }),
+  }).catch(() => {});
+}
       
       return new Response(
         JSON.stringify({ success: true, pdf_url: pdfUrl }),
