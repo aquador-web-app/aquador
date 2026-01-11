@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState, useRef  } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { normalizeISODate, formatDateFrSafe, formatCurrencyUSD } from "../../lib/dateUtils";
 import { useGlobalAlert } from "../../components/GlobalAlert";
+import { useAuth } from "../../context/AuthContext";
+
 
 
 
@@ -48,6 +50,9 @@ export default function AdminEnrollments() {
   const [profiles, setProfiles] = useState([]);
   const [courses, setCourses] = useState([]);
   const [plans, setPlans] = useState([]);
+  const { profile: currentUser } = useAuth();
+  const isAdminUser = currentUser?.role === "admin";
+
   // Always work with PUBLIC plans only
 const publicPlans = useMemo(
   () => plans.filter(p => p.is_public === true),
@@ -280,7 +285,7 @@ function toggleHour(which) {
     // selecting
     if (!has) {
       // rule: can't select second unless first is selected for the same series
-      if (isSecond && !prev.includes(`${base}${FIRST}`)) {
+      if (!isAdminUser && isSecond && !prev.includes(`${base}${FIRST}`)) {
         if (!hourWarningShown.current) {
           hourWarningShown.current = true;
           setTimeout(() => (hourWarningShown.current = false), 400);
