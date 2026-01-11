@@ -37,6 +37,14 @@ function lastDashNumber(s: string | null): number {
   const n = parseInt(parts[parts.length - 1], 10);
   return Number.isFinite(n) ? n : 0;
 }
+function sanitizeEmailPart(input: string) {
+  return input
+    .normalize("NFD")                 // split accents
+    .replace(/[\u0300-\u036f]/g, "")  // remove accents
+    .replace(/[^a-zA-Z0-9]/g, "")     // remove punctuation/spaces
+    .toLowerCase();
+}
+
 async function generateUniqueChildEmail(first: string, last: string) {
   const base = `${first}${last}`.replace(/\s+/g, "").toLowerCase();
   let candidate = `${base}@child.local`;
@@ -167,8 +175,8 @@ serve(async (req) => {
       }
 
       // generate unique dummy email
-      const safeFirst = first_name?.trim().toLowerCase() || "child";
-      const safeLast = last_name?.trim().toLowerCase() || "";
+      const safeFirst = sanitizeEmailPart(first_name || "child");
+      const safeLast  = sanitizeEmailPart(last_name || "");
       const fakeEmail = await generateUniqueChildEmail(safeFirst, safeLast);
       const fakePassword = crypto.randomUUID();
 
