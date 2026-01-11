@@ -1216,9 +1216,9 @@ setShowModal(false);
                       }
                     >
                       <option value="daypass">
-                        Day Pass (coexistence possible)
+                        Day Pass (réservation non-exclusive)
                       </option>
-                      <option value="full">Réservation complète</option>
+                      <option value="full">Réservation Exclusive</option>
                     </select>
                     <p className="text-xs text-gray-500 mt-1">
                       {form.booking_type === "daypass"
