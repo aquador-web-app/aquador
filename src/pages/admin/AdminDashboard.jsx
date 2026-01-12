@@ -270,6 +270,7 @@ const { data: newUsersRows, error: newUsersErr } = await supabase
   .select("id, full_name")
   .gte("created_at", getHaitiISOString(firstDayThisMonth))
   .lt("created_at", getHaitiISOString(firstDayNextMonth))
+  .neq("signup_type", "children_only") 
   .order("full_name", { ascending: true });
 
 // 👉 Previous month count (note only)
