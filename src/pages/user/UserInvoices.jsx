@@ -84,7 +84,13 @@ function groupByMonth(rows) {
     const allProfiles = [profile, ...children];
     const allIds = allProfiles.map((p) => p.id);
     const unpaidInvoices = invoices.filter(
-      (inv) => inv.status !== "paid" && allIds.includes(inv.user_id)
+      (inv) =>
+        inv.status !== "paid" &&
+        allIds.includes(inv.user_id) &&
+        (
+          Number(inv.total) > 0 ||
+          Number(inv.paid_total) > 0
+        )
     );
 
     const ownerOf = (uid) => allProfiles.find((p) => p.id === uid)?.full_name || "Inconnu";
@@ -499,12 +505,19 @@ export default function UserInvoices({ userId, initialTab = "factures" }) {
   );
 
   const factures = useMemo(
-    () =>
-      monthFiltered.filter(
-        (i) => familyIds.includes(i.user_id) && i.status !== "paid"
-      ),
-    [monthFiltered, familyIds]
-  );
+  () =>
+    monthFiltered.filter(
+      (i) =>
+        familyIds.includes(i.user_id) &&
+        i.status !== "paid" &&
+        (
+          Number(i.total) > 0 ||
+          Number(i.paid_total) > 0
+        )
+    ),
+  [monthFiltered, familyIds]
+);
+
 
   // Avoid obvious dummies in Reçus: keep paid/partial and hide totally empty lines
   const recus = useMemo(
@@ -544,8 +557,15 @@ export default function UserInvoices({ userId, initialTab = "factures" }) {
     const allProfiles = [profile, ...children];
     const allIds = allProfiles.map((p) => p.id);
     const unpaidInvoices = invoices.filter(
-      (inv) => inv.status !== "paid" && allIds.includes(inv.user_id)
-    );
+  (inv) =>
+    inv.status !== "paid" &&
+    allIds.includes(inv.user_id) &&
+    (
+      Number(inv.total) > 0 ||
+      Number(inv.paid_total) > 0
+    )
+);
+
 
     const totalAmount = (selectedInvoice || [])
       .map((id) => {
