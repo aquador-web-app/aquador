@@ -50,8 +50,15 @@ export default function AdminEnrollments() {
   const [profiles, setProfiles] = useState([]);
   const [courses, setCourses] = useState([]);
   const [plans, setPlans] = useState([]);
-  const { profile: currentUser } = useAuth();
-  const isAdminUser = currentUser?.role === "admin";
+  const { user: currentUser, loading: authLoading } = useAuth();
+  const isAdminUser = useMemo(() => {
+  return Boolean(
+    currentUser &&
+    ["admin", "superadmin", "owner"].includes(currentUser.role)
+  );
+}, [currentUser]);
+  const [bypass, setBypass] = useState(false);
+
 
   // Always work with PUBLIC plans only
 const publicPlans = useMemo(
@@ -71,7 +78,6 @@ const [courseMode, setCourseMode] = useState("natation");
 // natation | aquafitness | both
   const [autoCourse, setAutoCourse] = useState(null);
   const [overrideCourse, setOverrideCourse] = useState(""); // for admin override
-  const [bypass, setBypass] = useState(false);
   const [selectedHours, setSelectedHours] = useState([]);
   const [startDate, setStartDate] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -272,43 +278,43 @@ function toggleHour(which) {
   const isSecond = which.endsWith(SECOND);
   const isFirst = which.endsWith(FIRST);
 
-  // derive the base series id (UUID may contain dashes, so slice by suffix length)
-  const base = isSecond
-    ? which.slice(0, -SECOND.length)
-    : isFirst
-    ? which.slice(0, -FIRST.length)
-    : which; // fallback
+  const base = which.replace(/-(first|second)$/, "");
 
-  setSelectedHours((prev) => {
-    const has = prev.includes(which);
+  setSelectedHours(prev => {
+    const hasFirst = prev.includes(`${base}${FIRST}`);
+    const hasSecond = prev.includes(`${base}${SECOND}`);
 
-    // selecting
-    if (!has) {
-      // rule: can't select second unless first is selected for the same series
-      if (!isAdminUser && isSecond && !prev.includes(`${base}${FIRST}`)) {
-        if (!hourWarningShown.current) {
-          hourWarningShown.current = true;
-          setTimeout(() => (hourWarningShown.current = false), 400);
-          alert(
-            "Il est impératif de choisir la première tranche d'heure si vous choisissez 1 heure par séance."
-          );
-        }
-        return prev;
+    // ✅ DESELECT
+    if (prev.includes(which)) {
+      return prev.filter(h => !h.startsWith(base));
+    }
+
+    // 🚫 NON-ADMIN RULE
+    if (isSecond && !hasFirst && isAdminUser === false) {
+      if (!hourWarningShown.current) {
+        hourWarningShown.current = true;
+        setTimeout(() => (hourWarningShown.current = false), 400);
+        alert(
+          "Il est impératif de choisir la première tranche d'heure si vous choisissez 1 heure par séance."
+        );
       }
+      return prev;
+    }
+
+    // 🛠 ADMIN: allow second alone (1h override)
+    if (isSecond && isAdminUser && !hasFirst) {
+      return [...prev.filter(h => !h.startsWith(base)), which];
+    }
+
+    // 🛠 ADMIN OR USER: allow FIRST + SECOND = 2h
+    if ((isFirst && hasSecond) || (isSecond && hasFirst)) {
       return [...prev, which];
     }
 
-    // deselecting
-    if (isFirst) {
-      // if first is unchecked, also remove second for the same series to keep state valid
-      return prev.filter((h) => h !== which && h !== `${base}${SECOND}`);
-    }
-    // deselecting second: just remove second
-    return prev.filter((h) => h !== which);
+    // ✅ DEFAULT: single selection
+    return [...prev.filter(h => !h.startsWith(base)), which];
   });
 }
-
-
 
   const filteredProfiles = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -333,7 +339,9 @@ function toggleHour(which) {
 const autoPlan = useMemo(() => {
   if (selectedHours.length === 0) return null;
 
-  const duration = selectedHours.length === 2 ? 2 : 1;
+  const hasFirst = selectedHours.some(h => h.endsWith("-first"));
+  const hasSecond = selectedHours.some(h => h.endsWith("-second"));
+  const duration = hasFirst && hasSecond ? 2 : 1;
 
   const course = bypass
     ? courses.find(c => c.id === overrideCourse)
@@ -433,6 +441,9 @@ if (!plan) {
   // Extract the picked series key from the checkbox
   const FIRST = "-first";
   const SECOND = "-second";
+  const hasFirst = selectedHours.some((h) => h.endsWith("-first"));
+  const hasSecond = selectedHours.some((h) => h.endsWith("-second"));
+  const selectedHoursCount = hasFirst && hasSecond ? 2 : 1;
   const token = selectedHours[0];
   const baseKey = token.endsWith(FIRST)
     ? token.slice(0, -FIRST.length)
@@ -484,6 +495,11 @@ console.log("chosenPlan:", chosenPlan);
 console.log("publicPlans:", publicPlans);
 console.log("================================");
 
+let selectedSlot = "first";
+
+if (hasFirst && hasSecond) selectedSlot = "both";
+else if (hasSecond && isAdminUser) selectedSlot = "second";
+
 
 const { data, error } = await supabase.rpc("create_enrollment_with_invoice", {
   p_profile_id: selectedProfile.id,
@@ -497,7 +513,13 @@ const { data, error } = await supabase.rpc("create_enrollment_with_invoice", {
   p_full_name:
     selectedProfile.full_name ||
     `${selectedProfile.first_name} ${selectedProfile.last_name}`,
-});
+
+  // 🔥 THESE TWO LINES FIX EVERYTHING
+  p_admin_override: isAdminUser === true,
+  p_selected_hours: selectedHoursCount,
+  p_selected_slot: selectedSlot,
+}
+);
 
 
 
@@ -726,7 +748,7 @@ const getCurrentDur = (row) =>
           </label>
 
           {/* SECOND HOUR ONLY IF SESSION IS 2h */}
-          {duration === 2 && (
+          {(duration === 2 || isAdminUser) && (
             <label className="inline-flex items-center gap-2 ml-6">
               <input
                 type="checkbox"

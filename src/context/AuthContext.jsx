@@ -15,7 +15,7 @@ export function AuthProvider({ children }) {
       if (session?.user) {
         // Récupérer profil dans la table "profiles"
         const { data: profile } = await supabase
-          .from("profiles_with_unpaid")
+          .from("profiles")
           .select("*")
           .eq("id", session.user.id)
           .single()
@@ -33,7 +33,7 @@ export function AuthProvider({ children }) {
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         supabase
-          .from("profiles_with_unpaid")
+          .from("profiles")
           .select("*")
           .eq("id", session.user.id)
           .single()
