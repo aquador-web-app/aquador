@@ -129,6 +129,26 @@ export default function AdminUserProfile({ profileId: propId, onBack, onAddChild
   const [showAddCredit, setShowAddCredit] = useState(false);
   const [creditAmount, setCreditAmount] = useState("");
   const [addingCredit, setAddingCredit] = useState(false);
+  const visibleInvoices = useMemo(() => {
+  return (invoices || []).filter((inv) => {
+    const total = Number(inv.total || 0);
+    const paid = Number(inv.paid_total || 0);
+
+    // keep real money invoices
+    if (total > 0 || paid > 0) return true;
+
+    // keep if at least one line item has value
+    for (let i = 1; i <= 7; i++) {
+      if (Number(inv[`amount${i}`] || 0) > 0) {
+        return true;
+      }
+    }
+
+    // ❌ dummy invoice
+    return false;
+  });
+}, [invoices]);
+
 
 
 
@@ -597,7 +617,7 @@ console.log("Enrollments fetched", ens, ensErr);
                 </tr>
               </thead>
               <tbody>
-                {invoices.map((inv) => {
+                {visibleInvoices.map((inv) => {
                   const items = invoiceItems(inv);
                   const bal = Number(inv.total || 0) - Number(inv.paid_total || 0);
                   const pdf = getPdfLink(inv);
@@ -659,7 +679,7 @@ console.log("Enrollments fetched", ens, ensErr);
                     </tr>
                   );
                 })}
-                {!invoices.length && (
+                {!visibleInvoices.length && (
                   <tr>
                     <Td colSpan={9} className="text-gray-600">
                       Aucune facture
