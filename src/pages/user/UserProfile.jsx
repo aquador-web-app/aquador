@@ -213,7 +213,11 @@ try {
       }
 
       setProfile(p);
-      setInvoices(invs || []);
+      setInvoices(
+        (invs || []).filter(
+          inv => Number(inv.total) > 0 || Number(inv.paid_total) > 0
+        )
+      );
       setEnrollments(ens || []);
       setChildren(kids || []);
       setParent(parentData);
