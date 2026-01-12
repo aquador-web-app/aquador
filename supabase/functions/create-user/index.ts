@@ -76,6 +76,13 @@ serve(async (req) => {
     } catch (err) {
       console.error("❌ Failed to parse JSON:", err);
     }
+    console.log("🧾 SIGNUP PAYLOAD RECEIVED", {
+  referrer_code: body.referrer_code,
+  referrer_user_id: body.referrer_user_id,
+  signup_type: body.signup_type,
+  email: body.email,
+});
+
 
     // ensure full structure
     const expectedKeys = [
@@ -122,7 +129,13 @@ serve(async (req) => {
       isAdmin: !parent_id && !referrer_code && !!password && !user_id,
       isSelf: !parent_id && !referrer_code && !!user_id
     };
-    console.log("🧭 Flow detection:", flow);
+    console.log("🧭 FLOW DETECTION RESULT", {
+  isChild: flow.isChild,
+  hasReferrer: flow.hasReferrer,
+  referrer_code,
+  referrer_user_id,
+});
+
 
     // ===============================================================
     // 1️⃣ CHILD FLOW — parent adds child (with auth & invoice)
@@ -345,15 +358,25 @@ console.log("♻️ Child invoice UPDATED (trigger invoice reused):", {
       );
     if (profErr) throw new Error(`Profile upsert error: ${profErr.message}`);
 
-    // ---------- Referral linking ----------
-    if (flow.hasReferrer && referrer_code) {
-      const { data, error } = await supabaseAdmin.rpc("link_referral", {
-        p_user_id: userId,
-        p_code: referrer_code,
-      });
-      if (error) console.error("❌ link_referral RPC error:", error);
-      else console.log("✅ link_referral result:", data);
-    }
+    // ---------- Referral linking (robust) ----------
+if (!flow.isChild && referrer_code && referrer_code.trim() !== "") {
+  console.log("🔗 STEP 3 — ABOUT TO CALL link_referral", {
+    userId,
+    referrer_code: referrer_code.trim(),
+    flow_hasReferrer: flow.hasReferrer,
+  });
+  const { data, error } = await supabaseAdmin.rpc("link_referral", {
+    p_user_id: userId,
+    p_code: referrer_code.trim(),
+  });
+
+  if (error) {
+    console.error("❌ link_referral RPC error:", error);
+  } else {
+    console.log("✅ Referral linked:", data);
+  }
+}
+
 
     // ---------- Invoice for main user (unchanged for now) ----------
     const { data: myInvoices } = await supabaseAdmin
