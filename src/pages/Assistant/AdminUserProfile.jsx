@@ -257,7 +257,7 @@ console.log("Enrollments fetched", ens, ensErr);
 
   const referralLink = useMemo(() => {
     const code = profile?.referral_code;
-    return code ? `${window.location.origin}/register?ref=${code}` : "—";
+    return code ? `${window.location.origin}/signup?ref=${code}` : "—";
   }, [profile]);
 
   // quick actions

@@ -70,7 +70,7 @@ export default function Navbar() {
         ) : (
           <div className="flex items-center gap-3">
             <Link to="/login" className="link">Connexion</Link>
-            <Link to="/register" className="btn btn-primary">Inscription</Link>
+            <Link to="/signup" className="btn btn-primary">Inscription</Link>
             <ThemeToggle />
           </div>
         )}

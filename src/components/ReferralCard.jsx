@@ -4,7 +4,7 @@ export default function ReferralCard({ code }) {
     alert("Code copié: " + code)
   }
 
-  const shareLink = `${window.location.origin}/register?ref=${code}`
+  const shareLink = `${window.location.origin}/signup?ref=${code}`
 
   return (
     <div className="bg-white p-6 rounded-xl shadow">
