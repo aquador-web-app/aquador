@@ -31,14 +31,15 @@ serve(async (req) => {
   }
 
   try {
-    const { user_id, full_name, documents } = await req.json();
+    const { user_id, full_name, safe_name, documents } = await req.json();
 
     if (!user_id) throw new Error("Missing user_id");
     if (!full_name) throw new Error("Missing full_name");
+    if (!safe_name) throw new Error("Missing safe_name");
     if (!Array.isArray(documents) || documents.length === 0)
       throw new Error("Missing documents array");
 
-    const safeName = sanitizeFileName(full_name);
+    const safeName = String(safe_name).trim(); // preserve casing
     const results = [];
 
     for (const doc of documents) {

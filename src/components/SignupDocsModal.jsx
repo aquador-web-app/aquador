@@ -775,6 +775,23 @@ async function saveContent() {
   safeName: safeName,
 });
 
+// 🔔 INSERT CONSENTEMENT INTO DB (this restores notifications)
+try {
+  const { data: user } = await supabase.auth.getUser();
+  const user_id = user?.user?.id;
+
+  if (user_id) {
+    await supabase.from("documents").insert({
+      user_id,
+      type: "Formulaire de consentement",
+      file_url: url,
+      signed_at: new Date().toISOString(),
+    });
+  }
+} catch (dbErr) {
+  console.warn("⚠️ Consentement DB insert failed:", dbErr);
+}
+
 
     setResults((r) => [...r, { form_name: "Formulaire de consentement", url }]);
 
