@@ -368,6 +368,9 @@ const stop = (e) => e.stopPropagation();
                   <option value="me_student">Moi + enfants</option>
                   <option value="children_only">Enfants seulement</option>
                   <option value="child">Enfant</option>
+                  <option value="teacher_only">Professeur (interne)</option>
+                  <option value="assistant_only">Assistante (interne)</option>
+                  <option value="admin_only">Admin (interne)</option>
                 </select>
               </td>
 

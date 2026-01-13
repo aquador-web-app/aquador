@@ -157,6 +157,8 @@ export default function AdminDashboard() {
   const [openReports, setOpenReports] = useState(false)
   const [userCount, setUserCount] = useState(0)
   const [courseCount, setCourseCount] = useState(0)
+  const [parentCount, setParentCount] = useState(0);
+  const [staffCount, setStaffCount] = useState(0);
   const [unpaidInvoices, setUnpaidInvoices] = useState({ count: 0, total: 0 })
   const [attendance, setAttendance] = useState({ percent: 0, total: 0 })
   const [commissions, setCommissions] = useState(0)
@@ -185,16 +187,31 @@ const [role, setRole] = useState(null);
 const fetchStats = async () => {
     // 1) TOTAL users on platform (use PROFILES, not auth.users)
     const { count: profilesTotal } = await supabase
-      .from("profiles_with_unpaid")
+      .from("profiles")
       .select("*", { count: "exact", head: true });
     setUserCount(profilesTotal || 0);
 
     // Breakdown for tooltip
     const { count: infl } = await supabase
-      .from("profiles_with_unpaid")
+      .from("profiles")
       .select("*", { count: "exact", head: true })
       .eq("role", "influencer");
     setInfluencerCount(infl || 0);
+
+    const { count: parents } = await supabase
+      .from("profiles")
+      .select("*", { count: "exact", head: true })
+      .eq("signup_type", "children_only");
+
+    setParentCount(parents || 0);
+
+    const { count: staff } = await supabase
+      .from("profiles")
+      .select("*", { count: "exact", head: true })
+      .in("role", ["admin", "teacher", "assistant"]);
+
+    setStaffCount(staff || 0);
+
 
     const { count: enrolls } = await supabase
       .from("enrollments")
@@ -293,16 +310,20 @@ setNewUsers({
 // 7) Consentement signé
 const { data: consentRows, error: consErr } = await supabase
   .from("consentements_signed")
-  .select("user_id, full_name");
+  .select("user_id, full_name")
+  .order("full_name", { ascending: true });
 
 console.log("🔎 CONSENT ROWS FOUND:", consentRows, consErr);
 
 
 if (!consErr) {
-  const users = (consentRows || []).map(r => ({
+  const users = (consentRows || [])
+  .map(r => ({
     id: r.user_id,
     name: r.full_name
-  }));
+  }))
+  .sort((a, b) => a.name.localeCompare(b.name, "fr", { sensitivity: "base" }));
+
 
   setConsentSigned({
     count: users.length,
@@ -645,6 +666,17 @@ function isEcoleTabVisibleToAssistant(tabId) {
               <span>👥 Influenceurs</span>
               <b>{influencerCount || 0}</b>
             </li>
+
+            <li className="flex justify-between">
+              <span>👨‍👩‍👧 Parents</span>
+              <b>{parentCount || 0}</b>
+            </li>
+
+            <li className="flex justify-between">
+              <span>🧑‍🏫 Staff</span>
+              <b>{staffCount || 0}</b>
+            </li>
+
             <li className="flex justify-between">
               <span>🏊 Inscriptions actives</span>
               <b>{activeEnrollmentCount || 0}</b>
