@@ -159,7 +159,12 @@ export default function AdminDashboard() {
   const [courseCount, setCourseCount] = useState(0)
   const [parentCount, setParentCount] = useState(0);
   const [staffCount, setStaffCount] = useState(0);
-  const [unpaidInvoices, setUnpaidInvoices] = useState({ count: 0, total: 0 })
+  const [unpaidInvoices, setUnpaidInvoices] = useState({
+  count: 0,
+  total: 0,
+  rows: [],
+});
+
   const [attendance, setAttendance] = useState({ percent: 0, total: 0 })
   const [commissions, setCommissions] = useState(0)
   const [newUsers, setNewUsers] = useState({
@@ -228,20 +233,47 @@ const fetchStats = async () => {
     // 3) Unpaid invoices (across platform, not filtered by selected user)
     const { data: invs } = await supabase
       .from("invoices")
-      .select("id,total,paid_total,status");
-    const rows = invs || [];
-    const unpaid = rows.filter(r =>
-  r.status === "pending" || r.status === "partial"
-);
+      .select("id,total, full_name, paid_total,status, signup_type");
+      
+
+    const unpaid = (invs || [])
+  .map(r => {
+    const remaining =
+      Number(r.total || 0) - Number(r.paid_total || 0);
+
+    return {
+      id: r.id,
+      name: r.full_name || "—",
+      signup_type: r.signup_type,
+      status: r.status,
+      remaining,
+    };
+  })
+  .filter(r =>
+    (r.status === "pending" || r.status === "partial") &&
+    r.signup_type !== "children_only" &&
+    r.remaining > 0
+  )
+  .sort((a, b) =>
+    a.name.localeCompare(b.name, "fr", { sensitivity: "base" })
+  );
+
 
 const unpaidCount = unpaid.length;
 
 const unpaidTotal = unpaid.reduce(
-  (s, r) => s + (Number(r.total || 0) - Number(r.paid_total || 0)),
+  (sum, r) => sum + r.remaining,
   0
 );
 
-    setUnpaidInvoices({ count: unpaidCount, total: unpaidTotal });
+setUnpaidInvoices({
+  count: unpaidCount,
+  total: unpaidTotal,
+  rows: unpaid,
+});
+
+
+    setUnpaidInvoices({ count: unpaidCount, total: unpaidTotal, rows: unpaid, });
 
     // 4) Attendance this month (if your table has a date column, prefer filtering in SQL)
     const { data: presences } = await supabase.from("attendance").select("status, created_at");
@@ -714,20 +746,56 @@ function isEcoleTabVisibleToAssistant(tabId) {
 
   {/* Factures impayées */}
   <motion.div
-    className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm hover:shadow-lg cursor-pointer transition-all"
-    whileHover={{ scale: 1.03, y: -3 }}
-    onClick={() => setActiveTab("invoices")}
-  >
-    <div className="absolute top-0 left-0 h-1 w-full bg-gradient-to-r from-red-500 to-pink-400 rounded-t-2xl"></div>
-    <p className="text-gray-500 font-medium">Factures impayées</p>
-    <h3 className="text-3xl font-bold text-red-500">{unpaidInvoices.count}</h3>
-    {/* 🧩 Hide total when assistant */}
+  className="relative group bg-white rounded-2xl p-6 border border-gray-100 shadow-sm hover:shadow-xl cursor-pointer transition-all"
+  whileHover={{ scale: 1.03, y: -3, zIndex: 50 }}
+  style={{ zIndex: 1 }}
+  onClick={() => setActiveTab("invoices")}
+>
+  <div className="absolute top-0 left-0 h-1 w-full bg-gradient-to-r from-red-500 to-pink-400 rounded-t-2xl"></div>
+
+  <p className="text-gray-500 font-medium">Factures impayées</p>
+  <h3 className="text-3xl font-bold text-red-500">
+    {unpaidInvoices.count}
+  </h3>
+
   {role !== "assistant" && (
     <p className="text-sm text-gray-600">
       Total: {formatCurrencyUSD(unpaidInvoices.total)}
     </p>
   )}
-  </motion.div>
+
+  {/* ✅ Hover list (ascending) */}
+  <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+    <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-auto">
+      <div className="bg-white/95 backdrop-blur border border-gray-200 rounded-xl shadow-2xl px-5 py-4 w-96 max-h-80 overflow-y-auto">
+        <p className="font-semibold text-gray-800 mb-2 text-center">
+          Factures impayées ({unpaidInvoices.count})
+        </p>
+
+        {unpaidInvoices.rows.length === 0 ? (
+          <p className="text-sm text-gray-600 italic text-center">
+            Aucune facture impayée
+          </p>
+        ) : (
+          <ul className="text-sm text-gray-700 space-y-1">
+            {unpaidInvoices.rows.map((inv) => (
+              <li
+                key={inv.id}
+                className="flex justify-between bg-gray-50 px-3 py-1 rounded-md"
+              >
+                <span className="truncate">{inv.name}</span>
+                <span className="font-semibold text-red-600">
+                  {formatCurrencyUSD(inv.remaining)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  </div>
+</motion.div>
+
 
   {/* Forme de Consentement Signée */}
 <motion.div
