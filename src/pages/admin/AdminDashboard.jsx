@@ -1,5 +1,5 @@
 // src/pages/Admin/AdminDashboard.jsx
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { FaUsers, FaChalkboardTeacher, FaClipboardList, FaCalendarAlt, FaBox, FaChartBar, FaSignOutAlt, FaFileAlt, FaPrayingHands, FaUserFriends, FaBell, FaPuzzlePiece, FaCogs } from "react-icons/fa"
 import AdminCourses from "./AdminCourses"
 import AdminPlans from "./AdminPlans"
@@ -50,6 +50,7 @@ import AdminClubMembershipPayments from "./AdminClubMembershipPayments";
 import AdminClubOverview from "./AdminClubOverview";
 import AdminMembershipApproval from "./AdminMembershipApproval";
 import AdminMembershipUsers from "./AdminMembershipUsers";
+import HoverOverlay from "../../components/HoverOverlay";
 
 
 
@@ -183,6 +184,24 @@ export default function AdminDashboard() {
   const [openEcole, setOpenEcole] = useState(false);   // default closed
   const [openClub, setOpenClub] = useState(false);    // default closed
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeNonEnrolled, setActiveNonEnrolled] = useState({
+    count: 0,
+    users: [],
+  });
+  // Hover – Utilisateurs card
+const userCardRef = useRef(null);
+const [userHovered, setUserHovered] = useState(false);
+// Hover – Factures impayées
+const unpaidCardRef = useRef(null);
+const [unpaidHovered, setUnpaidHovered] = useState(false);
+
+// Hover – Consentements signés
+const consentCardRef = useRef(null);
+const [consentHovered, setConsentHovered] = useState(false);
+
+// Hover – Nouveaux inscrits
+const newUsersCardRef = useRef(null);
+const [newUsersHovered, setNewUsersHovered] = useState(false);
 
 
 
@@ -362,7 +381,41 @@ if (!consErr) {
     users
   });
 }
+
+// 8) Actifs non inscrits (active users with ZERO enrollments)
+const { data: nonEnrolledRows, error: nonEnrErr } = await supabase
+  .from("profiles")
+  .select(`
+    id,
+    full_name,
+    enrollments!left ( id )
+  `)
+  .eq("is_active", true)
+  .neq("signup_type", "children_only")
+  .not("role", "eq", "influencer") // optional safety
+  .not("role", "eq", "admin")
+  .not("role", "eq", "teacher")
+  .not("role", "eq", "assistant")
+  .not("role", "eq", "owner")
+  .is("enrollments", null)
+  .order("full_name", { ascending: true });
+
+
+if (nonEnrErr) {
+  console.error("❌ Active non-enrolled error:", nonEnrErr);
+  setActiveNonEnrolled({ count: 0, users: [] });
+} else {
+  setActiveNonEnrolled({
+    count: nonEnrolledRows?.length || 0,
+    users: (nonEnrolledRows || []).map(u => ({
+      id: u.id,
+      name: u.full_name,
+    })),
+  });
+}
+
   };
+
 
 useEffect(() => {
   async function fetchRole() {
@@ -663,6 +716,11 @@ function isEcoleTabVisibleToAssistant(tabId) {
   return !HIDDEN_ECOLE_TABS.some((prefix) => tabId.startsWith(prefix));
 }
 
+const totalUtilisateursPlateforme =
+  (activeEnrollmentCount || 0) +
+  (activeNonEnrolled.count || 0) +
+  (parentCount || 0) +
+  (staffCount || 0);
 
   const renderContent = () => {
     switch (activeTab) {
@@ -680,48 +738,78 @@ function isEcoleTabVisibleToAssistant(tabId) {
 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
   {/* Utilisateurs (total on platform) + centered hover breakdown */}
   <motion.div
-    className="relative group bg-white rounded-2xl p-6 border border-gray-100 shadow-sm hover:shadow-xl cursor-pointer transition-all"
-    whileHover={{ scale: 1.03, y: -3 }}
-    onClick={() => setActiveTab("users")}
-  >
+  ref={userCardRef}
+  className="relative bg-white rounded-2xl p-6 border border-gray-100 shadow-sm cursor-pointer"
+  whileHover={{ scale: 1.03, y: -3 }}
+  onMouseEnter={() => setUserHovered(true)}
+  onMouseLeave={() => setUserHovered(false)}
+  onClick={() => setActiveTab("users")}
+>
     <div className="absolute top-0 left-0 h-1 w-full bg-gradient-to-r from-blue-500 to-teal-400 rounded-t-2xl"></div>
     <p className="text-gray-500 font-medium">Utilisateurs</p>
     <h3 className="text-3xl font-bold text-blue-600 mt-1">{userCount}</h3>
-
-    {/* Centered hover card */}
-    <div className="pointer-events-none absolute inset-0 flex items-center justify-center z-20">
-      <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-        <div className="bg-white/95 backdrop-blur border border-gray-200 rounded-xl shadow-2xl px-4 py-3 w-64">
-          <p className="font-semibold text-gray-800 mb-1 text-center">Répartition</p>
-          <ul className="text-sm text-gray-700 space-y-1">
-            <li className="flex justify-between">
-              <span>👥 Influenceurs</span>
-              <b>{influencerCount || 0}</b>
-            </li>
-
-            <li className="flex justify-between">
-              <span>👨‍👩‍👧 Parents</span>
-              <b>{parentCount || 0}</b>
-            </li>
-
-            <li className="flex justify-between">
-              <span>🧑‍🏫 Staff</span>
-              <b>{staffCount || 0}</b>
-            </li>
-
-            <li className="flex justify-between">
-              <span>🏊 Inscriptions actives</span>
-              <b>{activeEnrollmentCount || 0}</b>
-            </li>
-          </ul>
-        </div>
-      </div>
-    </div>
   </motion.div>
+  <HoverOverlay
+  anchorRef={userCardRef}
+  visible={userHovered}
+  onMouseEnter={() => setUserHovered(true)}
+  onMouseLeave={() => setUserHovered(false)}
+>
+  <div className="px-4 py-3 text-sm">
+    <p className="font-semibold text-gray-800 mb-2 text-center">
+      Répartition
+    </p>
+
+    <ul className="space-y-1">
+      <li className="flex justify-between">
+        <span>👥 Influenceurs</span>
+        <b>{influencerCount || 0}</b>
+      </li>
+      <li className="flex justify-between">
+        <span>👨‍👩‍👧 Parents</span>
+        <b>{parentCount || 0}</b>
+      </li>
+      <li className="flex justify-between">
+        <span>🧑‍🏫 Staff</span>
+        <b>{staffCount || 0}</b>
+      </li>
+      <li className="flex justify-between">
+        <span>🏊 Inscriptions actives</span>
+        <b>{activeEnrollmentCount || 0}</b>
+      </li>
+      <li className="flex justify-between">
+        <span>🏊 Actifs non inscrits</span>
+        <b>{activeNonEnrolled.count || 0}</b>
+      </li>
+      <li className="flex justify-between border-t pt-2 mt-2 font-semibold">
+        <span>📊 Total</span>
+        <b>{totalUtilisateursPlateforme}</b>
+      </li>
+    </ul>
+    {activeNonEnrolled.count > 0 && (
+  <div className="mt-3 border-t pt-2">
+    <p className="text-xs font-semibold text-red-600 mb-1 text-center">
+      Actifs non inscrits – suivi requis
+    </p>
+
+    <ul className="text-xs text-gray-700 space-y-1 max-h-32 overflow-auto">
+      {activeNonEnrolled.users.map(u => (
+        <li
+          key={u.id}
+          className="bg-red-50 px-2 py-1 rounded-md"
+        >
+          • {u.name}
+        </li>
+      ))}
+    </ul>
+  </div>
+)}
+  </div>
+</HoverOverlay>
 
   {/* Notifications non lues */}
 <motion.div
-  className="relative bg-white rounded-2xl p-6 border border-gray-100 shadow-sm hover:shadow-lg cursor-pointer transition-all"
+  className="relative bg-white rounded-2xl p-6 border border-gray-100 shadow-sm cursor-pointer"
   whileHover={{ scale: 1.03, y: -3 }}
   onClick={() => setActiveTab("notifications-all")}
 >
@@ -743,12 +831,13 @@ function isEcoleTabVisibleToAssistant(tabId) {
   </p>
 </motion.div>
 
-
   {/* Factures impayées */}
   <motion.div
-  className="relative group bg-white rounded-2xl p-6 border border-gray-100 shadow-sm hover:shadow-xl cursor-pointer transition-all"
-  whileHover={{ scale: 1.03, y: -3, zIndex: 50 }}
-  style={{ zIndex: 1 }}
+  ref={unpaidCardRef}
+  className="relative bg-white rounded-2xl p-6 border border-gray-100 shadow-sm cursor-pointer"
+  whileHover={{ scale: 1.03, y: -3 }}
+  onMouseEnter={() => setUnpaidHovered(true)}
+  onMouseLeave={() => setUnpaidHovered(false)}
   onClick={() => setActiveTab("invoices")}
 >
   <div className="absolute top-0 left-0 h-1 w-full bg-gradient-to-r from-red-500 to-pink-400 rounded-t-2xl"></div>
@@ -763,44 +852,49 @@ function isEcoleTabVisibleToAssistant(tabId) {
       Total: {formatCurrencyUSD(unpaidInvoices.total)}
     </p>
   )}
-
-  {/* ✅ Hover list (ascending) */}
-  <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-    <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-auto">
-      <div className="bg-white/95 backdrop-blur border border-gray-200 rounded-xl shadow-2xl px-5 py-4 w-96 max-h-80 overflow-y-auto">
-        <p className="font-semibold text-gray-800 mb-2 text-center">
-          Factures impayées ({unpaidInvoices.count})
-        </p>
-
-        {unpaidInvoices.rows.length === 0 ? (
-          <p className="text-sm text-gray-600 italic text-center">
-            Aucune facture impayée
-          </p>
-        ) : (
-          <ul className="text-sm text-gray-700 space-y-1">
-            {unpaidInvoices.rows.map((inv) => (
-              <li
-                key={inv.id}
-                className="flex justify-between bg-gray-50 px-3 py-1 rounded-md"
-              >
-                <span className="truncate">{inv.name}</span>
-                <span className="font-semibold text-red-600">
-                  {formatCurrencyUSD(inv.remaining)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  </div>
 </motion.div>
+<HoverOverlay
+  anchorRef={unpaidCardRef}
+  visible={unpaidHovered}
+  width={420}   // 👈 wider just for invoices
+  onMouseEnter={() => setUnpaidHovered(true)}
+  onMouseLeave={() => setUnpaidHovered(false)}
+>
+  <div className="px-4 py-3 text-sm">
+    <p className="font-semibold text-gray-800 mb-2 text-center">
+      Factures impayées
+    </p>
+
+    {unpaidInvoices.rows.length === 0 ? (
+      <p className="text-gray-500 italic text-center">
+        Aucune facture en attente 🎉
+      </p>
+    ) : (
+      <ul className="space-y-1">
+        {unpaidInvoices.rows.map((r) => (
+          <li
+            key={r.id}
+            className="flex justify-between gap-3 bg-red-50 px-2 py-1 rounded-md"
+          >
+            <span className="truncate">{r.name}</span>
+            <b className="text-red-600">
+              {formatCurrencyUSD(r.remaining)}
+            </b>
+          </li>
+        ))}
+      </ul>
+    )}
+  </div>
+</HoverOverlay>
 
 
   {/* Forme de Consentement Signée */}
 <motion.div
-  className="relative group bg-white rounded-2xl p-6 border border-gray-100 shadow-sm hover:shadow-xl cursor-pointer transition-all"
+  ref={consentCardRef}
+  className="relative bg-white rounded-2xl p-6 border border-gray-100 shadow-sm cursor-pointer"
   whileHover={{ scale: 1.03, y: -3 }}
+  onMouseEnter={() => setConsentHovered(true)}
+  onMouseLeave={() => setConsentHovered(false)}
 >
   <div className="absolute top-0 left-0 h-1 w-full bg-gradient-to-r from-green-500 to-teal-400 rounded-t-2xl"></div>
 
@@ -808,42 +902,45 @@ function isEcoleTabVisibleToAssistant(tabId) {
   <h3 className="text-3xl font-bold text-green-600 mt-1">
     {consentSigned.count}
   </h3>
-
-  {/* Hover list (same style as Répartition) */}
-  <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-    <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-auto">
-      <div className="bg-white/95 backdrop-blur border border-gray-200 rounded-xl shadow-2xl px-4 py-3 w-72 max-h-72 overflow-y-auto">
-        <p className="font-semibold text-gray-800 mb-2 text-center">
-          Signataires ({consentSigned.count})
-        </p>
-
-        {consentSigned.users.length === 0 ? (
-          <p className="text-sm text-gray-600 italic text-center">
-            Aucun utilisateur n’a signé
-          </p>
-        ) : (
-          <ul className="text-sm text-gray-700 space-y-1">
-            {consentSigned.users.map((u) => (
-              <li
-                key={u.id}
-                className="flex justify-between bg-gray-50 px-3 py-1 rounded-md"
-              >
-                <span>{u.name}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  </div>
 </motion.div>
+<HoverOverlay
+  anchorRef={consentCardRef}
+  visible={consentHovered}
+  onMouseEnter={() => setConsentHovered(true)}
+  onMouseLeave={() => setConsentHovered(false)}
+>
+  <div className="px-4 py-3 text-sm">
+    <p className="font-semibold text-gray-800 mb-2 text-center">
+      Consentements signés
+    </p>
+
+    {consentSigned.users.length === 0 ? (
+      <p className="text-gray-500 italic text-center">
+        Aucun consentement
+      </p>
+    ) : (
+      <ul className="space-y-1">
+        {consentSigned.users.map((u) => (
+          <li
+            key={u.id}
+            className="bg-green-50 px-2 py-1 rounded-md"
+          >
+            • {u.name}
+          </li>
+        ))}
+      </ul>
+    )}
+  </div>
+</HoverOverlay>
+
 
 
   {/* Commissions en attente */}
   <motion.div
-    className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm hover:shadow-lg cursor-pointer transition-all"
-    whileHover={{ scale: 1.03, y: -3 }}
-    onClick={() => {
+  className="relative bg-white rounded-2xl p-6 border border-gray-100 shadow-sm cursor-pointer"
+  whileHover={{ scale: 1.03, y: -3 }}
+
+  onClick={() => {
   if (role !== "assistant") setActiveTab("commissions");
 }}
   >
@@ -854,8 +951,11 @@ function isEcoleTabVisibleToAssistant(tabId) {
 
   {/* Nouveaux inscrits (mois en cours) */}
 <motion.div
-  className="relative group bg-white rounded-2xl p-6 border border-gray-100 shadow-sm hover:shadow-xl cursor-pointer transition-all"
+  ref={newUsersCardRef}
+  className="relative bg-white rounded-2xl p-6 border border-gray-100 shadow-sm cursor-pointer"
   whileHover={{ scale: 1.03, y: -3 }}
+  onMouseEnter={() => setNewUsersHovered(true)}
+  onMouseLeave={() => setNewUsersHovered(false)}
 >
   <div className="absolute top-0 left-0 h-1 w-full bg-gradient-to-r from-purple-500 to-indigo-400 rounded-t-2xl"></div>
 
@@ -866,35 +966,37 @@ function isEcoleTabVisibleToAssistant(tabId) {
   <p className="text-sm text-gray-500 mt-1">
     Mois précédent : <b>{newUsers.last}</b>
   </p>
-
-  {/* Hover list */}
-  <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-    <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-auto">
-      <div className="bg-white/95 backdrop-blur border border-gray-200 rounded-xl shadow-2xl px-4 py-3 w-72 max-h-72 overflow-y-auto">
-        <p className="font-semibold text-gray-800 mb-2 text-center">
-          Nouveaux inscrits ({newUsers.current})
-        </p>
-
-        {newUsers.users.length === 0 ? (
-          <p className="text-sm text-gray-600 italic text-center">
-            Aucun nouvel inscrit ce mois
-          </p>
-        ) : (
-          <ul className="text-sm text-gray-700 space-y-1">
-            {newUsers.users.map(u => (
-              <li
-                key={u.id}
-                className="bg-gray-50 px-3 py-1 rounded-md"
-              >
-                {u.name}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  </div>
 </motion.div>
+<HoverOverlay
+  anchorRef={newUsersCardRef}
+  visible={newUsersHovered}
+  onMouseEnter={() => setNewUsersHovered(true)}
+  onMouseLeave={() => setNewUsersHovered(false)}
+>
+  <div className="px-4 py-3 text-sm">
+    <p className="font-semibold text-gray-800 mb-2 text-center">
+      Nouveaux inscrits – mois en cours
+    </p>
+
+    {newUsers.users.length === 0 ? (
+      <p className="text-gray-500 italic text-center">
+        Aucun nouvel inscrit
+      </p>
+    ) : (
+      <ul className="space-y-1">
+        {newUsers.users.map((u) => (
+          <li
+            key={u.id}
+            className="bg-purple-50 px-2 py-1 rounded-md"
+          >
+            • {u.name}
+          </li>
+        ))}
+      </ul>
+    )}
+  </div>
+</HoverOverlay>
+
 
       </div>
       <br />
