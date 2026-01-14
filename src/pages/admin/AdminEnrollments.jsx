@@ -596,6 +596,8 @@ const filteredEnrollments = useMemo(() => {
   });
 }, [enrollments, plans, filterCourseId, filterHours, dayFilter, timeFilter]);
 
+const enrolledCount = filteredEnrollments.length;
+
 // ✅ now it’s safe to paginate
 const { totalPages, visibleRows } = useMemo(() => {
   const total = Math.max(1, Math.ceil(filteredEnrollments.length / pageSize));
@@ -1050,6 +1052,9 @@ if (error) {
         <div className="flex items-center justify-between p-3">
           <span className="text-xs text-gray-600">
             Page {page} / {totalPages}
+            <span className="ml-3 text-gray-500">
+              • {enrolledCount} / {enrollments.length} inscriptions
+            </span>
           </span>
           <div className="flex gap-2">
             <button
