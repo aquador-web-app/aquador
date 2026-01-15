@@ -353,7 +353,7 @@ console.log("Enrollments fetched", ens, ensErr);
   if (!profile) return null;
 
   return (
-      <div className="p-6 space-y-6">
+      <div className="p-4 md:p-6 space-y-6 max-w-full overflow-x-hidden">
         {/* Back button */}
         <button
           onClick={onBack}
@@ -363,24 +363,26 @@ console.log("Enrollments fetched", ens, ensErr);
         </button>
 
         {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-orange-600 text-white rounded-xl p-6 shadow-lg">
-  <div className="flex items-center">
-    {/* Left side: avatar + profile info */}
+<div className="bg-gradient-to-r from-blue-600 to-orange-600 text-white rounded-xl p-6 shadow-lg">
+  <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+
+    {/* Left: avatar + info */}
     <div className="flex items-center gap-6">
-      <div className="w-20 h-20 rounded-full bg-white text-aquaBlue flex items-center justify-center text-2xl font-bold">
+      <div className="hidden sm:flex w-20 h-20 rounded-full bg-white text-aquaBlue items-center justify-center text-2xl font-bold">
         {profile.first_name?.[0]}
         {profile.last_name?.[0]}
       </div>
-      <div>
-        <h1 className="text-3xl font-bold flex items-center gap-2">
-  {profile.full_name || "—"}
-  {profile.has_unpaid && (
-    <FaDollarSign className="text-yellow-300 drop-shadow-sm" title="Facture impayée" />
-  )}
-</h1>
 
-        <div className="flex gap-2 mt-2">
-          <Badge color="blue">{profile.role || "—"}</Badge>
+      <div>
+        <h1 className="text-xl sm:text-3xl font-bold flex items-center gap-2">
+          {profile.full_name}
+          {profile.has_unpaid && (
+            <FaDollarSign className="text-yellow-300" />
+          )}
+        </h1>
+
+        <div className="flex gap-2 mt-2 flex-wrap">
+          <Badge color="blue">{profile.role}</Badge>
           <Badge color={profile.is_active ? "green" : "red"}>
             {profile.is_active ? "Actif" : "Inactif"}
           </Badge>
@@ -390,43 +392,44 @@ console.log("Enrollments fetched", ens, ensErr);
             <Badge color="gray">Titulaire</Badge>
           )}
         </div>
+
         <p className="mt-2 text-sm opacity-90">
-              E-mail  :  {profile.email || "—"} 
-            </p>
-            <p className="mt-2 text-sm opacity-90">
-              Téléphone : {profile.phone || "—"} 
-            </p>
-            <p className="mt-2 text-sm opacity-90">
-              Adresse : {profile.address || "—"}
-            </p>
+          E-mail : {profile.email || "—"}
+        </p>
+        <p className="text-sm opacity-90">
+          Téléphone : {profile.phone || "—"}
+        </p>
+        <p className="text-sm opacity-90">
+          Adresse : {profile.address || "—"}
+        </p>
       </div>
     </div>
 
-    {/* Right side: Add Person button (only for main profiles) */}
-{!profile.parent_id && (
-  <button
-    onClick={() => onAddChild && onAddChild(profile.id)}   // pass parent profile id
-    className="ml-auto bg-white text-blue-600 px-4 py-2 rounded-lg shadow hover:bg-gray-100 font-medium"
-  >
-    + Ajouter une personne
-  </button>
-)}
-{/* Ajouter du crédit */}
-<button
-  onClick={() => setShowAddCredit(true)}
-  className="ml-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow hover:bg-green-700 font-medium"
->
-  ➕ Ajouter du crédit
-</button>
+    {/* Right: actions (EXACT SAME IDEA AS UserProfile) */}
+    <div className="self-start sm:ml-auto flex flex-col gap-2 w-full sm:w-auto">
+      <button
+        onClick={() => setShowAddCredit(true)}
+        className="bg-green-600 text-white px-4 py-2 rounded-lg shadow font-medium"
+      >
+        ➕ Ajouter du crédit
+      </button>
 
+      {!profile.parent_id && (
+        <button
+          onClick={() => onAddChild?.(profile.id)}
+          className="bg-white text-blue-600 px-4 py-2 rounded-lg shadow font-medium"
+        >
+          + Ajouter une personne
+        </button>
+      )}
+    </div>
 
   </div>
-</div>
-           
+</div>        
            
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <Card
           icon={<FaMoneyBillWave />}
           label="Solde"
@@ -440,7 +443,7 @@ console.log("Enrollments fetched", ens, ensErr);
 
       {/* Tabs */}
       <div>
-        <div className="flex gap-4 border-b mb-4">
+        <div className="flex gap-3 border-b mb-4 overflow-x-auto whitespace-nowrap scrollbar-hide">
           {["infos", "enrollments", "invoices", "referrals", "family", "documents"].map((t) => (
             <button
               key={t}
@@ -465,7 +468,7 @@ console.log("Enrollments fetched", ens, ensErr);
             </button>
           ))}
         </div>
-
+<div className="max-w-md mx-auto lg:max-w-none">
         {/* Infos */}
         {tab === "infos" && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -551,7 +554,8 @@ console.log("Enrollments fetched", ens, ensErr);
 
         {/* Inscriptions */}
         {tab === "enrollments" && (
-          <div className="bg-white p-4 rounded-2xl shadow overflow-x-auto">
+          <div className="bg-white rounded-2xl shadow -mx-4 sm:mx-0">
+            <div className="p-4 overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead className="bg-gray-50">
                 <tr className="text-gray-600">
@@ -596,6 +600,7 @@ console.log("Enrollments fetched", ens, ensErr);
                 )}
               </tbody>
             </table>
+            </div>
           </div>
         )}
 
@@ -627,7 +632,7 @@ console.log("Enrollments fetched", ens, ensErr);
                       <Td>
                         {formatMonth(inv.month)}
                       </Td>
-                      <Td>
+                      <Td className="min-w-[220px]">
                         {items.length ? (
                           <ul className="space-y-1">
                             {items.map((it, i) => (
@@ -813,7 +818,7 @@ console.log("Enrollments fetched", ens, ensErr);
     ) : docs.length ? (
       <ul className="divide-y">
         {docs.map((doc, idx) => (
-          <li key={idx} className="flex justify-between items-center py-2">
+          <li key={idx} className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 py-2">
             <span className="text-gray-800">{doc.name}</span>
             <a
               href={doc.url}
@@ -833,7 +838,7 @@ console.log("Enrollments fetched", ens, ensErr);
 )}
 {showAddCredit && (
   <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-    <div className="bg-white p-6 rounded-xl shadow-xl w-80">
+    <div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-sm mx-4">
       <h2 className="text-lg font-semibold mb-4">Ajouter du crédit</h2>
 
       <label className="block text-sm text-gray-600 mb-1">
@@ -892,6 +897,7 @@ console.log("Enrollments fetched", ens, ensErr);
 )}
 
       </div>
+    </div>
     </div>
   );
   
