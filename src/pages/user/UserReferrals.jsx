@@ -120,8 +120,8 @@ export default function UserReferrals({ user }) {
         </div>
       </div>
 
-      {/* === Table === */}
-      <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-200">
+      {/* === Table (Desktop only) === */}
+      <div className="hidden md:block bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-200">
         <table className="table-auto w-full border-collapse">
           <thead className="bg-gradient-to-r from-blue-700 to-orange-400 text-white">
             <tr>
@@ -162,12 +162,12 @@ export default function UserReferrals({ user }) {
                       {r.filleuls.length}
                     </td>
                     <td
-  className={`px-4 py-3 font-medium ${
-    r.totalCommissions > 0 ? "text-red-600" : "text-green-600"
-  }`}
->
-  {formatCurrencyUSD(r.totalCommissions)}
-</td>
+                      className={`px-4 py-3 font-medium ${
+                        r.totalCommissions > 0 ? "text-red-600" : "text-green-600"
+                      }`}
+                    >
+                      {formatCurrencyUSD(r.totalCommissions)}
+                    </td>
 
                     <td className="px-4 py-3 text-center">
                       {expanded === r.referrerId ? (
@@ -234,6 +234,101 @@ export default function UserReferrals({ user }) {
           </tbody>
         </table>
       </div>
+      {/* 📱 Mobile referral cards — styled like desktop */}
+<div className="md:hidden space-y-5 mt-4">
+  {loading ? (
+    <p className="text-center text-gray-500 italic">Chargement…</p>
+  ) : referrals.length === 0 ? (
+    <p className="text-center text-gray-500 italic">
+      Aucun parrainage trouvé.
+    </p>
+  ) : (
+    referrals.map((r) => (
+      <div
+        key={r.referrerId}
+        className="rounded-2xl overflow-hidden shadow-lg border border-gray-200 bg-white"
+      >
+        {/* Header — desktop-like gradient */}
+        <button
+          onClick={() => toggleExpand(r.referrerId)}
+          className="w-full flex justify-between items-center px-4 py-4 bg-gradient-to-r from-blue-700 to-orange-400 text-white"
+        >
+          <div>
+            <p className="text-lg font-bold">
+              {r.referrerName}
+            </p>
+            <p className="text-xs opacity-90">
+              Code : {r.referrerCode}
+            </p>
+          </div>
+
+          <div className="text-right">
+            <p className="text-sm font-semibold">
+              {r.filleuls.length} filleul{r.filleuls.length > 1 ? "s" : ""}
+            </p>
+            <div className="flex items-center justify-end gap-1 mt-1">
+              <span className="text-base font-bold">
+                {formatCurrencyUSD(r.totalCommissions)}
+              </span>
+              {expanded === r.referrerId ? (
+                <FaChevronUp />
+              ) : (
+                <FaChevronDown />
+              )}
+            </div>
+          </div>
+        </button>
+
+        {/* Expanded content */}
+        <AnimatePresence>
+          {expanded === r.referrerId && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="bg-gray-50 px-4 py-4 space-y-4"
+            >
+              {r.filleuls.map((f) => (
+                <div
+                  key={f.id}
+                  className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm"
+                >
+                  {/* Row 1 */}
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-semibold text-blue-700 text-base">
+                        {f.name}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {formatDateFrSafe(f.createdAt)}
+                      </p>
+                    </div>
+
+                    <span className="text-sm font-bold text-green-600">
+                      {f.commission
+                        ? formatCurrencyUSD(f.commission)
+                        : "$0.00"}
+                    </span>
+                  </div>
+
+                  {/* Divider */}
+                  <div className="border-t border-gray-100 my-2"></div>
+
+                  {/* Row 2 */}
+                  <div className="text-sm text-gray-700">
+                    <span className="font-medium">Code :</span>{" "}
+                    <span className="text-gray-900">{f.code}</span>
+                  </div>
+                </div>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    ))
+  )}
+</div>
+
     </div>
   );
 }

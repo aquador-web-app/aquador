@@ -877,7 +877,7 @@ const totalUtilisateursPlateforme =
             className="flex justify-between gap-3 bg-red-50 px-2 py-1 rounded-md"
           >
             <span className="truncate">{r.name}</span>
-            <b className="text-red-600">
+            <b className="text-red-600 whitespace-nowrap">
               {formatCurrencyUSD(r.remaining)}
             </b>
           </li>
