@@ -77,7 +77,27 @@ async function sendHTMLToPDFAndUpload({ html, formName, fullName, safeName }) {
  *  - onClose(): void
  *  - onDone(results: Array<{form_name, url}>): void
  */
-export default function SignupDocsModal({ fullName = "", signupType = "me", onClose, onDone }) {
+export default function SignupDocsModal({
+  fullName = "",
+  signupType = "me",
+  enabledDocs = { rules: true, accord: true, consent: true },
+  initialStep,
+  onClose,
+  onDone,
+}) {
+
+  function getNextEnabledStep(current) {
+  if (current < 2 && enabledDocs.accord) return 2;
+  if (current < 3 && enabledDocs.consent) return 3;
+  return null;
+}
+
+function getPrevEnabledStep(current) {
+  if (current > 2 && enabledDocs.accord) return 2;
+  if (current > 1 && enabledDocs.rules) return 1;
+  return null;
+}
+
 
   const safeName = useMemo(
   () => sanitizeFullName(fullName || "utilisateur"),
@@ -87,7 +107,16 @@ if (!safeName || safeName.length < 2) {
   throw new Error("Nom invalide pour la génération des documents.");
 }
 
-  const [step, setStep] = useState(1); // 1=Reglements, 2=Accord, 3=Consentement
+const FIRST_ENABLED_STEP = useMemo(() => {
+  if (initialStep) return initialStep;
+  if (enabledDocs.rules) return 1;
+  if (enabledDocs.accord) return 2;
+  if (enabledDocs.consent) return 3;
+  return 1;
+}, [enabledDocs, initialStep]);
+
+
+  const [step, setStep] = useState(FIRST_ENABLED_STEP); 
   const [saving, setSaving] = useState(false);
   const [uiError, setUiError] = useState("");
   const contentRef = useRef(null);
@@ -625,7 +654,13 @@ Des frais d’adhésion annuels de USD 30.00 devront être versés au début de 
 });
       setResults((r) => [...r, { form_name: "Accord du participant", url }]);
       // Next
-      setStep(3);
+      const next = getNextEnabledStep(2);
+if (next) setStep(next);
+else {
+  onDone?.(results);
+  onClose?.();
+}
+
     } catch (err) {
       setUiError(err.message || String(err));
     } finally {
@@ -734,7 +769,13 @@ try {
 
     // 5️⃣ Move to next step (ACCORD DU PARTICIPANT)
     setSaving(false);
-    setStep(2);
+    const next = getNextEnabledStep(1);
+if (next) setStep(next);
+else {
+  onDone?.(results);
+  onClose?.();
+}
+
 
     // 5️⃣ Done — close modal and continue
     console.log("🎉 Règlements signing complete!");
@@ -802,9 +843,9 @@ async function saveContent() {
         {/* Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b">
           <div className="font-semibold text-lg">
-            {step === 1 && "Règlements"}
-            {step === 2 && "Accord du participant"}
-            {step === 3 && "Formulaire de consentement (optionel)"}
+            {step === 1 && enabledDocs.rules && "Règlements"}
+            {step === 2 && enabledDocs.accord && "Accord du participant"}
+            {step === 3 && enabledDocs.consent && "Formulaire de consentement (optionnel)"}
           </div>
           <button
             onClick={() => onClose?.()}
@@ -1096,7 +1137,11 @@ async function saveContent() {
             className="rounded-md px-4 py-2 bg-gray-100 hover:bg-gray-200"
             onClick={() => {
               if (step === 1) onClose?.();
-              else setStep((s) => Math.max(1, s - 1));
+              else {
+  const prev = getPrevEnabledStep(step);
+  if (prev) setStep(prev);
+}
+
             }}
             disabled={saving}
           >
