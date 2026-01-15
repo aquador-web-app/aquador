@@ -14,6 +14,8 @@ import {
   formatCurrencyUSD,
 } from "../../lib/dateUtils";
 import { sanitizeFullName } from "../../lib/sanitizeFullName";
+import SignupDocsModal from "../../components/SignupDocsModal";
+import { useGlobalAlert } from "../../components/GlobalAlert";
 
 
 
@@ -27,7 +29,20 @@ export default function UserProfile({ userId, onAddChild }) {
   const [parent, setParent] = useState(null);
   const [tab, setTab] = useState("infos");
   const [docs, setDocs] = useState([]);
+  const { showAlert, showConfirm } = useGlobalAlert();
   const [loadingDocs, setLoadingDocs] = useState(false);
+  const [showResignModal, setShowResignModal] = useState(false);
+  const [showResignIntro, setShowResignIntro] = useState(false);
+  const [docChoice, setDocChoice] = useState({
+    rules: true,
+    accord: true,
+    consent: true,
+  });
+  const initialStep =
+  docChoice.rules ? 1 :
+  docChoice.accord ? 2 :
+  3;
+
 
   
 useEffect(() => {
@@ -663,39 +678,148 @@ function timeRangeWithFallback(start_time, end_time, duration_hours) {
           </div>
         )}
         {tab === "documents" && (
-  <div className="bg-white p-4 sm:p-6 rounded-2xl shadow w-full sm:max-w-lg mx-auto">
-    <h3 className="font-semibold mb-3">Documents signés</h3>
+  <div className="bg-white p-4 sm:p-6 rounded-2xl shadow w-full sm:max-w-lg mx-auto space-y-6">
+    
+    {/* Signed docs */}
+    <div>
+      <h3 className="font-semibold mb-3">Documents signés</h3>
 
-    {loadingDocs ? (
-      <p className="text-gray-600 text-sm">Chargement des documents…</p>
-    ) : docs.length ? (
-      <ul className="divide-y">
-        {docs.map((doc, idx) => (
-          <li
-            key={idx}
-            className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 py-3"
-          >
-            <span className="text-gray-800 text-sm break-all">
-              {doc.name}
-            </span>
-
-            <a
-              href={doc.url}
-              target="_blank"
-              rel="noreferrer"
-              className="text-blue-600 underline text-sm w-fit"
+      {loadingDocs ? (
+        <p className="text-gray-600 text-sm">Chargement des documents…</p>
+      ) : docs.length ? (
+        <ul className="divide-y">
+          {docs.map((doc, idx) => (
+            <li
+              key={idx}
+              className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 py-3"
             >
-              Ouvrir
-            </a>
-          </li>
+              <span className="text-gray-800 text-sm break-all">
+                {doc.name}
+              </span>
+              <a
+                href={doc.url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-blue-600 underline text-sm w-fit"
+              >
+                Ouvrir
+              </a>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-gray-500 text-sm">Aucun document signé trouvé.</p>
+      )}
+    </div>
+
+    {/* Re-sign section */}
+    <div className="border-t pt-4">
+      <h4 className="font-semibold text-gray-700 mb-2">
+        Signer de nouveau les documents
+      </h4>
+
+      <p className="text-sm text-gray-600 mb-3">
+        Utilisez cette option si vous souhaitez modifier ou refaire la signature
+        des documents (ex. ajout d’un enfant, changement de consentement).
+      </p>
+
+      <button
+  onClick={() => setShowResignIntro(true)}
+  className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-medium hover:bg-blue-700 transition"
+>
+  Signer les documents requis
+</button>
+      {showResignIntro && (
+  <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center px-4">
+    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-5">
+      
+      <div className="flex items-start gap-3">
+        <div className="text-yellow-500 text-xl">⚠️</div>
+        <div>
+          <h3 className="font-semibold text-gray-800">
+            Nouvelle signature de documents
+          </h3>
+          <p className="text-sm text-gray-600 mt-1">
+            En signant de nouveau :
+            <br /><b>• Vous devez rajouter toutes les personnes déjà inscrites en ajoutant la/les nouvelle(s).</b>
+            <br /><b>• Toutes les signatures et documents précédents seront remplacés.</b>
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <p className="text-sm font-medium text-gray-700">
+          Quels documents souhaitez-vous signer ?
+        </p>
+
+        {[
+          { key: "rules", label: "Règlements" },
+          { key: "accord", label: "Accord du participant" },
+          { key: "consent", label: "Formulaire de consentement" },
+        ].map((d) => (
+          <label
+            key={d.key}
+            className="flex items-center gap-3 text-sm text-gray-700"
+          >
+            <input
+              type="checkbox"
+              checked={docChoice[d.key]}
+              onChange={(e) =>
+                setDocChoice((prev) => ({
+                  ...prev,
+                  [d.key]: e.target.checked,
+                }))
+              }
+              className="w-4 h-4 text-blue-600 rounded"
+            />
+            {d.label}
+          </label>
         ))}
-      </ul>
-    ) : (
-      <p className="text-gray-500 text-sm">Aucun document signé trouvé.</p>
-    )}
+      </div>
+
+      <div className="flex gap-3 pt-2">
+        <button
+          onClick={() => setShowResignIntro(false)}
+          className="flex-1 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700"
+        >
+          Annuler
+        </button>
+
+        <button
+          onClick={() => {
+            if (!Object.values(docChoice).some(Boolean)) {
+              alert("Veuillez sélectionner au moins un document.");
+              return;
+            }
+            setShowResignIntro(false);
+            setShowResignModal(true);
+          }}
+          className="flex-1 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium"
+        >
+          Continuer
+        </button>
+      </div>
+    </div>
   </div>
 )}
 
+    </div>
+  </div>
+)}
+  {showResignModal && (
+  <SignupDocsModal
+    fullName={profile.full_name}
+    signupType={profile.signup_type || "me"}
+    enabledDocs={docChoice}
+    initialStep={initialStep}
+    onClose={() => setShowResignModal(false)}
+    onDone={() => {
+      setShowResignModal(false);
+      setTimeout(() => setProfile({ ...profile }), 300);
+    }}
+  />
+)}
+  
     </div>
   );
 }
