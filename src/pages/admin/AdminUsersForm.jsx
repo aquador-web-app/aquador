@@ -249,8 +249,16 @@ if (formData.phone && !isValidPhoneNumber(formData.phone)) {
   const referralLocked = formData.role !== "influencer";
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40">
-      <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg">
+    <div className="fixed inset-0 z-50 bg-black/40 overflow-y-auto">
+      <div className="
+  bg-white rounded-lg shadow-xl
+  w-full max-w-lg
+  mx-auto
+  my-6 sm:my-10
+  p-4 sm:p-6
+  max-h-[90vh]
+  overflow-y-auto
+">
         <h2 className="text-xl font-bold mb-4">
           {user ? "Modifier l’utilisateur" : "Créer un utilisateur"}
         </h2>
@@ -321,17 +329,20 @@ if (formData.phone && !isValidPhoneNumber(formData.phone)) {
           {/* Phone */}
           <label className="label">Téléphone</label>
 
-<PhoneInput
-  international
-  defaultCountry={country}
-  countryCallingCodeEditable={false}
-  value={formData.phone}
-  onChange={(value) =>
-    setFormData((prev) => ({ ...prev, phone: value || "" }))
-  }
-  placeholder="Numéro de téléphone"
-  disabled={!!parentId}
-/>
+<div className="w-full">
+  <PhoneInput
+    international
+    defaultCountry={country}
+    countryCallingCodeEditable={false}
+    value={formData.phone}
+    onChange={(value) =>
+      setFormData((prev) => ({ ...prev, phone: value || "" }))
+    }
+    placeholder="Numéro de téléphone"
+    disabled={!!parentId}
+    className="w-full"
+  />
+</div>
 
           {/* Adresse */}
           <input
@@ -412,7 +423,7 @@ if (formData.phone && !isValidPhoneNumber(formData.phone)) {
 )}
 
           {/* Buttons */}
-          <div className="flex justify-end space-x-3">
+          <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
             <button
               type="button"
               onClick={onClose}
