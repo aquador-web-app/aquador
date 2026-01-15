@@ -78,9 +78,6 @@ function groupByMonth(rows) {
     const [customAmount, setCustomAmount] = useState("");
     const { showAlert } = useGlobalAlert();
   
-
-
-
     const allProfiles = [profile, ...children];
     const allIds = allProfiles.map((p) => p.id);
     const unpaidInvoices = invoices.filter(
@@ -697,7 +694,7 @@ export default function UserInvoices({ userId, initialTab = "factures" }) {
               className="px-3 py-3"
             >
               {/* Mini table with owner column + collapsible rows */}
-              <div className="overflow-x-auto bg-white rounded-lg border border-gray-100">
+              <div className="hidden md:block overflow-x-auto bg-white rounded-lg border border-gray-100">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50">
                     <tr>
@@ -747,6 +744,114 @@ export default function UserInvoices({ userId, initialTab = "factures" }) {
                   </tbody>
                 </table>
               </div>
+              <div className="md:hidden space-y-4">
+  {rows.map((f) => {
+    const owner = ownerMap.get(f.user_id) || "—";
+    const restant = sumRemaining(f);
+
+    return (
+      <div
+        key={f.id}
+        className="bg-white rounded-xl shadow p-4 border space-y-3"
+      >
+        {/* Header */}
+        <div className="flex justify-between items-start">
+          <div>
+            <p className="font-semibold text-blue-700">{owner}</p>
+            <p className="text-xs text-gray-500">
+              #{f.invoice_no}
+            </p>
+            <p className="text-xs text-gray-500">
+              Échéance : {formatDateFrSafe(f.due_date)}
+            </p>
+          </div>
+
+          <span
+            className={`px-3 py-1 rounded-full text-xs font-medium ${
+              f.status === "paid"
+                ? "bg-green-100 text-green-700"
+                : f.status === "partial"
+                ? "bg-yellow-100 text-yellow-700"
+                : "bg-red-100 text-red-700"
+            }`}
+          >
+            {f.status === "paid"
+              ? "Payée"
+              : f.status === "partial"
+              ? "Partielle"
+              : "En attente"}
+          </span>
+        </div>
+
+        {/* Amounts */}
+        <div className="text-sm text-gray-700 space-y-1">
+          <div className="flex justify-between">
+            <span>Total</span>
+            <b>{formatCurrencyUSD(f.total)}</b>
+          </div>
+          <div className="flex justify-between">
+            <span>Payé</span>
+            <b>{formatCurrencyUSD(f.paid_total)}</b>
+          </div>
+          <div className="flex justify-between font-semibold">
+            <span>Restant</span>
+            <b className="text-red-600">
+              {formatCurrencyUSD(restant)}
+            </b>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-3 pt-2">
+          {f.pdf_url && (
+            <button
+              onClick={() =>
+                window.open(`${f.pdf_url}?m=${Date.now()}`, "_blank")
+              }
+              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm flex items-center justify-center gap-2"
+            >
+              <FaFilePdf /> PDF
+            </button>
+          )}
+
+          <button
+            onClick={() => toggleRow(f.id)}
+            className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 rounded-lg text-sm"
+          >
+            Détails
+          </button>
+        </div>
+
+        {/* Collapsible details */}
+        <AnimatePresence initial={false}>
+          {openRows.has(f.id) && (
+            <motion.div
+              initial="collapse"
+              animate="expand"
+              exit="collapse"
+              variants={frVariants}
+              className="bg-gray-50 rounded-lg p-3 text-sm"
+            >
+              {[1,2,3,4,5,6,7]
+                .map(i => ({
+                  desc: f[`description${i}`],
+                  amt: Number(f[`amount${i}`])
+                }))
+                .filter(it => it.desc && it.amt > 0)
+                .map((it, i) => (
+                  <div key={i} className="flex justify-between">
+                    <span>{it.desc}</span>
+                    <b>{formatCurrencyUSD(it.amt)}</b>
+                  </div>
+                ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  })}
+</div>
+
             </motion.div>
           )}
         </AnimatePresence>
