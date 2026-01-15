@@ -250,7 +250,7 @@ const stop = (e) => e.stopPropagation();
       {loading ? (
         <p>Chargement...</p>
       ) : (
-        <div className="overflow-x-auto bg-white border rounded shadow">
+        <div className="hidden md:block overflow-x-auto bg-white border rounded shadow">
   <table
     className={`${
       role === "assistant" ? "min-w-[1000px]" : "min-w-[1400px]"
@@ -450,7 +450,117 @@ const stop = (e) => e.stopPropagation();
   </table>
 </div>
 
+
         )}
+        {/* 📱 Mobile user cards */}
+<div className="md:hidden space-y-4">
+  {loading ? (
+    <p className="text-center text-gray-500">Chargement…</p>
+  ) : filteredUsers.length === 0 ? (
+    <p className="text-center text-gray-500">Aucun utilisateur</p>
+  ) : (
+    filteredUsers.map((u) => (
+      <div
+        key={u.id}
+        className="bg-white rounded-xl shadow border p-4 space-y-3"
+      >
+        {/* Header */}
+        <div className="flex justify-between items-start">
+          <div>
+            <p className="font-bold text-lg text-blue-700">
+              {u.first_name} {u.last_name}
+            </p>
+            <p className="text-xs text-gray-500">
+              {u.role} · {u.signup_type}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {u.has_unpaid && (
+              <FaDollarSign
+                className="text-red-500"
+                title="Facture impayée"
+              />
+            )}
+            <span
+              className={`text-xs px-2 py-0.5 rounded-full ${
+                u.is_active
+                  ? "bg-green-100 text-green-700"
+                  : "bg-red-100 text-red-700"
+              }`}
+            >
+              {u.is_active ? "Actif" : "Inactif"}
+            </span>
+          </div>
+        </div>
+
+        {/* Info */}
+        <div className="text-sm space-y-1">
+          <p>
+            <b>Email:</b>{" "}
+            {u.email ? (
+              <a
+                href={`mailto:${u.email}`}
+                className="text-blue-600 underline"
+              >
+                {u.email}
+              </a>
+            ) : (
+              "—"
+            )}
+          </p>
+
+          <p>
+            <b>Téléphone:</b>{" "}
+            {u.phone ? (
+              <a
+                href={`tel:${u.phone}`}
+                className="text-blue-600 underline"
+              >
+                {u.phone}
+              </a>
+            ) : (
+              "—"
+            )}
+          </p>
+
+          <p>
+            <b>Code parrainage:</b> {u.referral_code || "—"}
+          </p>
+        </div>
+
+        {/* Actions */}
+        <div className="flex flex-col gap-2 pt-2">
+          <button
+            onClick={() => setSelectedUser(u)}
+            className="w-full bg-blue-600 text-white py-2 rounded-lg"
+          >
+            Voir le profil
+          </button>
+
+          {role !== "assistant" && (
+            <div className="flex gap-2">
+              <button
+                className="flex-1 border rounded py-2"
+                onClick={() => openEdit(u)}
+              >
+                ✏️ Modifier
+              </button>
+
+              <button
+                className="flex-1 border rounded py-2 text-red-600"
+                onClick={() => handleDelete(u.id)}
+              >
+                🗑️ Supprimer
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    ))
+  )}
+</div>
+
       </>
     ) : (
       <AdminUserProfile
