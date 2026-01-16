@@ -511,15 +511,32 @@ const handleScan = async (result) => {
       <h2 className="text-2xl font-bold text-gray-800">Gestion des présences</h2>
 
       {/* Filtres */}
+    <div className="w-full max-w-full overflow-x-hidden">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex gap-3 items-end">
-        <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-600">Jour</label>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="border p-2 rounded-lg" />
-          <span className="text-gray-500 text-sm capitalize">({jourSemaine})</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-600">Cours</label>
-          <select value={coursSelectionne} onChange={(e) => setCoursSelectionne(e.target.value)} className="border p-2 rounded-lg">
+        <div className="flex flex-col gap-1 w-full">
+  <label className="text-sm text-gray-600">Jour</label>
+
+  <input
+    type="date"
+    value={date}
+    onChange={(e) => setDate(e.target.value)}
+    className="border p-2 rounded-lg w-full"
+  />
+
+  <span className="text-gray-500 text-xs capitalize">
+    {jourSemaine}
+  </span>
+</div>
+
+        <div className="flex flex-col gap-1 w-full">
+  <label className="text-sm text-gray-600">Cours</label>
+
+  <select
+    value={coursSelectionne}
+    onChange={(e) => setCoursSelectionne(e.target.value)}
+    className="border p-2 rounded-lg w-full"
+  >
+
             <option value="">Tous les cours</option>
             {cours.map((c) => (
               <option key={c.id} value={c.name}>
@@ -528,10 +545,15 @@ const handleScan = async (result) => {
             ))}
           </select>
         </div>
-        <button onClick={fetchSessions} className="bg-aquaBlue text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+        <button
+  onClick={fetchSessions}
+  className="bg-aquaBlue text-white px-4 py-2 rounded-lg hover:bg-blue-700 w-full sm:w-auto"
+>
+
           Rafraîchir
         </button>
       </div>
+    </div>
 
       {/* QR Scanner (Global) */}
 <div className="flex justify-center">
