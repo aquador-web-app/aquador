@@ -20,7 +20,7 @@ export default function ForgotPassword() {
     }
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: "http://localhost:5173/reset-password", // ⚠️ change ça quand tu mettras en ligne
+      redirectTo: redirectTo = `${window.location.origin}/reset-password`, // ⚠️ change ça quand tu mettras en ligne
     })
 
     if (error) {
