@@ -3,6 +3,8 @@ import { supabase } from "../../lib/supabaseClient";
 import { Scanner } from "@yudiel/react-qr-scanner";
 import { formatDateFrSafe, formatMonth } from "../../lib/dateUtils";
 import { FaDollarSign } from "react-icons/fa";
+import { useAuth } from "../../context/AuthContext";
+
 
 // Haiti = UTC-5
 function getHaitiDateISO(dateString) {
@@ -42,6 +44,36 @@ export default function AdminAttendance() {
   const [modalErreur, setModalErreur] = useState("");
   const [modalResult, setModalResult] = useState("");
   const lastScanTime = useRef(0);
+  const [nameFilter, setNameFilter] = useState("");
+  const { user, profile } = useAuth();
+  const [role, setRole] = useState(null);
+
+useEffect(() => {
+  async function fetchRole() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    if (!error && data) {
+      setRole(data.role);
+    }
+  }
+
+  fetchRole();
+}, []);
+
+  const isAdmin = role === "admin";
+  const isAssistant = role === "assistant";
+const isStaff = role === "admin" || role === "teacher" || role === "assistant";
+const canSeeMonthlySummary = role === "admin" || role === "assistant";
+
+
+
 
   const globalScannerRef = useRef(null);
   const modalScannerRef = useRef(null);
@@ -377,6 +409,22 @@ const handleScan = async (result) => {
   }
 };
 
+const filteredResumeMensuel = useMemo(() => {
+  if (!nameFilter.trim()) return resumeMensuel;
+
+  const q = nameFilter
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+  return resumeMensuel.filter((r) =>
+    r.full_name
+      ?.toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .includes(q)
+  );
+}, [resumeMensuel, nameFilter]);
 
 
   const openModal = (action, enrollment_id, sessionStartHHMM) => {
@@ -505,6 +553,8 @@ const handleScan = async (result) => {
       </span>
     );
   };
+
+
 
   return (
     <div className="p-6 space-y-6">
@@ -781,10 +831,12 @@ const handleScan = async (result) => {
     </div>
   ))}
 </div>
+{canSeeMonthlySummary && (
 
+  <>
 {/* Filtres Résumé mensuel */}
 <div className="bg-white rounded-xl shadow p-4 mt-6">
-  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-[260px_1070px_140px]">
+  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-[260px_520px_540px_140px]">
 
     {/* Mois */}
     <div className="flex flex-col">
@@ -822,6 +874,19 @@ const handleScan = async (result) => {
       />
     </div>
 
+    {/* Nom */}
+<div className="flex flex-col">
+  <label className="text-sm text-gray-600 mb-1">Nom</label>
+  <input
+    type="text"
+    placeholder="Nom de l’élève"
+    value={nameFilter}
+    onChange={(e) => setNameFilter(e.target.value)}
+    className="border rounded-lg px-3 h-[44px]"
+  />
+</div>
+
+
     {/* Button */}
     <div className="flex flex-col justify-end">
       <button
@@ -834,7 +899,6 @@ const handleScan = async (result) => {
 
   </div>
 </div>
-
 
       {/* Résumé mensuel */}
       <div className="bg-white rounded-2xl shadow p-6 mt-8">
@@ -856,7 +920,7 @@ const handleScan = async (result) => {
       </thead>
 
       <tbody>
-        {resumeMensuel.map((r) => (
+        {filteredResumeMensuel.map((r) => (
           <tr
             key={`${r.profile_id}-${r.course_name}`}
             className="border-t hover:bg-gray-50"
@@ -881,7 +945,7 @@ const handleScan = async (result) => {
 </div>
 </div>
 <div className="md:hidden space-y-3">
-  {resumeMensuel.map((r) => (
+  {filteredResumeMensuel.map((r) => (
     <div
       key={`${r.profile_id}-${r.course_name}`}
       className="bg-white rounded-xl shadow p-4 space-y-1"
@@ -920,7 +984,8 @@ const handleScan = async (result) => {
     </div>
   ))}
 </div>
-
+</>
+)}
 
       {/* MODAL (QR + manuel) */}
       {modalOpen && (
