@@ -226,8 +226,7 @@
 
 
     const Presence = () => (
-      <div className="p-6">
-        <h2 className="text-xl font-bold mb-4">Gérer la présence</h2>
+      <div className="p-1">
         <AdminAttendance />
       </div>
     );

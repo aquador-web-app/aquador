@@ -511,49 +511,54 @@ const handleScan = async (result) => {
       <h2 className="text-2xl font-bold text-gray-800">Gestion des présences</h2>
 
       {/* Filtres */}
-    <div className="w-full max-w-full overflow-x-hidden">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex gap-3 items-end">
-        <div className="flex flex-col gap-1 w-full">
-  <label className="text-sm text-gray-600">Jour</label>
+<div className="bg-white rounded-xl shadow p-4">
+  <div className="grid grid-cols-1 gap-4 lg:grid-cols-[260px_1fr_auto]">
 
-  <input
-    type="date"
-    value={date}
-    onChange={(e) => setDate(e.target.value)}
-    className="border p-2 rounded-lg w-full"
-  />
+    {/* Jour */}
+    <div className="flex flex-col">
+      <label className="text-sm text-gray-600 mb-1">Jour</label>
 
-  <span className="text-gray-500 text-xs capitalize">
-    {jourSemaine}
-  </span>
+      <input
+        type="date"
+        value={date}
+        onChange={(e) => setDate(e.target.value)}
+        className="border rounded-lg px-3 h-[44px]"
+      />
+
+    </div>
+
+    {/* Cours */}
+    <div className="flex flex-col">
+      <label className="text-sm text-gray-600 mb-1">Cours</label>
+
+      <select
+        value={coursSelectionne}
+        onChange={(e) => setCoursSelectionne(e.target.value)}
+        className="border rounded-lg px-3 h-[44px]"
+      >
+        <option value="">Tous les cours</option>
+        {cours.map((c) => (
+          <option key={c.id} value={c.name}>
+            {c.name}
+          </option>
+        ))}
+      </select>
+    </div>
+
+    {/* Button */}
+    <div className="flex flex-col justify-end">
+      <button
+        onClick={fetchSessions}
+        className="bg-aquaBlue text-white px-6 h-[44px] rounded-lg hover:bg-blue-700 transition"
+      >
+        Rafraîchir
+      </button>
+    </div>
+
+  </div>
 </div>
 
-        <div className="flex flex-col gap-1 w-full">
-  <label className="text-sm text-gray-600">Cours</label>
-
-  <select
-    value={coursSelectionne}
-    onChange={(e) => setCoursSelectionne(e.target.value)}
-    className="border p-2 rounded-lg w-full"
-  >
-
-            <option value="">Tous les cours</option>
-            {cours.map((c) => (
-              <option key={c.id} value={c.name}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <button
-  onClick={fetchSessions}
-  className="bg-aquaBlue text-white px-4 py-2 rounded-lg hover:bg-blue-700 w-full sm:w-auto"
->
-
-          Rafraîchir
-        </button>
-      </div>
-    </div>
+    
 
       {/* QR Scanner (Global) */}
 <div className="flex justify-center">
@@ -778,48 +783,58 @@ const handleScan = async (result) => {
 </div>
 
 {/* Filtres Résumé mensuel */}
-<div className="mt-6 flex flex-wrap gap-3 items-center">
-  <div className="flex items-center gap-2">
-    <label className="text-sm text-gray-600">Mois</label>
-    <select
-      value={selectedMonth}
-      onChange={(e) => setSelectedMonth(Number(e.target.value))}
-      className="border p-2 rounded-lg"
-    >
-      <option value={1}>Janvier</option>
-      <option value={2}>Février</option>
-      <option value={3}>Mars</option>
-      <option value={4}>Avril</option>
-      <option value={5}>Mai</option>
-      <option value={6}>Juin</option>
-      <option value={7}>Juillet</option>
-      <option value={8}>Août</option>
-      <option value={9}>Septembre</option>
-      <option value={10}>Octobre</option>
-      <option value={11}>Novembre</option>
-      <option value={12}>Décembre</option>
-    </select>
-  </div>
+<div className="bg-white rounded-xl shadow p-4 mt-6">
+  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-[260px_1070px_140px]">
 
-  <div className="flex items-center gap-2">
-    <label className="text-sm text-gray-600">Année</label>
-    <input
-      type="number"
-      className="border p-2 rounded-lg w-24"
-      value={selectedYear}
-      onChange={(e) => setSelectedYear(Number(e.target.value))}
-      min="2023"
-      max="2100"
-    />
-  </div>
+    {/* Mois */}
+    <div className="flex flex-col">
+      <label className="text-sm text-gray-600 mb-1">Mois</label>
+      <select
+        value={selectedMonth}
+        onChange={(e) => setSelectedMonth(Number(e.target.value))}
+        className="border rounded-lg px-3 h-[44px]"
+      >
+        <option value={1}>Janvier</option>
+        <option value={2}>Février</option>
+        <option value={3}>Mars</option>
+        <option value={4}>Avril</option>
+        <option value={5}>Mai</option>
+        <option value={6}>Juin</option>
+        <option value={7}>Juillet</option>
+        <option value={8}>Août</option>
+        <option value={9}>Septembre</option>
+        <option value={10}>Octobre</option>
+        <option value={11}>Novembre</option>
+        <option value={12}>Décembre</option>
+      </select>
+    </div>
 
-  <button
-    onClick={fetchResumeMensuel}
-    className="bg-aquaBlue text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-  >
-    Filtrer
-  </button>
+    {/* Année */}
+    <div className="flex flex-col">
+      <label className="text-sm text-gray-600 mb-1">Année</label>
+      <input
+        type="number"
+        value={selectedYear}
+        onChange={(e) => setSelectedYear(Number(e.target.value))}
+        min="2023"
+        max="2100"
+        className="border rounded-lg px-3 h-[44px]"
+      />
+    </div>
+
+    {/* Button */}
+    <div className="flex flex-col justify-end">
+      <button
+        onClick={fetchResumeMensuel}
+        className="bg-aquaBlue text-white px-6 h-[44px] rounded-lg hover:bg-blue-700 transition"
+      >
+        Filtrer
+      </button>
+    </div>
+
+  </div>
 </div>
+
 
       {/* Résumé mensuel */}
       <div className="bg-white rounded-2xl shadow p-6 mt-8">
