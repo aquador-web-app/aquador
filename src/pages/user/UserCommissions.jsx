@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabaseClient'
 import { motion } from "framer-motion"
 import { formatCurrencyUSD, formatDateFrSafe } from '../../lib/dateUtils'
 
-export default function UserCommissions({ setActiveTab }) {
+export default function UserCommissions({ setActiveTab, hideActions = false }) {
   const [commissions, setCommissions] = useState([])
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -87,6 +87,7 @@ export default function UserCommissions({ setActiveTab }) {
       </motion.div>
 
       {/* Buttons */}
+      {!hideActions && (
       <div className="flex flex-col md:flex-row justify-center gap-3 mt-4">
         <button
           onClick={() => setActiveTab && setActiveTab("commissions-requests")}
@@ -101,9 +102,11 @@ export default function UserCommissions({ setActiveTab }) {
           Utiliser en boutique
         </button>
       </div>
+      )}
 
       {/* Table */}
-      <table className="w-full text-sm border mt-6">
+      <div className="overflow-x-auto -mx-4 md:mx-0">
+      <table className="min-w-[640px] w-full text-sm border mt-6">
         <thead>
           <tr className="bg-gray-100 text-left">
             <th className="p-2 border text-center">Nom complet</th>
@@ -118,8 +121,8 @@ export default function UserCommissions({ setActiveTab }) {
               <td className="p-2 border text-center">{c.referred_name}</td>
               <td className="p-2 border text-center">{formatDateFrSafe(c.created_at)}</td>
               <td className="p-2 border text-center">
-  {formatCurrencyUSD(c.remaining_amount ?? c.amount)}
-</td>
+          {formatCurrencyUSD(c.remaining_amount ?? c.amount)}
+        </td>
 
               <td className="p-2 border text-center">
                 {c.status === "paid" ? (
@@ -148,6 +151,7 @@ export default function UserCommissions({ setActiveTab }) {
           )}
         </tbody>
       </table>
+      </div>
     </div>
   )
 }

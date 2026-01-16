@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, Fragment } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { Scanner } from "@yudiel/react-qr-scanner";
 import { formatDateFrSafe, formatMonth } from "../../lib/dateUtils";
@@ -619,7 +619,7 @@ const handleScan = async (result) => {
             <tbody>
               {sessions.length ? (
                 sessions.map((s) => (
-                  <>
+                  <Fragment key={s.id}>
                     <tr key={`head-${s.id}`} className={s.status === "cancelled" ? "bg-red-50 text-red-700 font-semibold" : "bg-blue-50 text-aquaBlue font-semibold"}>
                       <td colSpan="7" className="p-2">
                         {s.status === "cancelled"
@@ -632,12 +632,11 @@ const handleScan = async (result) => {
                         s.inscriptions.map((e) => (
                           <tr key={e.enrollment_id} className="border-t hover:bg-gray-50">
                             <td className="p-2 flex items-center gap-1">
-  {e.nom}
-  {e.has_unpaid && (
-    <FaDollarSign className="text-red-500" title="Facture impayée" />
-  )}
-</td>
-
+                              {e.nom}
+                              {e.has_unpaid && (
+                                <FaDollarSign className="text-red-500" title="Facture impayée" />
+                              )}
+                            </td>
                             <td className="p-2">{e.cours}</td>
                             <td className="p-2">
                               {s.start_time?.slice(0, 5)} – {ajouterHeures(s.start_time?.slice(0, 5), s.duration_hours)}
@@ -696,7 +695,7 @@ const handleScan = async (result) => {
                           </td>
                         </tr>
                       ))}
-                  </>
+                  </Fragment>
                 ))
               ) : (
                 <tr>

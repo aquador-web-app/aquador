@@ -104,14 +104,14 @@ setBalance(totalRemaining);
 
   return (
     <motion.div
-      className="bg-white p-6 rounded-2xl shadow-lg space-y-6"
+      className="space-y-6"
       initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
     >
       {/* Header */}
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+        <h1 className="text-lg sm:text-2xl font-bold text-gray-800 flex items-center gap-2">
           <FaMoneyBillWave className="text-green-500" />
           Mes Demandes de Paiement
         </h1>
@@ -119,7 +119,7 @@ setBalance(totalRemaining);
         <button
           onClick={() => setShowForm(true)}
           disabled={balance <= 0}
-          className={`px-4 py-2 rounded-lg font-semibold shadow transition ${
+          className={`w-full sm:w-auto px-4 py-2 rounded-lg font-semibold shadow transition ${
             balance <= 0
               ? "bg-gray-300 text-gray-500 cursor-not-allowed"
               : "bg-aquaBlue text-white hover:bg-blue-700"
@@ -139,7 +139,7 @@ setBalance(totalRemaining);
 
       {/* Requests table */}
       <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
-        <table className="w-full text-sm border-collapse">
+        <table className="min-w-[640px] w-full text-sm border-collapse">
           <thead className="bg-gray-100 text-gray-800 font-semibold">
             <tr>
               <th className="p-3 border text-left">Date de demande</th>
@@ -206,12 +206,12 @@ setBalance(totalRemaining);
       {/* Modal for custom payment request */}
       {showForm && (
         <motion.div
-          className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50"
+          className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 px-4"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
         >
           <motion.div
-            className="bg-white rounded-2xl p-6 shadow-2xl w-96"
+            className="bg-white rounded-2xl p-6 shadow-2xl w-full max-w-md"
             initial={{ scale: 0.9 }}
             animate={{ scale: 1 }}
           >
