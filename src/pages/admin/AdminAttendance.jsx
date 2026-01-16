@@ -511,7 +511,7 @@ const handleScan = async (result) => {
       <h2 className="text-2xl font-bold text-gray-800">Gestion des présences</h2>
 
       {/* Filtres */}
-      <div className="flex flex-wrap gap-3 items-center">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex gap-3 items-end">
         <div className="flex items-center gap-2">
           <label className="text-sm text-gray-600">Jour</label>
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="border p-2 rounded-lg" />
@@ -535,7 +535,7 @@ const handleScan = async (result) => {
 
       {/* QR Scanner (Global) */}
 <div className="flex justify-center">
-  <div className="bg-white rounded-2xl shadow-lg p-6 w-[380px] text-center transition-all duration-300 hover:shadow-xl">
+  <div className="bg-white rounded-2xl shadow-lg p-4 sm:p-6 w-full max-w-md text-center">
     <div className="flex flex-col items-center border-b pb-3 mb-4">
       <div className="bg-blue-300 text-Blue-700 p-2 rounded-xl mb-2">
         <i className="fa-solid fa-qrcode text-2xl"></i>
@@ -558,7 +558,7 @@ const handleScan = async (result) => {
       </div>
     ) : (
       <div className="flex flex-col items-center space-y-4">
-        <div className="w-[320px] h-[320px] rounded-xl overflow-hidden border-2 border-aquaBlue shadow-inner">
+        <div className="w-full aspect-square max-w-[320px] rounded-xl overflow-hidden border-2 border-aquaBlue shadow-inner">
           <Scanner
             onDecode={(result) => handleScan({ text: result })}
             onError={(err) => console.error(err)}
@@ -599,6 +599,7 @@ const handleScan = async (result) => {
 
 
       {/* Tableau de présences */}
+      <div className="hidden md:block">
       <div className="bg-white rounded-2xl shadow p-6 overflow-x-auto">
         <h3 className="font-semibold text-lg mb-3">Présences du {formatDateFrSafe(date)}</h3>
         {chargement ? (
@@ -708,6 +709,52 @@ const handleScan = async (result) => {
           </table>
         )}
       </div>
+      </div>
+      <div className="md:hidden space-y-4">
+  {sessions.map((s) => (
+    <div key={s.id} className="bg-white rounded-xl shadow p-4 space-y-2">
+      <div className="font-semibold text-aquaBlue">
+        {s.course?.name}
+      </div>
+
+      <div className="text-sm text-gray-600">
+        {s.start_time?.slice(0,5)} → {ajouterHeures(s.start_time?.slice(0,5), s.duration_hours)}
+      </div>
+
+      {s.inscriptions.map((e) => (
+        <div key={e.enrollment_id} className="border-t pt-2 mt-2 space-y-2">
+          <div className="flex justify-between items-center">
+            <span className="font-medium">{e.nom}</span>
+            {e.has_unpaid && <FaDollarSign className="text-red-500" />}
+          </div>
+
+          <StatusBadge status={e.presence?.status} />
+
+          <div className="grid grid-cols-2 gap-2">
+            {!e.presence?.check_in_time && (
+              <button
+                className="bg-green-600 text-white py-2 rounded"
+                onClick={() => openModal("check-in", e.enrollment_id, s.start_time)}
+              >
+                Check-in
+              </button>
+            )}
+
+            {!e.presence?.check_out_time && (
+              <button
+                className="bg-blue-600 text-white py-2 rounded"
+                onClick={() => openModal("check-out", e.enrollment_id, s.start_time)}
+              >
+                Check-out
+              </button>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  ))}
+</div>
+
 {/* Filtres Résumé mensuel */}
 <div className="mt-6 flex flex-wrap gap-3 items-center">
   <div className="flex items-center gap-2">
@@ -757,7 +804,7 @@ const handleScan = async (result) => {
   <h3 className="font-semibold text-lg mb-3">
     Résumé mensuel des présences — {formatMonth(`${selectedYear}-${String(selectedMonth).padStart(2, "0")}-01`)}
   </h3>
-
+<div className="hidden md:block">
   {resumeMensuel.length ? (
     <table className="w-full text-sm border-collapse">
       <thead className="bg-gray-100 text-gray-600">
@@ -794,6 +841,47 @@ const handleScan = async (result) => {
       Aucun enregistrement ce mois-ci.
     </div>
   )}
+</div>
+</div>
+<div className="md:hidden space-y-3">
+  {resumeMensuel.map((r) => (
+    <div
+      key={`${r.profile_id}-${r.course_name}`}
+      className="bg-white rounded-xl shadow p-4 space-y-1"
+    >
+      <div className="font-semibold">{r.full_name}</div>
+      <div className="text-sm text-gray-600">{r.course_name}</div>
+
+      <div className="grid grid-cols-3 text-center mt-3 gap-y-1">
+  {/* Labels */}
+  <div className="text-xs font-semibold text-green-700">
+    Présence
+  </div>
+  <div className="text-xs font-semibold text-yellow-600">
+    Retard
+  </div>
+  <div className="text-xs font-semibold text-red-600">
+    Absence
+  </div>
+
+  {/* Counts */}
+  <div className="text-lg font-bold text-green-700">
+    {r.presents}
+  </div>
+  <div className="text-lg font-bold text-yellow-600">
+    {r.retards}
+  </div>
+  <div className="text-lg font-bold text-red-600">
+    {r.absents}
+  </div>
+</div>
+
+
+      <div className="text-center font-bold mt-2">
+        {Number(r.taux_presence).toFixed(0)}%
+      </div>
+    </div>
+  ))}
 </div>
 
 
