@@ -90,10 +90,10 @@ const effectiveOvertimePrice = Number(overtimePricePer30 || 0);
 
 
 useEffect(() => {
-  detectCountryISO()
-    .then((c) => setCountry(c || "HT"))
-    .catch(() => setCountry("HT"));
+  const c = detectCountryISO();
+  setCountry(c || "HT");
 }, []);
+
 
 
 

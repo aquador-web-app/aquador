@@ -1,9 +1,9 @@
 // src/lib/detectCountry.js
-export async function detectCountryISO() {
+export function detectCountryISO() {
   try {
-    const res = await fetch("https://ipapi.co/json/");
-    const data = await res.json();
-    return data?.country_code || "HT";
+    const locale = Intl.DateTimeFormat().resolvedOptions().locale;
+    const country = locale.split("-")[1];
+    return country || "HT";
   } catch {
     return "HT";
   }
