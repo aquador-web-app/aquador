@@ -271,6 +271,7 @@ const fetchStats = async () => {
   .filter(r =>
     (r.status === "pending" || r.status === "partial") &&
     r.signup_type !== "children_only" &&
+    r.role !== "teacher" &&
     r.remaining > 0
   )
   .sort((a, b) =>
@@ -339,6 +340,7 @@ const { data: newUsersRows, error: newUsersErr } = await supabase
   .gte("created_at", getHaitiISOString(firstDayThisMonth))
   .lt("created_at", getHaitiISOString(firstDayNextMonth))
   .neq("signup_type", "children_only") 
+  .neq("role", "teacher") 
   .order("full_name", { ascending: true });
 
 // 👉 Previous month count (note only)
