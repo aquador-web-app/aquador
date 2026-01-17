@@ -72,27 +72,31 @@
     }
 
     async function fetchPayments() {
-      const from = (page - 1) * pageSize;
-      const to = from + pageSize - 1;
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
 
-      let query = supabase
-        .from("payments")
-        .select("id, invoice_id, amount, method, notes, paid_at, invoices(full_name, invoice_no)", {
-          count: "exact",
-        })
-        .order("paid_at", { ascending: false })
-        .range(from, to);
+  let query = supabase
+    .from("payments")
+    .select(
+      "id, invoice_id, amount, method, notes, paid_at, invoices(full_name, invoice_no)",
+      { count: "exact" }
+    )
+    .eq("approved", true) // ✅ ONLY approved payments
+    .order("paid_at", { ascending: false })
+    .range(from, to);
 
-      if (selectedProfileId) {
-        query = query.eq("invoices.user_id", selectedProfileId);
-      }
+  if (selectedProfileId) {
+    query = query.eq("invoices.user_id", selectedProfileId);
+  }
 
-      const { data, error, count } = await query;
-      if (!error) {
-        setPayments(data || []);
-        setTotalPages(Math.ceil((count || 0) / pageSize));
-      }
-    }
+  const { data, error, count } = await query;
+
+  if (!error) {
+    setPayments(data || []);
+    setTotalPages(Math.ceil((count || 0) / pageSize));
+  }
+}
+
 
     async function fetchPendingPayments() {
       const { data, error } = await supabase

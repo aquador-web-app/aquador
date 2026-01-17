@@ -260,11 +260,14 @@ const loadPayments = async () => {
       amount,
       method,
       reversed,
+      approved,
       created_at,
       invoices (
         invoice_no
       )
     `)
+    .eq("approved", true)      // ✅ ONLY approved payments
+    .eq("reversed", false)     // ✅ exclude reverted ones
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -273,7 +276,6 @@ const loadPayments = async () => {
     return;
   }
 
-  // flatten invoice_no for easy use
   const enriched = (data || []).map((p) => ({
     ...p,
     invoice_no: p.invoices?.invoice_no || null,
@@ -281,6 +283,7 @@ const loadPayments = async () => {
 
   setPayments(enriched);
 };
+
 
 
   // ---- FEES (table may not exist yet; guard it) ----
