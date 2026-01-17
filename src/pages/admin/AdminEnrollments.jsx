@@ -618,11 +618,14 @@ const getCurrentDur = (row) =>
 
 
   return (
-    <div className="p-6">
+    <div className="px-3 py-4 sm:px-4 lg:px-6 max-w-[1600px] mx-auto">
       <h2 className="text-xl font-semibold mb-4">Inscriptions</h2>
 
       {/* Form */}
-      <form onSubmit={handleSubmit} className="bg-white border p-4 rounded shadow mb-6">
+      <form
+  onSubmit={handleSubmit}
+  className="bg-white border p-4 rounded shadow mb-6 grid grid-cols-1 md:grid-cols-2 gap-4"
+>
         {/* Search student */}
         <label className="block text-sm font-medium mb-1">Rechercher un étudiant</label>
         <input
@@ -858,7 +861,7 @@ const getCurrentDur = (row) =>
       </form>
 
       {/* Table with filters */}
-      <div className="flex items-center gap-3 mb-3">
+      <div className="flex flex-wrap gap-3 mb-3">
   <label className="text-sm">Filtrer par jour</label>
   <select
     value={dayFilter}
@@ -898,7 +901,8 @@ const getCurrentDur = (row) =>
 
 
 
-
+  {/* 🖥 Desktop table */}
+    <div className="hidden md:block overflow-x-auto">
       {/* Enrollments Table */}
       <div className="bg-white border rounded shadow">
         <table className="min-w-full text-sm">
@@ -923,99 +927,98 @@ const getCurrentDur = (row) =>
                 <td className="px-3 py-2">{dayLabel(e)}</td>
                 <td className="px-3 py-2">{heureRange(e, plans)}</td>
                 <td className="px-3 py-2">
-  {/* Allow switching duration by swapping to a plan with same course but 1h/2h */}
-  <select
-  value={getCurrentDur(e)}
-  onChange={async (ev) => {
-    const newDur = Number(ev.target.value);
-    // find a plan of the same course (or general) with the chosen duration
-    const courseType = courses.find(c => c.id === e.course_id)?.course_type;
+                  {/* Allow switching duration by swapping to a plan with same course but 1h/2h */}
+                  <select
+                  value={getCurrentDur(e)}
+                  onChange={async (ev) => {
+                    const newDur = Number(ev.target.value);
+                    // find a plan of the same course (or general) with the chosen duration
+                    const courseType = courses.find(c => c.id === e.course_id)?.course_type;
 
-const candidate = publicPlans.find(
-  (p) =>
-    Number(p.duration_hours) === newDur &&
-    p.course_type === courseType
-);
-
-
-    if (!candidate) {
-      alert("Aucun plan trouvé pour cette durée.");
-      return;
-    }
-
-    const { error } = await supabase
-      .from("enrollments")
-      .update({ plan_id: candidate.id })
-      .eq("id", e.id);
-
-    if (error) {
-      alert("Erreur mise à jour de la durée: " + error.message);
-    } else {
-      await loadEnrollments(); // refresh rows + join
-    }
-  }}
-  className="border rounded px-1 py-0.5 text-sm"
->
-  <option value={1}>1h</option>
-  <option value={2}>2h</option>
-  
-</select>
-</td>
-  <td className="px-3 py-2">
-  <select
-    value={e.plan_id || ""}
-    onChange={async (ev) => {
-  const newPlanId = ev.target.value;
-
-  // Find the new plan price
-  const chosenPlan = plans.find(p => p.id === newPlanId);
-  const newPrice = chosenPlan?.price || 0;
-
-  // Update the enrollment (plan + optional override)
-  const { data: updated, error } = await supabase
-  .from("enrollments")
-  .update({
-    plan_id: newPlanId,
-    override_price: newPrice
-  })
-  .eq("id", e.id)
-  .select("id, plan_id, override_price")
-  .single();
-
-  await loadEnrollments();
+                  const candidate = publicPlans.find(
+                    (p) =>
+                      Number(p.duration_hours) === newDur &&
+                      p.course_type === courseType
+                  );
 
 
-if (error) {
-  alert("Erreur mise à jour du plan: " + error.message);
-} else {
-  // ✅ Immediately reflect the new override price in UI
-  setEnrollments(prev =>
-    prev.map(row =>
-      row.id === e.id
-        ? { ...row, ...updated }
-        : row
-    )
-  );
+                    if (!candidate) {
+                      alert("Aucun plan trouvé pour cette durée.");
+                      return;
+                    }
 
-    alert(`✅ Plan mis à jour: ${chosenPlan.name} — $${newPrice}`);
-  }
-}}
+                    const { error } = await supabase
+                      .from("enrollments")
+                      .update({ plan_id: candidate.id })
+                      .eq("id", e.id);
 
-    className="border rounded px-1 py-0.5 text-sm"
-  >
-    <option value="">—</option>
-    {plans.map((p) => (
-  <option key={p.id} value={p.id}>
-    {p.name} — {formatCurrencyUSD(
-      e.plan_id === p.id
-        ? (e.override_price ?? p.price)   // ✅ use override_price if present
-        : p.price
-    )}
-  </option>
-))}
+                    if (error) {
+                      alert("Erreur mise à jour de la durée: " + error.message);
+                    } else {
+                      await loadEnrollments(); // refresh rows + join
+                    }
+                  }}
+                  className="border rounded px-1 py-0.5 text-sm">
+                  <option value={1}>1h</option>
+                  <option value={2}>2h</option>
+                  
+                  </select>
+                </td>
+                  <td className="px-3 py-2">
+                  <select
+                    value={e.plan_id || ""}
+                    onChange={async (ev) => {
+                  const newPlanId = ev.target.value;
 
-  </select>
-</td>
+                  // Find the new plan price
+                  const chosenPlan = plans.find(p => p.id === newPlanId);
+                  const newPrice = chosenPlan?.price || 0;
+
+                  // Update the enrollment (plan + optional override)
+                  const { data: updated, error } = await supabase
+                  .from("enrollments")
+                  .update({
+                    plan_id: newPlanId,
+                    override_price: newPrice
+                  })
+                  .eq("id", e.id)
+                  .select("id, plan_id, override_price")
+                  .single();
+
+                  await loadEnrollments();
+
+
+                if (error) {
+                  alert("Erreur mise à jour du plan: " + error.message);
+                } else {
+                  // ✅ Immediately reflect the new override price in UI
+                  setEnrollments(prev =>
+                    prev.map(row =>
+                      row.id === e.id
+                        ? { ...row, ...updated }
+                        : row
+                    )
+                  );
+
+                    alert(`✅ Plan mis à jour: ${chosenPlan.name} — $${newPrice}`);
+                  }
+                }}
+
+                    className="border rounded px-1 py-0.5 text-sm"
+                  >
+                    <option value="">—</option>
+                    {plans.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} — {formatCurrencyUSD(
+                      e.plan_id === p.id
+                        ? (e.override_price ?? p.price)   // ✅ use override_price if present
+                        : p.price
+                    )}
+                  </option>
+                ))}
+
+                  </select>
+                </td>
                 <td className="px-3 py-2">{formatDateFrSafe(e.start_date)}</td>
                 <td className="px-3 py-2">
                   <span
@@ -1029,14 +1032,14 @@ if (error) {
                   </span>
                 </td>
                 <td className="px-3 py-2">
-  <button
-    onClick={() => handleDelete(e)}
-    className="px-2 py-1 rounded text-xs bg-red-600 text-white hover:bg-red-700"
-    title="Supprimer inscription"
-  >
-    Supprimer
-  </button>
-</td>
+                  <button
+                    onClick={() => handleDelete(e)}
+                    className="px-2 py-1 rounded text-xs bg-red-600 text-white hover:bg-red-700"
+                    title="Supprimer inscription"
+                  >
+                    Supprimer
+                  </button>
+                </td>
               </tr>
             ))}
             {visibleRows.length === 0 && (
@@ -1049,7 +1052,7 @@ if (error) {
           </tbody>
         </table>
 
-        <div className="flex items-center justify-between p-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3">
           <span className="text-xs text-gray-600">
             Page {page} / {totalPages}
             <span className="ml-3 text-gray-500">
@@ -1075,5 +1078,70 @@ if (error) {
         </div>
       </div>
     </div>
+    {/* 📱 Mobile cards */}
+<div className="md:hidden space-y-4">
+  {visibleRows.map((e) => (
+    <EnrollmentCard
+      key={e.id}
+      e={e}
+      plans={plans}
+      courses={courses}
+      onDelete={handleDelete}
+    />
+  ))}
+</div>
+
+  </div>
   );
+  function EnrollmentCard({ e, plans, courses, onDelete }) {
+  return (
+    <div className="bg-white rounded-xl border shadow-sm p-4 space-y-2">
+      <div className="flex justify-between items-start">
+        <div>
+          <p className="font-semibold text-blue-700">
+            {e.profiles?.full_name || "—"}
+          </p>
+          <p className="text-xs text-gray-500">
+            {e.courses?.name}
+          </p>
+        </div>
+
+        <span
+          className={`px-2 py-1 rounded text-xs ${
+            e.status === "active"
+              ? "bg-green-100 text-green-700"
+              : "bg-gray-200 text-gray-700"
+          }`}
+        >
+          {e.status}
+        </span>
+      </div>
+
+      <div className="text-sm text-gray-700 space-y-1">
+        <div className="flex justify-between">
+          <span>Jour</span>
+          <span>{dayLabel(e)}</span>
+        </div>
+
+        <div className="flex justify-between">
+          <span>Heure</span>
+          <span>{heureRange(e, plans)}</span>
+        </div>
+
+        <div className="flex justify-between">
+          <span>Début</span>
+          <span>{formatDateFrSafe(e.start_date)}</span>
+        </div>
+      </div>
+
+      <button
+        onClick={() => onDelete(e)}
+        className="w-full mt-2 bg-red-600 text-white py-2 rounded-lg text-sm"
+      >
+        Supprimer
+      </button>
+    </div>
+  );
+}
+
 }
