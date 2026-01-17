@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, Fragment, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef, Fragment} from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { Scanner } from "@yudiel/react-qr-scanner";
 import { formatDateFrSafe, formatMonth } from "../../lib/dateUtils";
@@ -384,6 +384,10 @@ console.log("📡 EDGE RESPONSE", { data, error });
 
     setGlobalResult(data?.message || "✅ Présence enregistrée !");
     await fetchSessions();
+    // ⬇️ CLOSE ONLY IF NOT GLOBAL SCAN
+if (modalAction !== "scan-global") {
+  closeModal();
+}
   } catch (err) {
     setGlobalErreur("Erreur lors du scan : " + err.message);
   }
@@ -456,7 +460,6 @@ const filteredResumeMensuel = useMemo(() => {
         return setModalErreur("⚠️ Cet élève n’a pas de séance aujourd’hui.");
 
       await saveAttendanceWithRules(modalEnrollment, modalAction, modalSessionStartISO);
-      stopCamera(modalScannerRef);
       closeModal();
       setModalResult("✅ Présence enregistrée !");
       setTimeout(() => setModalResult(""), 2000);
@@ -763,6 +766,16 @@ const filteredResumeMensuel = useMemo(() => {
 
           <StatusBadge status={e.presence?.status} />
 
+<div className="text-sm text-gray-600 flex justify-between">
+  <span>Arrivée :</span>
+  <span>{fmtHeure(e.presence?.check_in_time)}</span>
+</div>
+
+<div className="text-sm text-gray-600 flex justify-between">
+  <span>Départ :</span>
+  <span>{fmtHeure(e.presence?.check_out_time)}</span>
+</div>
+
           <div className="grid grid-cols-2 gap-2">
   {/* CHECK-IN / UNDO CHECK-IN */}
   {!e.presence?.check_in_time ? (
@@ -809,6 +822,21 @@ const filteredResumeMensuel = useMemo(() => {
       Undo
     </button>
   )}
+  {!e.presence?.check_in_time && !e.presence?.check_out_time && (
+  <button
+    className="bg-red-600 text-white py-2 rounded col-span-2"
+    onClick={() =>
+      saveAttendanceWithRules(
+        e.enrollment_id,
+        "mark-absent",
+        s.start_time
+      )
+    }
+  >
+    Marquer absent
+  </button>
+)}
+
 </div>
 
         </div>
@@ -1033,6 +1061,15 @@ const filteredResumeMensuel = useMemo(() => {
     style={{ width: "100%", height: "100%" }}
   />
 </div>
+{modalAction === "scan-global" && (
+  <button
+    onClick={closeModal}
+    className="bg-red-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-red-700 transition"
+  >
+    Fermer le scanner
+  </button>
+)}
+
 
               <button
                 onClick={handleManual}
