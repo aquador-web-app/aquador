@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, Fragment } from "react";
+import { useState, useEffect, useMemo, useRef, Fragment, useCallback } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { Scanner } from "@yudiel/react-qr-scanner";
 import { formatDateFrSafe, formatMonth } from "../../lib/dateUtils";
@@ -32,8 +32,6 @@ export default function AdminAttendance() {
   const [sessions, setSessions] = useState([]);
   const [resumeMensuel, setResumeMensuel] = useState([]);
   const [chargement, setChargement] = useState(false);
-  const [scanActif, setScanActif] = useState(false);
-  const [scanResult, setScanResult] = useState("");
   const [erreur, setErreur] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [modalAction, setModalAction] = useState(null);
@@ -72,19 +70,6 @@ useEffect(() => {
 const isStaff = role === "admin" || role === "teacher" || role === "assistant";
 const canSeeMonthlySummary = role === "admin" || role === "assistant";
 
-
-
-
-  const globalScannerRef = useRef(null);
-  const modalScannerRef = useRef(null);
-
-  const stopCamera = (ref) => {
-    try {
-      if (ref.current?.stream) {
-        ref.current.stream.getTracks().forEach((track) => track.stop());
-      }
-    } catch (_) {}
-  };
 
   const fmtHeure = (t) =>
     t ? new Date(t).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "—";
@@ -431,14 +416,14 @@ const filteredResumeMensuel = useMemo(() => {
   };
 
   const closeModal = () => {
-    stopCamera(modalScannerRef);
-    setModalOpen(false);
-    setModalAction(null);
-    setModalEnrollment(null);
-    setModalSessionStartISO(null);
-    setModalErreur("");
-    setModalResult("");
-  };
+  setModalOpen(false);
+  setModalAction(null);
+  setModalEnrollment(null);
+  setModalSessionStartISO(null);
+  setModalErreur("");
+  setModalResult("");
+};
+
 
   const handleModalScan = async (text) => {
   if (typeof text !== "string" || !text.trim()) return;
@@ -551,9 +536,9 @@ const filteredResumeMensuel = useMemo(() => {
   };
 
 
-
   return (
     <div className="p-6 space-y-6">
+
       <h2 className="text-2xl font-bold text-gray-800">Gestion des présences</h2>
 
       {/* Filtres */}
@@ -616,64 +601,20 @@ const filteredResumeMensuel = useMemo(() => {
       <h3 className="font-semibold text-lg text-gray-800">Scanner un QR code</h3>
     </div>
 
-    {!scanActif ? (
-      <div className="flex flex-col items-center space-y-3">
-        <button
-          onClick={() => {
-            setScanActif(true);
-            setErreur("");
-            setScanResult("");
-          }}
-          className="bg-aquaBlue text-white px-6 py-2 rounded-lg font-medium shadow hover:bg-blue-700 transition"
-        >
-          <i className="fa-solid fa-camera mr-2"></i>Démarrer le scan
-        </button>
-      </div>
-    ) : (
-      <div className="flex flex-col items-center space-y-4">
-        <div className="w-full aspect-square max-w-[320px] rounded-xl overflow-hidden border-2 border-aquaBlue shadow-inner">
-          <Scanner
-  onScan={(result) => {
-  try {
-    if (!result) return;
+    <div className="flex flex-col items-center space-y-3">
+  <button
+    onClick={() => {
+      setModalAction("scan-global");
+      setModalEnrollment(null);
+      setModalSessionStartISO(null);
+      setModalOpen(true);
+    }}
+    className="bg-aquaBlue text-white px-6 py-2 rounded-lg font-medium shadow hover:bg-blue-700 transition"
+  >
+    <i className="fa-solid fa-camera mr-2"></i>Démarrer le scan
+  </button>
+</div>
 
-    const value =
-      Array.isArray(result)
-        ? result[0]?.rawValue || result[0]?.text
-        : result.rawValue || result.text;
-
-    if (typeof value !== "string" || !value.trim()) return;
-
-    console.log("📸 SCAN RAW VALUE:", value);
-
-    handleScan(value); // OR handleModalScan(value)
-  } catch (e) {
-    console.error("SCAN HANDLER ERROR:", e);
-  }
-}}
-onError={(err) => {
-  console.error("SCANNER ERROR:", err);
-}}
-
-  constraints={{ facingMode: "environment" }}
-  style={{
-    width: "100%",
-    height: "100%",
-    objectFit: "cover",
-  }}
-/>
-        </div>
-
-        <button
-          onClick={() => {
-            setScanActif(false);
-          }}
-          className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition"
-        >
-          <i className="fa-solid fa-xmark mr-2"></i>Fermer
-        </button>
-      </div>
-    )}
 
     {globalErreur && (
       <div className="p-3 bg-red-100 text-red-800 rounded-lg text-center mt-4 font-medium">
@@ -1046,8 +987,15 @@ onError={(err) => {
             </button>
 
             <h4 className="text-xl font-semibold text-gray-800 text-center mb-2">
-              {modalAction === "check-in" ? "Check-in" : "Check-out"}
-            </h4>
+  {modalAction === "scan-global"
+    ? "Scan global des présences"
+    : modalAction === "check-in"
+    ? "Check-in"
+    : modalAction === "check-out"
+    ? "Check-out"
+    : ""}
+</h4>
+
 
             <div className="flex flex-col items-center space-y-4">
               {modalErreur && (
@@ -1063,37 +1011,28 @@ onError={(err) => {
 )}
 
               <div className="w-[280px] h-[280px] rounded-lg overflow-hidden border-2 border-aquaBlue shadow-inner">
-                <Scanner
-  onScan={(result) => {
-  try {
-    if (!result) return;
+  <Scanner
+    onScan={(result) => {
+      if (!result) return;
 
-    const value =
-      Array.isArray(result)
+      const value = Array.isArray(result)
         ? result[0]?.rawValue || result[0]?.text
         : result.rawValue || result.text;
 
-    if (typeof value !== "string" || !value.trim()) return;
+      if (!value) return;
 
-    console.log("📸 SCAN RAW VALUE:", value);
-
-    handleModalScan(value); // OR handleModalScan(value)
-  } catch (e) {
-    console.error("SCAN HANDLER ERROR:", e);
-  }
-}}
-onError={(err) => {
-  console.error("SCANNER ERROR:", err);
-}}
-
-  constraints={{ facingMode: "environment" }}
-  style={{
-    width: "100%",
-    height: "100%",
-    objectFit: "cover",
-  }}
-/>
-              </div>
+      if (modalAction === "scan-global") {
+        handleScan(value);
+      } else {
+        handleModalScan(value);
+      }
+    }}
+    onError={(err) => console.error("SCANNER ERROR:", err)}
+    constraints={{ facingMode: "environment" }}
+    scanDelay={300}
+    style={{ width: "100%", height: "100%" }}
+  />
+</div>
 
               <button
                 onClick={handleManual}
