@@ -160,6 +160,7 @@ export default function AdminDashboard() {
   const [courseCount, setCourseCount] = useState(0)
   const [parentCount, setParentCount] = useState(0);
   const [staffCount, setStaffCount] = useState(0);
+  const [statsLoaded, setStatsLoaded] = useState(false);
   const [unpaidInvoices, setUnpaidInvoices] = useState({
   count: 0,
   total: 0,
@@ -209,6 +210,7 @@ const [newUsersHovered, setNewUsersHovered] = useState(false);
 const [role, setRole] = useState(null);
 
 const fetchStats = async () => {
+  setStatsLoaded(false);
     // 1) TOTAL users on platform (use PROFILES, not auth.users)
     const { count: profilesTotal } = await supabase
       .from("profiles")
@@ -414,6 +416,7 @@ if (nonEnrErr) {
     })),
   });
 }
+setStatsLoaded(true);
 
   };
 
@@ -637,15 +640,6 @@ async function fetchSessions() {
 
 
 
-  useEffect(() => {
-  if (activeTab === "overview") {
-    fetchStats();
-    fetchBirthdays();
-    fetchSessions();
-  }
-}, [activeTab]);
-
-
 useEffect(() => {
   const channel = supabase
     .channel("admin-dashboard-realtime")
@@ -709,6 +703,10 @@ useEffect(() => {
   return () => {
     supabase.removeChannel(channel);
   };
+}, []);
+
+useEffect(() => {
+  fetchStats();
 }, []);
 
 
@@ -806,7 +804,9 @@ const totalUtilisateursPlateforme =
 >
     <div className="absolute top-0 left-0 h-1 w-full bg-gradient-to-r from-blue-500 to-teal-400 rounded-t-2xl"></div>
     <p className="text-gray-500 font-medium">Utilisateurs</p>
-    <h3 className="text-3xl font-bold text-blue-600 mt-1">{userCount}</h3>
+    <h3 className="text-3xl font-bold text-blue-600 mt-1">
+  {statsLoaded ? userCount : "—"}
+</h3>
   </motion.div>
   <HoverOverlay
   anchorRef={userCardRef}
