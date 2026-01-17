@@ -820,24 +820,53 @@ const filteredResumeMensuel = useMemo(() => {
           <StatusBadge status={e.presence?.status} />
 
           <div className="grid grid-cols-2 gap-2">
-            {!e.presence?.check_in_time && (
-              <button
-                className="bg-green-600 text-white py-2 rounded"
-                onClick={() => openModal("check-in", e.enrollment_id, s.start_time)}
-              >
-                Check-in
-              </button>
-            )}
+  {/* CHECK-IN / UNDO CHECK-IN */}
+  {!e.presence?.check_in_time ? (
+    <button
+      className="bg-green-600 text-white py-2 rounded"
+      onClick={() => openModal("check-in", e.enrollment_id, s.start_time)}
+    >
+      Check-in
+    </button>
+  ) : (
+    <button
+      className="bg-gray-500 text-white py-2 rounded"
+      onClick={() =>
+        saveAttendanceWithRules(
+          e.enrollment_id,
+          "undo-checkin",
+          s.start_time
+        )
+      }
+    >
+      Undo
+    </button>
+  )}
 
-            {!e.presence?.check_out_time && (
-              <button
-                className="bg-blue-600 text-white py-2 rounded"
-                onClick={() => openModal("check-out", e.enrollment_id, s.start_time)}
-              >
-                Check-out
-              </button>
-            )}
-          </div>
+  {/* CHECK-OUT / UNDO CHECK-OUT */}
+  {!e.presence?.check_out_time ? (
+    <button
+      className="bg-blue-600 text-white py-2 rounded"
+      onClick={() => openModal("check-out", e.enrollment_id, s.start_time)}
+    >
+      Check-out
+    </button>
+  ) : (
+    <button
+      className="bg-gray-500 text-white py-2 rounded"
+      onClick={() =>
+        saveAttendanceWithRules(
+          e.enrollment_id,
+          "undo-checkout",
+          s.start_time
+        )
+      }
+    >
+      Undo
+    </button>
+  )}
+</div>
+
         </div>
       ))}
     </div>
