@@ -334,12 +334,12 @@ const firstDayPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
 // 👉 Current month users (with names)
 const { data: newUsersRows, error: newUsersErr } = await supabase
   .from("profiles_with_unpaid")
-  .select("id, full_name")
+  .select("id, full_name, created_at")
   .gte("created_at", getHaitiISOString(firstDayThisMonth))
   .lt("created_at", getHaitiISOString(firstDayNextMonth))
   .neq("signup_type", "children_only") 
   .neq("role", "teacher") 
-  .order("full_name", { ascending: true });
+  .order("created_at", { ascending: false });
 
 // 👉 Previous month count (note only)
 const { count: prevMonthCount } = await supabase
@@ -354,6 +354,7 @@ setNewUsers({
   users: (newUsersRows || []).map(u => ({
     id: u.id,
     name: u.full_name,
+    created_at: u.created_at,
   })),
 });
 
@@ -1042,15 +1043,19 @@ const totalUtilisateursPlateforme =
       </p>
     ) : (
       <ul className="space-y-1">
-        {newUsers.users.map((u) => (
-          <li
-            key={u.id}
-            className="bg-purple-50 px-2 py-1 rounded-md"
-          >
-            • {u.name}
-          </li>
-        ))}
-      </ul>
+  {newUsers.users.map((u) => (
+    <li
+      key={u.id}
+      className="bg-purple-50 px-2 py-1 rounded-md flex justify-between gap-2"
+    >
+      <span className="font-medium truncate">• {u.name}</span>
+      <span className="text-xs text-gray-500 whitespace-nowrap">
+        {formatDateFrSafe(u.created_at)}
+      </span>
+    </li>
+  ))}
+</ul>
+
     )}
   </div>
 </HoverOverlay>
