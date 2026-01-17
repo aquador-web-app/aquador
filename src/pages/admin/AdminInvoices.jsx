@@ -466,35 +466,38 @@ const lastRow = Math.min(page * PAGE_SIZE, totalFamilies);
 
   /** Render */
   return (
-    <div className="p-6">
-      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-        <h1 className="text-3xl font-bold text-gray-800">Finance Management</h1>
-        <nav className="flex gap-2">
-          {["invoices", "payments", "fees", "credits"].map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 rounded-md border ${
-                activeTab === tab
-                  ? "bg-blue-600 text-white border-blue-600"
-                  : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-              }`}
-            >
-              {tab[0].toUpperCase() + tab.slice(1)}
-            </button>
-          ))}
-        </nav>
-      </header>
+    <div className="px-3 py-4 sm:px-4 lg:px-6 max-w-[1600px] mx-auto">
+      <header className="flex flex-col gap-3 mb-5">
+  <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-800">
+    Finance Management
+  </h1>
+
+  <nav className="flex gap-2 overflow-x-auto pb-1">
+    {["invoices", "payments"].map((tab) => (
+      <button
+        key={tab}
+        onClick={() => setActiveTab(tab)}
+        className={`px-3 py-2 text-sm whitespace-nowrap rounded-md border ${
+          activeTab === tab
+            ? "bg-blue-600 text-white border-blue-600"
+            : "bg-white text-gray-700 border-gray-300"
+        }`}
+      >
+        {tab[0].toUpperCase() + tab.slice(1)}
+      </button>
+    ))}
+  </nav>
+</header>
+
 
       {activeTab === "invoices" && (
         <section className="space-y-4">
           {/* Filter bar */}
-          <div className="flex flex-col lg:flex-row gap-3 items-start lg:items-end">
-            <StatusDropdown
-              value={statusFilter}
-              onChange={setStatusFilter}
-            />
-            <div className="flex items-end gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3 items-end">
+            <div className="w-full">
+              <StatusDropdown value={statusFilter} onChange={setStatusFilter} />
+            </div>
+            <div className="flex flex-col gap-3 w-full">
               <DateField label="Start date" date={startDate} onChange={setStartDate} />
               <DateField label="End date" date={endDate} onChange={setEndDate} />
             </div>
@@ -502,8 +505,7 @@ const lastRow = Math.min(page * PAGE_SIZE, totalFamilies);
 <select
   value={monthFilter}
   onChange={(e) => setMonthFilter(e.target.value)}
-  className="border rounded px-2 py-1 text-sm"
->
+  className="border rounded px-2 py-2 text-sm w-full">
   <option value="">Tous</option>
   {monthOptions.map((opt) => (
     <option key={opt.value} value={opt.value}>
@@ -515,8 +517,7 @@ const lastRow = Math.min(page * PAGE_SIZE, totalFamilies);
 <select
   value={nameFilter}
   onChange={(e) => setNameFilter(e.target.value)}
-  className="border rounded px-2 py-1 text-sm"
->
+  className="border rounded px-2 py-2 text-sm w-full">
   <option value="">Tous</option>
   {nameOptions.map((name) => (
     <option key={name} value={name}>
@@ -526,7 +527,7 @@ const lastRow = Math.min(page * PAGE_SIZE, totalFamilies);
 </select>
 
             <button
-              className="px-3 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+              className="w-full md:w-auto px-3 py-2 rounded-md border border-gray-300 text-gray-700"
               onClick={() => {
                 setStatusFilter("all");
                 setStartDate(null);
@@ -561,12 +562,12 @@ const lastRow = Math.min(page * PAGE_SIZE, totalFamilies);
           )}
 
           {/* Pagination */}
-          <div className="flex items-center justify-between pt-2">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-3">
             <span className="text-sm text-gray-600">
   Page {page} of {totalPages} • Showing {firstRow}–{lastRow} of {totalFamilies}
 </span>
 
-            <div className="flex gap-2">
+            <div className="flex justify-between sm:justify-end gap-2">
               <button
                 className="px-3 py-1 rounded border border-gray-300 text-gray-700 disabled:opacity-50"
                 disabled={page === 1}
@@ -587,7 +588,7 @@ const lastRow = Math.min(page * PAGE_SIZE, totalFamilies);
       )}
 
       {activeTab === "payments" && (
-        <section className="space-y-3">
+        <section className="space-y-3 overflow-x-auto">
           <Table
             headers={["Name", "Amount", "Method", "Invoice", "Date"]}
             rows={(payments || [])
@@ -602,33 +603,103 @@ const lastRow = Math.min(page * PAGE_SIZE, totalFamilies);
           />
         </section>
       )}
+    </div>
+  );
+}
+function AdminInvoiceCard({
+  inv,
+  paidDate,
+  toggleExpandInvoice,
+  expandingInvoice,
+  invoiceItemsById,
+  reloadInvoices,
+}) {
+  const isOpen = !!expandingInvoice[inv.invoice_id];
+  const balance = (inv.total || 0) - (inv.paid_total || 0);
 
-      {activeTab === "fees" && (
-        <section className="space-y-3">
-          <Table
-            headers={["Name", "Description", "Amount", "Applied"]}
-            rows={(fees || []).map((f) => [
-              f.full_name || "—",
-              f.description,
-              formatCurrencyUSD(f.amount),
-              formatDateFrSafe(f.created_at),
-            ])}
-          />
-        </section>
-      )}
+  return (
+    <div className="bg-white rounded-xl border shadow p-4 space-y-3">
+      {/* Header */}
+      <div className="flex justify-between items-start">
+        <div>
+          <p className="font-semibold text-blue-700">
+            {inv.child_full_name}
+          </p>
+          <p className="text-xs text-gray-500">
+            #{inv.invoice_no}
+          </p>
+          <p className="text-xs text-gray-500">
+            Échéance : {formatDateFrSafe(inv.due_date)}
+          </p>
+        </div>
 
-      {activeTab === "credits" && (
-        <section className="space-y-3">
-          <Table
-            headers={["Name", "Amount", "Reason", "Updated"]}
-            rows={(credits || []).map((c) => [
-              c.full_name || "—",
-              formatCurrencyUSD(c.amount),
-              c.reason || "—",
-              formatDateFrSafe(c.updated_at || c.created_at),
-            ])}
-          />
-        </section>
+        <span
+          className={`px-3 py-1 rounded-full text-xs font-medium ${
+            inv.status === "paid"
+              ? "bg-green-100 text-green-700"
+              : inv.status === "partial"
+              ? "bg-yellow-100 text-yellow-700"
+              : "bg-red-100 text-red-700"
+          }`}
+        >
+          {inv.status}
+        </span>
+      </div>
+
+      {/* Amounts */}
+      <div className="text-sm space-y-1">
+        <div className="flex justify-between">
+          <span>Total</span>
+          <b>{formatCurrencyUSD(inv.total)}</b>
+        </div>
+        <div className="flex justify-between">
+          <span>Payé</span>
+          <b>{formatCurrencyUSD(inv.paid_total)}</b>
+        </div>
+        <div className="flex justify-between font-semibold">
+          <span>Restant</span>
+          <b className="text-red-600">
+            {formatCurrencyUSD(balance)}
+          </b>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex gap-3 pt-2">
+        {getPdfLink(inv, supabase) && (
+          <button
+            onClick={() =>
+              window.open(
+                `${getPdfLink(inv, supabase)}?refresh=${Date.now()}`,
+                "_blank"
+              )
+            }
+            className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg text-sm"
+          >
+            PDF
+          </button>
+        )}
+
+        <button
+          onClick={() => toggleExpandInvoice(inv.invoice_id)}
+          className="flex-1 bg-gray-100 py-2.5 rounded-lg text-sm"
+        >
+          {isOpen ? "Masquer" : "Détails"}
+        </button>
+      </div>
+
+      {/* Details */}
+      {isOpen && (
+        <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
+          {(invoiceItemsById[inv.invoice_id] || invoiceItems(inv)).map(
+            (it, i) => (
+              <div key={i} className="flex justify-between">
+                <span>{it.description || it.d}</span>
+                <b>{formatCurrencyUSD(it.amount || it.a)}</b>
+              </div>
+            )
+          )}
+        </div>
       )}
     </div>
   );
@@ -661,7 +732,7 @@ function FamilyBlock({
   return (
     <div className="border rounded-lg shadow-sm">
       <div
-        className="flex justify-between items-center p-3 bg-blue-900 cursor-pointer"
+        className="flex justify-between items-center px-4 py-4 bg-blue-900 cursor-pointer select-none rounded-xl" 
         onClick={() =>
           setExpandingFamily((prev) => ({
             ...prev,
@@ -676,8 +747,12 @@ function FamilyBlock({
         <span>{open ? "▲" : "▼"}</span>
       </div>
 
+  
+
       {open && (
-        <div className="p-3 bg-white overflow-x-auto">
+        <div className="p-3 bg-white">
+          {/* 🖥 Desktop table */}
+         <div className="hidden md:block overflow-x-auto -mx-3 md:mx-0">
           <table className="w-full text-sm relative">
             <thead>
               <tr className="border-b">
@@ -712,43 +787,43 @@ function FamilyBlock({
                       {invoiceItems(inv).length ? (
                         <div className="space-y-1 max-h-28 overflow-auto pr-1">
                           {invoiceItems(inv).map((it, idx) => (
-  <div key={idx} className="flex justify-between gap-3 items-center">
-    <span className="text-gray-700">
-      {it.d}
-    </span>
+                            <div key={idx} className="flex justify-between gap-3 items-center">
+                              <span className="text-gray-700">
+                                {it.d}
+                              </span>
 
-    <div className="flex items-center gap-3">
-      <span className="font-medium"> 
-        {formatCurrencyUSD(it.a)}
-      </span>
+                              <div className="flex items-center gap-3">
+                                <span className="font-medium"> 
+                                  {formatCurrencyUSD(it.a)}
+                                </span>
 
-      <button
-        onClick={async () => {
-          if (!confirm(`Revert "${it.d}" ?`)) return;
+                                <button
+                                  onClick={async () => {
+                                    if (!confirm(`Revert "${it.d}" ?`)) return;
 
-          const { error } = await supabase.rpc(
-            "revert_invoice_slot",
-            {
-              p_invoice_id: inv.invoice_id,
-              p_slot: idx + 1,              // 🔑 THIS IS CRITICAL
-              p_description: it.d,
-              p_amount: it.a,
-            }
-          );
+                                    const { error } = await supabase.rpc(
+                                      "revert_invoice_slot",
+                                      {
+                                        p_invoice_id: inv.invoice_id,
+                                        p_slot: idx + 1,              // 🔑 THIS IS CRITICAL
+                                        p_description: it.d,
+                                        p_amount: it.a,
+                                      }
+                                    );
 
-          if (!error) {
-            await reloadInvoices();
-          } else {
-            alert(error.message);
-          }
-        }}
-        className="text-xs text-red-600 hover:underline"
-      >
-        Revert
-      </button>
-    </div>
-  </div>
-))}
+                                    if (!error) {
+                                      await reloadInvoices();
+                                    } else {
+                                      alert(error.message);
+                                    }
+                                  }}
+                                  className="text-xs text-red-600 hover:underline"
+                                >
+                                  Revert
+                                </button>
+                              </div>
+                            </div>
+                          ))}
 
                         </div>
                       ) : (
@@ -771,54 +846,54 @@ function FamilyBlock({
                     <Td>{formatDateFrSafe(inv.due_date)}</Td>
                     <Td>{formatDateFrSafe(paidDates[inv.invoice_id])}</Td>
                     <Td>
-  {(() => {
-    const url = getPdfLink(inv, supabase);
-    if (!url) return "—";
+                      {(() => {
+                        const url = getPdfLink(inv, supabase);
+                        if (!url) return "—";
 
-    return (
-      <button
-        onClick={async () => {
-          try {
-            // Force revalidation on mobile browsers
-            await fetch(url, { method: "HEAD", cache: "no-store" });
-          } catch (_) {}
+                        return (
+                          <button
+                            onClick={async () => {
+                              try {
+                                // Force revalidation on mobile browsers
+                                await fetch(url, { method: "HEAD", cache: "no-store" });
+                              } catch (_) {}
 
-          // Open same file, same name, but bypass cache
-          window.open(`${url}?refresh=${Date.now()}`, "_blank");
-        }}
-        className="text-blue-600 underline"
-      >
-        PDF
-      </button>
-    );
-  })()}
-</Td>
+                              // Open same file, same name, but bypass cache
+                              window.open(`${url}?refresh=${Date.now()}`, "_blank");
+                            }}
+                            className="text-blue-600 underline"
+                          >
+                            PDF
+                          </button>
+                        );
+                      })()}
+                    </Td>
 
                     <Td>
-  {inv.proof_url ? (
-    inv.proof_url.match(/\.(jpg|jpeg|png)$/i) ? (
-      <a
-        href={inv.proof_url}
-        target="_blank"
-        rel="noreferrer"
-        className="text-blue-600 underline"
-      >
-        Image
-      </a>
-    ) : (
-      <a
-        href={inv.proof_url}
-        target="_blank"
-        rel="noreferrer"
-        className="text-blue-600 underline"
-      >
-        Proof
-      </a>
-    )
-  ) : (
-    "—"
-  )}
-</Td>
+                      {inv.proof_url ? (
+                        inv.proof_url.match(/\.(jpg|jpeg|png)$/i) ? (
+                          <a
+                            href={inv.proof_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-blue-600 underline"
+                          >
+                            Image
+                          </a>
+                        ) : (
+                          <a
+                            href={inv.proof_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-blue-600 underline"
+                          >
+                            Proof
+                          </a>
+                        )
+                      ) : (
+                        "—"
+                      )}
+                    </Td>
 
                     <Td>
                       <button
@@ -828,72 +903,72 @@ function FamilyBlock({
                         {expandingInvoice[inv.invoice_id] ? "Hide" : "Show"}
                       </button>
                       {expandingInvoice[inv.invoice_id] && (
-  <div className="mt-2">
-    {invoiceItemsById[inv.invoice_id]?.length ? (
-      <ul className="text-sm text-gray-700 list-disc pl-5">
-        {invoiceItemsById[inv.invoice_id].map((it) => (
-  <li
-    key={it.id}
-    className={`flex justify-between items-center ${
-      it.reverted ? "line-through text-gray-400" : ""
-    }`}
-  >
-    <span>
-      {it.description} — {fmtUSD(it.amount)}
-      {it.paid ? " ✅" : ""}
-    </span>
+                        <div className="mt-2">
+                        {invoiceItemsById[inv.invoice_id]?.length ? (
+                          <ul className="text-sm text-gray-700 list-disc pl-5">
+                            {invoiceItemsById[inv.invoice_id].map((it) => (
+                        <li
+                        key={it.id}
+                        className={`flex justify-between items-center ${
+                          it.reverted ? "line-through text-gray-400" : ""
+                        }`}
+                        >
+                        <span>
+                          {it.description} — {fmtUSD(it.amount)}
+                          {it.paid ? " ✅" : ""}
+                        </span>
 
-    {!it.reverted && (
-      <button
-        onClick={async () => {
-          if (!confirm("Revert this invoice item?")) return;
+                        {!it.reverted && (
+                          <button
+                            onClick={async () => {
+                              if (!confirm("Revert this invoice item?")) return;
 
-          const { error } = await supabase.rpc(
-            "revert_invoice_item",
-            { p_item_id: it.id }
-          );
+                              const { error } = await supabase.rpc(
+                                "revert_invoice_item",
+                                { p_item_id: it.id }
+                              );
 
-          if (!error) {
-            // refresh items
-            const { data } = await supabase
-              .from("invoice_items")
-              .select("id, description, amount, paid, reverted, created_at")
-              .eq("invoice_id", inv.invoice_id)
-              .order("created_at");
+                              if (!error) {
+                                // refresh items
+                                const { data } = await supabase
+                                  .from("invoice_items")
+                                  .select("id, description, amount, paid, reverted, created_at")
+                                  .eq("invoice_id", inv.invoice_id)
+                                  .order("created_at");
 
-            setInvoiceItemsById((prev) => ({
-              ...prev,
-              [inv.invoice_id]: data || [],
-            }));
+                                setInvoiceItemsById((prev) => ({
+                                  ...prev,
+                                  [inv.invoice_id]: data || [],
+                                }));
 
-            // refresh invoice row
-            await reloadInvoices();
-          } else {
-            alert(error.message);
-          }
-        }}
-        className="text-xs text-red-600 hover:underline"
-      >
-        Revert
-      </button>
-    )}
-  </li>
-))}
+                                  // refresh invoice row
+                                  await reloadInvoices();
+                                } else {
+                                  alert(error.message);
+                                }
+                              }}
+                              className="text-xs text-red-600 hover:underline"
+                            >
+                              Revert
+                            </button>
+                          )}
+                        </li>
+                      ))}
 
-      </ul>
-    ) : invoiceItems(inv).length ? (
-      <ul className="text-sm text-gray-700 list-disc pl-5">
-        {invoiceItems(inv).map((it, idx) => (
-          <li key={idx}>
-            {it.d} — {fmtUSD(it.a)}
-          </li>
-        ))}
-      </ul>
-    ) : (
-      <p className="text-sm text-gray-500">Aucun item.</p>
-    )}
-  </div>
-)}
+                            </ul>
+                          ) : invoiceItems(inv).length ? (
+                            <ul className="text-sm text-gray-700 list-disc pl-5">
+                              {invoiceItems(inv).map((it, idx) => (
+                                <li key={idx}>
+                                  {it.d} — {fmtUSD(it.a)}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-sm text-gray-500">Aucun item.</p>
+                          )}
+                        </div>
+                      )}
 
                     </Td>
                   </tr>
@@ -913,6 +988,21 @@ function FamilyBlock({
             </tfoot>
           </table>
         </div>
+        {/* 📱 Mobile cards */}
+    <div className="md:hidden space-y-4">
+      {family.invoices.map((inv) => (
+        <AdminInvoiceCard
+          key={inv.invoice_id}
+          inv={inv}
+          paidDate={paidDates[inv.invoice_id]}
+          toggleExpandInvoice={toggleExpandInvoice}
+          expandingInvoice={expandingInvoice}
+          invoiceItemsById={invoiceItemsById}
+          reloadInvoices={reloadInvoices}
+        />
+      ))}
+    </div>
+       </div>
       )}
     </div>
   );
@@ -963,7 +1053,7 @@ function DateField({ label, date, onChange }) {
       <DatePicker
         selected={date ? new Date(date) : null}
         onChange={(d) => onChange(d)}
-        className="border border-gray-300 rounded-md px-3 py-2 text-sm w-48"
+        className="border border-gray-300 rounded-md px-3 py-2 text-sm w-full"
         placeholderText="Select date"
         isClearable
       />
@@ -1018,7 +1108,7 @@ function Th({ children, right }) {
 }
 function Td({ children, right }) {
   return (
-    <td className={`px-4 py-2 text-sm ${right ? "text-right" : "text-left"}`}>
+    <td className={`px-3 py-2 text-sm ${right ? "text-right" : "text-left"}`}>
       {children}
     </td>
   );

@@ -1642,8 +1642,8 @@ window.__ADMIN_CLOSE_SIDEBAR__ = () => setSidebarOpen(false);
 
       {/* Confirmation Modal */}
       {showSignOutConfirm && (
-  <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/40">
-    <div className="bg-white p-6 rounded-lg shadow-lg max-w-sm z-[9999] relative">
+        <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/40">
+          <div className="bg-white p-6 rounded-lg shadow-lg max-w-sm z-[9999] relative">
             <h2 className="text-lg font-bold mb-4">Êtes-vous sûr de vouloir vous déconnecter ?</h2>
             <div className="flex justify-end gap-3">
               <button
