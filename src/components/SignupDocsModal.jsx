@@ -402,7 +402,7 @@ MANGER, MACHER UNE GOMME, BOIRE dans la piscine ne sont pas autorisé.<br/><br/>
 A’QUA D’OR n’acceptera aucune responsabilité pour les effets personnels laissés dans les vestiaires ou pour la perte ou les dommages aux biens personnels.</p> <br/>
 
 <p><strong>4. Mesure de sécurité</strong><br/>
-Aucun élève ne sera admis dans les cours sans présenter le « bar code » qui lui sera attribué lors de l’inscription. Toute personne venant récupérer un élève devra présenter le « bar code » et donner le mot de passe pour que l’élève soit habilité à partir avec cette dernière au cas où cette dernière ne serait pas restée sur place pendant les cours.</p><br/>
+Aucun élève ne sera admis aux cours sans présenter la carte d’accès contenant le QR code qui lui sera attribué lors de l’inscription. Cette carte servira à contrôler la présence du jour. Toute personne venant récupérer un élève devra également présenter la carte d’accès afin que l’élève soit autorisé à partir avec elle, dans le cas où cette personne ne serait pas restée sur place pendant les cours.</p><br/>
 
 <p><strong>5. Règles de propreté</strong><br/>
 Des poubelles sont placées dans l’enceinte du bâtiment afin de maintenir l’espace propre. Aucun objet, déchet ne doit trainer dans l’air de la piscine et à tout autre endroit de A’QUA D’OR. Crachats, émouchements du nez, jets d'eau, élimination des déchets corporels et actes insalubres dans la piscine sont interdits.</p><br/>
