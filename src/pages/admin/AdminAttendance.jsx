@@ -334,7 +334,7 @@ const [selectedYear, setSelectedYear] = useState(
 // ✅ QR SCAN → EDGE FUNCTION ONLY
 const handleScan = async (text) => {
   console.log("📸 SCAN RAW TEXT:", text); 
-  if (!text) return;
+  if (typeof text !== "string" || !text.trim()) return;
 
   const nowMs = Date.now();
   if (nowMs - lastScanTime.current < 3000) return;
@@ -441,7 +441,7 @@ const filteredResumeMensuel = useMemo(() => {
   };
 
   const handleModalScan = async (text) => {
-  if (!text) return;
+  if (typeof text !== "string" || !text.trim()) return;
   const scanned_profile_id = String(text).trim();
     setModalErreur("");
     setModalResult("");
@@ -633,25 +633,28 @@ const filteredResumeMensuel = useMemo(() => {
       <div className="flex flex-col items-center space-y-4">
         <div className="w-full aspect-square max-w-[320px] rounded-xl overflow-hidden border-2 border-aquaBlue shadow-inner">
           <Scanner
-  onScan={(results) => {
-    try {
-      if (!Array.isArray(results) || results.length === 0) return;
+  onScan={(result) => {
+  try {
+    if (!result) return;
 
-      const value =
-        results[0]?.rawValue ??
-        results[0]?.text ??
-        "";
+    const value =
+      Array.isArray(result)
+        ? result[0]?.rawValue || result[0]?.text
+        : result.rawValue || result.text;
 
-      console.log("📸 SCAN RAW VALUE:", value);
+    if (typeof value !== "string" || !value.trim()) return;
 
-      handleScan(value);
-    } catch (e) {
-      console.error("SCAN HANDLER ERROR:", e);
-    }
-  }}
-  onError={(err) => {
-    console.error("SCANNER ERROR:", err);
-  }}
+    console.log("📸 SCAN RAW VALUE:", value);
+
+    handleScan(value); // OR handleModalScan(value)
+  } catch (e) {
+    console.error("SCAN HANDLER ERROR:", e);
+  }
+}}
+onError={(err) => {
+  console.error("SCANNER ERROR:", err);
+}}
+
   constraints={{ facingMode: "environment" }}
   style={{
     width: "100%",
@@ -1061,25 +1064,28 @@ const filteredResumeMensuel = useMemo(() => {
 
               <div className="w-[280px] h-[280px] rounded-lg overflow-hidden border-2 border-aquaBlue shadow-inner">
                 <Scanner
-  onScan={(results) => {
-    try {
-      if (!Array.isArray(results) || results.length === 0) return;
+  onScan={(result) => {
+  try {
+    if (!result) return;
 
-      const value =
-        results[0]?.rawValue ??
-        results[0]?.text ??
-        "";
+    const value =
+      Array.isArray(result)
+        ? result[0]?.rawValue || result[0]?.text
+        : result.rawValue || result.text;
 
-      console.log("📸 SCAN RAW VALUE:", value);
+    if (typeof value !== "string" || !value.trim()) return;
 
-      handleModalScan(value);
-    } catch (e) {
-      console.error("SCAN HANDLER ERROR:", e);
-    }
-  }}
-  onError={(err) => {
-    console.error("SCANNER ERROR:", err);
-  }}
+    console.log("📸 SCAN RAW VALUE:", value);
+
+    handleModalScan(value); // OR handleModalScan(value)
+  } catch (e) {
+    console.error("SCAN HANDLER ERROR:", e);
+  }
+}}
+onError={(err) => {
+  console.error("SCANNER ERROR:", err);
+}}
+
   constraints={{ facingMode: "environment" }}
   style={{
     width: "100%",
