@@ -70,9 +70,12 @@ export default function ClubGuestDashboard() {
   const [notification, setNotification] = useState("");
 
   useEffect(() => {
-  detectCountryISO()
-    .then((c) => setCountry(c || "HT"))
-    .catch(() => setCountry("HT"));
+  try {
+    const c = detectCountryISO();
+    setCountry(c || "HT");
+  } catch {
+    setCountry("HT");
+  }
 }, []);
 
 

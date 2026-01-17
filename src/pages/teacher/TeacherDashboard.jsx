@@ -14,6 +14,8 @@
   } from "react-icons/fa";
 
   import { formatCurrencyUSD, formatCurrencyHTG, formatDateFrSafe } from "../../lib/dateUtils";
+  import CalendarView from "../../components/CalendarView";
+
 
   // === Reused blocks from existing dashboards ===
   // Commissions stack from User Dashboard
@@ -34,6 +36,7 @@
     const [profile, setProfile] = useState(null);
     const [role, setRole] = useState(null);
     const [loadingProfile, setLoadingProfile] = useState(true);
+    const [showSignOutConfirm, setShowSignOutConfirm] = useState(false)
 
 
     // commissions metrics
@@ -219,8 +222,16 @@
       Mois&nbsp;: <span className="font-semibold">{salaryMonth}</span>
     </p>
   </motion.div>
+  </div>
+{/* === CALENDAR (NEW) === */}
+    <div className="bg-white rounded-2xl shadow p-6">
+      <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+        📅 Calendrier des cours
+      </h3>
 
-        </div>
+      <CalendarView mode="club" />
+    </div>
+        
       </div>
     );
 
@@ -409,7 +420,7 @@
   </div>
 <button
           onClick={() => goToTab("boutique")}
-          className={`text-left px-2 py-1 rounded ${
+          className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-left ${
             activeTab === "boutique"
               ? "bg-aquaBlue text-white"
               : "text-gray-100 hover:bg-orange-700"
@@ -443,7 +454,7 @@
 
           <div className="p-4 border-t border-gray-700">
             <button
-              onClick={handleLogout}
+              onClick={() => setShowSignOutConfirm(true)}
               className="flex items-center gap-2 text-gray-200 hover:text-red-400 w-full"
             >
               <FaSignOutAlt /> Se déconnecter
@@ -463,7 +474,28 @@
     <UserCommissionsRequests userId={profile?.id} />
   </div>
 )}
-
+{/* Confirmation Modal */}
+      {showSignOutConfirm && (
+        <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/40">
+          <div className="bg-white p-6 rounded-lg shadow-lg max-w-sm z-[9999] relative">
+            <h2 className="text-lg font-bold mb-4">Êtes-vous sûr de vouloir vous déconnecter ?</h2>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowSignOutConfirm(false)}
+                className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleLogout}
+                className="px-3 py-1 rounded bg-red-600 text-white hover:bg-red-700"
+              >
+                Oui, déconnecter
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
   {activeTab === "boutique" && (
     <UserBoutique userId={profile?.id} />

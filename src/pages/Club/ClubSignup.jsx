@@ -129,10 +129,14 @@ export default function ClubSignup() {
   const [country, setCountry] = useState("HT");
 
 useEffect(() => {
-  detectCountryISO()
-    .then((c) => setCountry(c || "HT"))
-    .catch(() => setCountry("HT"));
+  try {
+    const c = detectCountryISO();
+    setCountry(c || "HT");
+  } catch {
+    setCountry("HT");
+  }
 }, []);
+
   
 
 

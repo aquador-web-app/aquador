@@ -24,10 +24,14 @@ export default function Signup() {
   const [country, setCountry] = useState("HT");
 
 useEffect(() => {
-  detectCountryISO()
-    .then((c) => setCountry(c || "HT"))
-    .catch(() => setCountry("HT"));
+  try {
+    const c = detectCountryISO();
+    setCountry(c || "HT");
+  } catch {
+    setCountry("HT");
+  }
 }, []);
+
 
 
   const [form, setForm] = useState({
