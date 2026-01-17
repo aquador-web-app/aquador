@@ -20,7 +20,7 @@ export default function ForgotPassword() {
     }
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`, // ⚠️ change ça quand tu mettras en ligne
+      redirectTo: `www.clubaquador.com/reset-password`, // ⚠️ change ça quand tu mettras en ligne
     })
 
     if (error) {
