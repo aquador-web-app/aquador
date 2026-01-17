@@ -331,83 +331,79 @@ const [selectedYear, setSelectedYear] = useState(
   };
 
   // ✅ lightweight scan handler (no infinite reloads, no double check-in)
-const handleScan = async (result) => {
-  if (!result) return;
+// ✅ QR SCAN → EDGE FUNCTION ONLY
+const handleScan = async (text) => {
+  console.log("📸 SCAN RAW TEXT:", text); 
+  if (!text) return;
 
   const nowMs = Date.now();
-  if (nowMs - lastScanTime.current < 3000) return; // 🕒 ignore scans within 3s
+  if (nowMs - lastScanTime.current < 3000) return;
   lastScanTime.current = nowMs;
 
-  const profile_id = (result.text || "").trim();
   setGlobalErreur("");
   setGlobalResult("");
 
+  // 🔹 Extract UUID from ANY QR content
+  const match = String(text).match(
+    /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/
+  );
+
+  console.log("🔍 UUID MATCH:", match);
+
+  if (!match) {
+    setGlobalErreur("⚠️ QR code invalide.");
+    return;
+  }
+
+  const profile_id = match[0];
+
   try {
-    const { data: enr, error: enrErr } = await supabase
-      .from("enrollments")
-      .select("id, session_group")
-      .eq("profile_id", profile_id)
-      .eq("status", "active");
+    const session = (await supabase.auth.getSession()).data.session;
 
-    if (enrErr) throw enrErr;
-    if (!enr?.length) return setGlobalErreur("⚠️ Aucun élève actif trouvé pour ce QR code.");
+    console.log("🔑 SESSION:", session);
+    
 
-    const sessionGroups = enr.map((e) => e.session_group).filter(Boolean);
-    if (!sessionGroups.length)
-      return setGlobalErreur("⚠️ Cet élève n’a pas de groupe de séance assigné.");
+if (!session) {
+  setGlobalErreur("⚠️ Session expirée. Veuillez vous reconnecter.");
+  return;
+}
 
-    const { data: todaySessions, error: sessErr } = await supabase
-      .from("sessions")
-      .select("id, start_time, duration_hours")
-      .eq("start_date", getHaitiDateISO(date))
-      .in("session_group", sessionGroups)
-      .eq("status", "active");
+console.log("🚀 CALLING EDGE FUNCTION", {
+  profile_id,
+  date: getHaitiDateISO(date),
+});
 
-    if (sessErr) throw sessErr;
-    if (!todaySessions?.length)
-      return setGlobalErreur("⚠️ Cet élève n’a pas de séance aujourd’hui.");
+const { data, error } = await supabase.functions.invoke(
+  "record-attendance",
+  {
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: {
+      profile_id,
+      selected_date: getHaitiDateISO(date),
+    },
+  }
+);
+console.log("📡 EDGE RESPONSE", { data, error });
 
-    const enrollment_id = enr[0].id;
-
-    const { data: existing } = await supabase
-      .from("attendance")
-      .select("id, check_in_time, check_out_time")
-      .eq("enrollment_id", enrollment_id)
-      .eq("attended_on", getHaitiDateISO(date))
-      .maybeSingle();
-
-    const now = new Date().toISOString();
-
-    // ✅ Case 1: First scan of the day → Check-in
-    if (!existing) {
-      await supabase.from("attendance").insert([
-        {
-          enrollment_id,
-          attended_on: date,
-          status: "present",
-          check_in_time: now,
-        },
-      ]);
-      setGlobalResult("✅ Check-in enregistré !");
-    }
-    // ✅ Case 2: Already checked in → auto Check-out
-    else if (existing.check_in_time && !existing.check_out_time) {
-      await supabase
-        .from("attendance")
-        .update({ check_out_time: now })
-        .eq("id", existing.id);
-      setGlobalResult("✅ Départ enregistré !");
-    }
-    // ✅ Case 3: Both already exist
-    else {
-      setGlobalErreur("⚠️ Arrivée et départ déjà marqués pour aujourd’hui.");
+    if (error) {
+      setGlobalErreur(error.message || "Erreur lors du scan.");
+      return;
     }
 
-    await fetchSessions(); // refresh UI immediately
+    if (data?.error) {
+      setGlobalErreur(data.error);
+      return;
+    }
+
+    setGlobalResult(data?.message || "✅ Présence enregistrée !");
+    await fetchSessions();
   } catch (err) {
     setGlobalErreur("Erreur lors du scan : " + err.message);
   }
 };
+
 
 const filteredResumeMensuel = useMemo(() => {
   if (!nameFilter.trim()) return resumeMensuel;
@@ -444,9 +440,9 @@ const filteredResumeMensuel = useMemo(() => {
     setModalResult("");
   };
 
-  const handleModalScan = async (res) => {
-    if (!res) return;
-    const scanned_profile_id = (res.text || "").trim();
+  const handleModalScan = async (text) => {
+  if (!text) return;
+  const scanned_profile_id = String(text).trim();
     setModalErreur("");
     setModalResult("");
 
@@ -637,20 +633,36 @@ const filteredResumeMensuel = useMemo(() => {
       <div className="flex flex-col items-center space-y-4">
         <div className="w-full aspect-square max-w-[320px] rounded-xl overflow-hidden border-2 border-aquaBlue shadow-inner">
           <Scanner
-            onDecode={(result) => handleScan({ text: result })}
-            onError={(err) => console.error(err)}
-            constraints={{ facingMode: "environment" }}
-            style={{
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-            }}
-          />
+  onScan={(results) => {
+    try {
+      if (!Array.isArray(results) || results.length === 0) return;
+
+      const value =
+        results[0]?.rawValue ??
+        results[0]?.text ??
+        "";
+
+      console.log("📸 SCAN RAW VALUE:", value);
+
+      handleScan(value);
+    } catch (e) {
+      console.error("SCAN HANDLER ERROR:", e);
+    }
+  }}
+  onError={(err) => {
+    console.error("SCANNER ERROR:", err);
+  }}
+  constraints={{ facingMode: "environment" }}
+  style={{
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+  }}
+/>
         </div>
 
         <button
           onClick={() => {
-            stopCamera(globalScannerRef);
             setScanActif(false);
           }}
           className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition"
@@ -1020,15 +1032,32 @@ const filteredResumeMensuel = useMemo(() => {
 
               <div className="w-[280px] h-[280px] rounded-lg overflow-hidden border-2 border-aquaBlue shadow-inner">
                 <Scanner
-                  onDecode={(result) => handleModalScan({ text: result })}
-                  onError={(err) => console.error(err)}
-                  constraints={{ facingMode: "environment" }}
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    objectFit: "cover",
-                  }}
-                />
+  onScan={(results) => {
+    try {
+      if (!Array.isArray(results) || results.length === 0) return;
+
+      const value =
+        results[0]?.rawValue ??
+        results[0]?.text ??
+        "";
+
+      console.log("📸 SCAN RAW VALUE:", value);
+
+      handleModalScan(value);
+    } catch (e) {
+      console.error("SCAN HANDLER ERROR:", e);
+    }
+  }}
+  onError={(err) => {
+    console.error("SCANNER ERROR:", err);
+  }}
+  constraints={{ facingMode: "environment" }}
+  style={{
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+  }}
+/>
               </div>
 
               <button
