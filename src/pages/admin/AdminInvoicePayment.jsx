@@ -77,7 +77,7 @@
 
       let query = supabase
         .from("payments")
-        .select("id, invoice_id, amount, method, notes, paid_at, invoices(full_name)", {
+        .select("id, invoice_id, amount, method, notes, paid_at, invoices(full_name, invoice_no)", {
           count: "exact",
         })
         .order("paid_at", { ascending: false })
@@ -98,7 +98,7 @@
       const { data, error } = await supabase
         .from("payments")
         .select(
-          "id, invoice_id, amount, method, notes, paid_at, approved, invoices(full_name, proof_url)"
+          "id, invoice_id, amount, method, notes, paid_at, approved, invoices(full_name, invoice_no, proof_url)"
         )
         .in("method", ["cash", "transfer"])
         .eq("approved", false)
@@ -389,83 +389,170 @@
         </button>
 
         {/* 🔹 Pending Payments Section */}
-        <h2 className="text-lg font-bold mt-8 mb-4 text-yellow-700">
-          Paiements en attente
-        </h2>
-        <div className="bg-yellow-50 border border-yellow-200 rounded p-3 mb-6">
-          {pendingPayments.length === 0 ? (
-            <p className="text-gray-600 text-sm text-center">
-              Aucun paiement en attente.
-            </p>
-          ) : (
-            <table className="min-w-full text-sm">
-              <thead className="bg-yellow-100">
-                <tr>
-                  <th className="px-3 py-2 text-left">Client</th>
-                  <th className="px-3 py-2 text-left">Facture</th>
-                  <th className="px-3 py-2 text-left">Montant</th>
-                  <th className="px-3 py-2 text-left">Méthode</th>
-                  <th className="px-3 py-2 text-left">Date</th>
-                  <th className="px-3 py-2 text-left">Preuve</th>
-                  <th className="px-3 py-2 text-left">
-                    {role === "admin" ? "Actions" : "Statut"}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {pendingPayments.map((p) => (
-                  <tr key={p.id} className="border-t">
-                    <td className="px-3 py-2">
-                      {p.invoices?.full_name || "—"}
-                    </td>
-                    <td className="px-3 py-2">{p.invoice_id}</td>
-                    <td className="px-3 py-2">
-                      USD {Number(p.amount).toFixed(2)}
-                    </td>
-                    <td className="px-3 py-2 capitalize">{p.method}</td>
-                    <td className="px-3 py-2">
-                      {p.method === "transfer" && p.invoices?.proof_url ? (
-                        <a
-                          href={p.invoices.proof_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-blue-600 underline"
-                        >
-                          Voir preuve
-                        </a>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td className="px-3 py-2">{formatDateFrSafe(p.paid_at)}</td>
+<h2 className="text-lg font-bold mt-8 mb-4 text-yellow-700">
+  Paiements en attente
+</h2>
 
-                    {/* ✅ Role-based column */}
-                    {role === "admin" ? (
-                      <td className="px-3 py-2 flex gap-2">
-                        <button
-                          onClick={() => approvePayment(p.id)}
-                          className="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700"
-                        >
-                          Approuver
-                        </button>
-                        <button
-                          onClick={() => rejectPayment(p.id)}
-                          className="bg-red-500 text-white px-2 py-1 rounded text-xs hover:bg-red-600"
-                        >
-                          Rejeter
-                        </button>
-                      </td>
-                    ) : (
-                      <td className="px-3 py-2 text-yellow-700 font-medium">
-                        Paiement en attente d’approbation
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+<div className="bg-yellow-50 border border-yellow-200 rounded p-3 mb-6">
+
+  {/* EMPTY STATE */}
+  {pendingPayments.length === 0 && (
+    <p className="text-gray-600 text-sm text-center">
+      Aucun paiement en attente.
+    </p>
+  )}
+
+  {pendingPayments.length > 0 && (
+    <>
+      {/* ================= DESKTOP TABLE ================= */}
+      <div className="hidden md:block">
+        <table className="min-w-full text-sm">
+          <thead className="bg-yellow-100">
+            <tr>
+              <th className="px-3 py-2 text-left">Client</th>
+              <th className="px-3 py-2 text-left">Facture</th>
+              <th className="px-3 py-2 text-left">Montant</th>
+              <th className="px-3 py-2 text-left">Méthode</th>
+              <th className="px-3 py-2 text-left">Date</th>
+              <th className="px-3 py-2 text-left">Preuve</th>
+              <th className="px-3 py-2 text-left">
+                {role === "admin" ? "Actions" : "Statut"}
+              </th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {pendingPayments.map((p) => (
+              <tr key={p.id} className="border-t">
+                <td className="px-3 py-2">
+                  {p.invoices?.full_name || "—"}
+                </td>
+
+                <td className="px-3 py-2">
+                  {p.invoices?.invoice_no || "—"}
+                </td>
+
+                <td className="px-3 py-2">
+                  USD {Number(p.amount).toFixed(2)}
+                </td>
+
+                <td className="px-3 py-2 capitalize">
+                  {p.method}
+                </td>
+
+                <td className="px-3 py-2">
+                  {formatDateFrSafe(p.paid_at)}
+                </td>
+
+                <td className="px-3 py-2">
+                  {p.method === "transfer" && p.invoices?.proof_url ? (
+                    <a
+                      href={p.invoices.proof_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-blue-600 underline"
+                    >
+                      Voir preuve
+                    </a>
+                  ) : (
+                    "—"
+                  )}
+                </td>
+
+                {role === "admin" ? (
+                  <td className="px-3 py-2 flex gap-2">
+                    <button
+                      onClick={() => approvePayment(p.id)}
+                      className="bg-green-600 text-white px-2 py-1 rounded text-xs"
+                    >
+                      Approuver
+                    </button>
+                    <button
+                      onClick={() => rejectPayment(p.id)}
+                      className="bg-red-500 text-white px-2 py-1 rounded text-xs"
+                    >
+                      Rejeter
+                    </button>
+                  </td>
+                ) : (
+                  <td className="px-3 py-2 text-yellow-700 font-medium">
+                    En attente d’approbation
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* ================= MOBILE CARDS ================= */}
+      <div className="md:hidden space-y-3">
+        {pendingPayments.map((p) => (
+          <div
+            key={p.id}
+            className="bg-white border rounded-lg p-3 shadow-sm"
+          >
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="font-semibold text-gray-800">
+                  {p.invoices?.full_name || "—"}
+                </p>
+                <p className="text-xs text-gray-500">
+                  Facture: {p.invoices?.invoice_no || "—"}
+                </p>
+              </div>
+
+              <span className="text-sm font-bold text-yellow-700">
+                USD {Number(p.amount).toFixed(2)}
+              </span>
+            </div>
+
+            <div className="mt-2 text-sm space-y-1">
+              <p><b>Méthode:</b> {p.method}</p>
+              <p><b>Date:</b> {formatDateFrSafe(p.paid_at)}</p>
+
+              {p.method === "transfer" && p.invoices?.proof_url && (
+                <a
+                  href={p.invoices.proof_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-blue-600 underline text-sm"
+                >
+                  Voir preuve
+                </a>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="mt-3">
+              {role === "admin" ? (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => approvePayment(p.id)}
+                    className="flex-1 bg-green-600 text-white px-3 py-2 rounded text-sm"
+                  >
+                    Approuver
+                  </button>
+                  <button
+                    onClick={() => rejectPayment(p.id)}
+                    className="flex-1 bg-red-500 text-white px-3 py-2 rounded text-sm"
+                  >
+                    Rejeter
+                  </button>
+                </div>
+              ) : (
+                <p className="text-yellow-700 text-sm font-medium">
+                  Paiement en attente d’approbation
+                </p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  )}
+</div>
+
 
         {/* Payment History */}
         <h2 className="text-lg font-bold mb-4">Historique des Paiements</h2>
@@ -498,7 +585,10 @@
         </div>
 
         {/* Payments Table */}
-        <div className="bg-gray-50 border rounded">
+        <div className="bg-gray-50 border rounded p-2">
+
+  {/* DESKTOP TABLE */}
+  <div className="hidden md:block">
           <table className="min-w-full text-sm">
             <thead className="bg-gray-200">
               <tr>
@@ -509,15 +599,15 @@
                 <th className="px-3 py-2 text-left">Date</th>
                 <th className="px-3 py-2 text-left">Notes</th>
                 {role === "admin" && (
-        <th className="px-3 py-2 text-left">Actions</th>
-      )}
+                  <th className="px-3 py-2 text-left">Actions</th>
+                )}
               </tr>
             </thead>
             <tbody>
               {payments.map((p) => (
                 <tr key={p.id} className="border-t">
                   <td className="px-3 py-2">{p.invoices?.full_name || "—"}</td>
-                  <td className="px-3 py-2">{p.invoice_id}</td>
+                  <td className="px-3 py-2">{p.invoices?.invoice_no}</td>
                   <td className="px-3 py-2">
                     USD {Number(p.amount).toFixed(2)}
                   </td>
@@ -525,20 +615,20 @@
                   <td className="px-3 py-2">{formatDateFrSafe(p.paid_at)}</td>
                   <td className="px-3 py-2">{p.notes || "—"}</td>
                 {/* 🔁 Action column */}
-        {role === "admin" && (
-          <td className="px-3 py-2">
-            <button
-              onClick={() =>
-                handleRevertPayment(p.id, p.invoice_id, p.amount)
-              }
-              className="bg-red-100 text-red-700 border border-red-300 px-2 py-1 text-xs rounded hover:bg-red-200"
-            >
-              Annuler
-            </button>
-          </td>
-        )}
-      </tr>
-    ))}
+                    {role === "admin" && (
+                      <td className="px-3 py-2">
+                        <button
+                          onClick={() =>
+                            handleRevertPayment(p.id, p.invoice_id, p.amount)
+                          }
+                          className="bg-red-100 text-red-700 border border-red-300 px-2 py-1 text-xs rounded hover:bg-red-200"
+                        >
+                          Annuler
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
               {payments.length === 0 && (
                 <tr>
                   <td colSpan="6" className="text-center py-4 text-gray-500">
@@ -549,6 +639,41 @@
             </tbody>
           </table>
         </div>
+         {/* MOBILE CARDS */}
+  <div className="md:hidden space-y-3">
+    {payments.map((p) => (
+      <div key={p.id} className="bg-white border rounded-lg p-3 shadow-sm">
+        <div className="flex justify-between">
+          <div>
+            <p className="font-semibold">{p.invoices?.full_name}</p>
+            <p className="text-xs text-gray-500">
+              Facture: {p.invoices?.invoice_no}
+            </p>
+          </div>
+          <span className="font-bold text-blue-700">
+            USD {Number(p.amount).toFixed(2)}
+          </span>
+        </div>
+
+        <div className="mt-2 text-sm space-y-1">
+          <p><b>Méthode:</b> {p.method}</p>
+          <p><b>Date:</b> {formatDateFrSafe(p.paid_at)}</p>
+          {p.notes && <p><b>Notes:</b> {p.notes}</p>}
+        </div>
+
+        {role === "admin" && (
+          <button
+            onClick={() => handleRevertPayment(p.id, p.invoice_id)}
+            className="mt-3 w-full bg-red-100 text-red-700 border px-3 py-2 rounded text-sm"
+          >
+            Annuler
+          </button>
+        )}
+      </div>
+    ))}
+  </div>
+
+</div>
 
         {/* Pagination */}
         <div className="flex items-center justify-between p-3">
