@@ -293,8 +293,6 @@ setUnpaidInvoices({
 });
 
 
-    setUnpaidInvoices({ count: unpaidCount, total: unpaidTotal, rows: unpaid, });
-
     // 4) Attendance this month (if your table has a date column, prefer filtering in SQL)
     const { data: presences } = await supabase.from("attendance").select("status, created_at");
     const all = presences || [];
@@ -461,24 +459,18 @@ useEffect(() => {
 
   // 🔹 Realtime updates
   const channel = supabase
-    .channel("admin_notifications_realtime")
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "notifications",
-      },
-      (payload) => {
-        const note = payload.new || payload.old || {};
-        // ✅ Only refresh when notification is admin/global
-        if (!note?.user_id) {
-          console.log("🔔 Admin/global notification changed:", payload.eventType);
-          fetchUnread();
-        }
+  .channel("admin_notifications_realtime")
+  .on(
+    "postgres_changes",
+    { event: "*", schema: "public", table: "notifications" },
+    (payload) => {
+      if (!payload.new?.user_id) {
+        fetchUnread();
       }
-    )
-    .subscribe();
+    }
+  )
+  .subscribe();
+
 
   return () => {
     isMounted = false;
@@ -653,6 +645,70 @@ async function fetchSessions() {
 }, [activeTab]);
 
 
+useEffect(() => {
+  const channel = supabase
+    .channel("admin-dashboard-realtime")
+
+    // 👤 USERS / PROFILES
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "profiles" },
+      () => {
+        console.log("🔄 profiles changed → refresh stats");
+        fetchStats();
+        fetchBirthdays();
+      }
+    )
+
+    // 🧾 ENROLLMENTS
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "enrollments" },
+      () => {
+        console.log("🔄 enrollments changed → refresh stats & sessions");
+        fetchStats();
+        fetchSessions();
+      }
+    )
+
+    // 💰 INVOICES
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "invoices" },
+      () => {
+        console.log("🔄 invoices changed → refresh stats");
+        fetchStats();
+      }
+    )
+
+    // 📄 CONSENTEMENTS SIGNÉS (storage trigger already writes DB)
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "consentements_signed" },
+      () => {
+        console.log("🔄 consentements changed → refresh stats");
+        fetchStats();
+      }
+    )
+
+    // 🔔 ADMIN NOTIFICATIONS
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "notifications" },
+      (payload) => {
+        if (!payload.new?.user_id) {
+          console.log("🔔 admin notification update");
+          setUnreadCount((prev) => prev + 1);
+        }
+      }
+    )
+
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, []);
 
 
 const HIDDEN_SECTIONS = [

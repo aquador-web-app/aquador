@@ -672,6 +672,49 @@ useEffect(() => {
   }
 }, [activeTab]);
 
+useEffect(() => {
+  if (!user?.id) return;
+
+  const channel = supabase
+    .channel("user-financial-realtime-" + user.id)
+
+    // 🧾 INVOICES
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "invoices", filter: `user_id=eq.${user.id}` },
+      () => {
+        console.log("🧾 Invoice change detected");
+        fetchAllInvoices();
+      }
+    )
+
+    // 💳 CREDIT
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "credits", filter: `user_id=eq.${user.id}` },
+      () => {
+        console.log("💳 Credit updated");
+        fetchCredit();
+      }
+    )
+
+    // 💰 COMMISSIONS
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "commissions", filter: `referrer_user_id=eq.${user.id}` },
+      () => {
+        console.log("💰 Commission updated");
+        refreshOverviewData();
+      }
+    )
+
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, [user?.id]);
+
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
