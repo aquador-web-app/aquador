@@ -250,19 +250,38 @@ const [monthFilter, setMonthFilter] = useState("");
   useEffect(() => {
   loadInvoices();   // ✅ ADD THIS LINE
   // ---- PAYMENTS (drop inexistent columns, handle errors) ----
-  const loadPayments = async () => {
-    const { data, error } = await supabase
-      .from("payments")
-      .select("id, full_name, invoice_id, amount, method, reversed, created_at")
-      .order("created_at", { ascending: false });
+const loadPayments = async () => {
+  const { data, error } = await supabase
+    .from("payments")
+    .select(`
+      id,
+      full_name,
+      invoice_id,
+      amount,
+      method,
+      reversed,
+      created_at,
+      invoices (
+        invoice_no
+      )
+    `)
+    .order("created_at", { ascending: false });
 
-    if (error) {
-      console.error("loadPayments error:", error);
-      setPayments([]);
-      return;
-    }
-    setPayments(data || []);
-  };
+  if (error) {
+    console.error("loadPayments error:", error);
+    setPayments([]);
+    return;
+  }
+
+  // flatten invoice_no for easy use
+  const enriched = (data || []).map((p) => ({
+    ...p,
+    invoice_no: p.invoices?.invoice_no || null,
+  }));
+
+  setPayments(enriched);
+};
+
 
   // ---- FEES (table may not exist yet; guard it) ----
   const loadFees = async () => {
@@ -588,21 +607,33 @@ const lastRow = Math.min(page * PAGE_SIZE, totalFamilies);
       )}
 
       {activeTab === "payments" && (
-        <section className="space-y-3 overflow-x-auto">
-          <Table
-            headers={["Name", "Amount", "Method", "Invoice", "Date"]}
-            rows={(payments || [])
-              .filter((p) => !!p) // safe
-              .map((p) => [
-                p.full_name || "—",
-                formatCurrencyUSD(p.amount),
-                p.method,
-                p.invoice_id,
-                formatDateFrSafe(p.created_at),
-              ])}
-          />
-        </section>
-      )}
+  <section className="space-y-4">
+    {/* 🖥 Desktop table */}
+    <div className="hidden md:block overflow-x-auto">
+      <Table
+        headers={["Name", "Amount", "Method", "Invoice", "Date"]}
+        rows={(payments || [])
+          .filter((p) => !!p)
+          .map((p) => [
+  p.full_name || "—",
+  formatCurrencyUSD(p.amount),
+  p.method,
+  p.invoice_no ? `${p.invoice_no}` : "—",
+  formatDateFrSafe(p.created_at),
+])
+}
+      />
+    </div>
+
+    {/* 📱 Mobile cards */}
+    <div className="md:hidden space-y-4">
+      {(payments || []).map((p) => (
+        <AdminPaymentCard key={p.id} payment={p} />
+      ))}
+    </div>
+  </section>
+)}
+
     </div>
   );
 }
@@ -626,7 +657,7 @@ function AdminInvoiceCard({
             {inv.child_full_name}
           </p>
           <p className="text-xs text-gray-500">
-            #{inv.invoice_no}
+            {inv.invoice_no}
           </p>
           <p className="text-xs text-gray-500">
             Échéance : {formatDateFrSafe(inv.due_date)}
@@ -704,6 +735,45 @@ function AdminInvoiceCard({
     </div>
   );
 }
+
+function AdminPaymentCard({ payment }) {
+  return (
+    <div className="bg-white rounded-xl border shadow-sm p-4 space-y-3">
+      <div className="flex justify-between items-start">
+        <div>
+          <p className="font-semibold text-blue-700">
+            {payment.full_name || "—"}
+          </p>
+          <p className="text-xs text-gray-500">
+            {formatDateFrSafe(payment.created_at)}
+          </p>
+        </div>
+
+        <span className="font-semibold text-sm text-green-700">
+          {formatCurrencyUSD(payment.amount)}
+        </span>
+      </div>
+
+      <div className="text-sm text-gray-700 space-y-2">
+  <div className="grid grid-cols-3 gap-2">
+    <span className="text-gray-500">Méthode</span>
+    <span className="col-span-2 text-right font-medium">
+      {payment.method}
+    </span>
+  </div>
+
+  <div className="grid grid-cols-3 gap-2">
+    <span className="text-gray-500">Facture</span>
+    <span className="col-span-2 text-right break-all text-xs">
+      {payment.invoice_no ? `#${payment.invoice_no}` : "—"}
+    </span>
+  </div>
+</div>
+
+    </div>
+  );
+}
+
 
 /** Family Block (expandable) with sticky totals */
 function FamilyBlock({
