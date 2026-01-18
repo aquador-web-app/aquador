@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useEffect, useState } from "react"
 import { supabase } from "../lib/supabaseClient"
 import { useNavigate } from "react-router-dom"
 
@@ -7,17 +7,31 @@ export default function ResetPassword() {
   const [confirmPassword, setConfirmPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [ready, setReady] = useState(false)
+
   const navigate = useNavigate()
 
+  // 🔑 CRITICAL PART
   useEffect(() => {
-    // Vérifie si on a bien une session après clic sur le lien email
-    const checkSession = async () => {
-      const { data, error } = await supabase.auth.getSession()
-      if (error || !data.session) {
-        setError("Lien invalide ou expiré. Veuillez redemander un email de réinitialisation.")
+    const exchangeSession = async () => {
+      const url = new URL(window.location.href)
+      const code = url.searchParams.get("code")
+
+      if (!code) {
+        setError("Lien invalide ou expiré.")
+        return
+      }
+
+      const { error } = await supabase.auth.exchangeCodeForSession(code)
+
+      if (error) {
+        setError("Lien invalide ou expiré.")
+      } else {
+        setReady(true)
       }
     }
-    checkSession()
+
+    exchangeSession()
   }, [])
 
   const handleReset = async (e) => {
@@ -37,17 +51,21 @@ export default function ResetPassword() {
     setLoading(true)
 
     const { error } = await supabase.auth.updateUser({
-      password: password,
+      password,
     })
 
     if (error) {
-      setError("Erreur: " + error.message)
+      setError(error.message)
     } else {
       alert("Mot de passe réinitialisé avec succès ✅")
       navigate("/login")
     }
 
     setLoading(false)
+  }
+
+  if (!ready && !error) {
+    return <div className="p-6 text-center">⏳ Vérification du lien…</div>
   }
 
   return (
@@ -58,30 +76,26 @@ export default function ResetPassword() {
         {error && <div className="text-red-600 mb-3">{error}</div>}
 
         <form onSubmit={handleReset} className="space-y-4">
-          <div>
-            <label className="block text-sm font-semibold">Nouveau mot de passe</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full border rounded p-2"
-            />
-          </div>
+          <input
+            type="password"
+            placeholder="Nouveau mot de passe"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full border rounded p-2"
+          />
 
-          <div>
-            <label className="block text-sm font-semibold">Confirmer le mot de passe</label>
-            <input
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full border rounded p-2"
-            />
-          </div>
+          <input
+            type="password"
+            placeholder="Confirmer le mot de passe"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            className="w-full border rounded p-2"
+          />
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            className="w-full px-4 py-2 bg-blue-600 text-white rounded"
           >
             {loading ? "Enregistrement..." : "Réinitialiser"}
           </button>

@@ -20,7 +20,7 @@ export default function ForgotPassword() {
     }
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `www.clubaquador.com/reset-password`, // ⚠️ change ça quand tu mettras en ligne
+      redirectTo: "https://clubaquador.com/reset-password",
     })
 
     if (error) {
@@ -41,23 +41,20 @@ export default function ForgotPassword() {
         {message && <div className="text-green-600 mb-3">{message}</div>}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-semibold">Adresse email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full border rounded p-2"
-              placeholder="exemple@domaine.com"
-            />
-          </div>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full border rounded p-2"
+            placeholder="exemple@domaine.com"
+          />
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            className="w-full px-4 py-2 bg-blue-600 text-white rounded"
           >
-            {loading ? "Envoi en cours..." : "Envoyer l’email de réinitialisation"}
+            {loading ? "Envoi en cours..." : "Envoyer l’email"}
           </button>
         </form>
       </div>
