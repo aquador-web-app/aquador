@@ -28,6 +28,9 @@ export default function Login() {
   }
 }, [user, loading, navigate]);
 
+if (!loading && user) {
+  return null;
+}
   
 
   const submit = async (e) => {

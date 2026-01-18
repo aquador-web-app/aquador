@@ -21,6 +21,8 @@ export default defineConfig({
       ],
 
       manifest: {
+        id: "/",
+        scope: "/",
         name: "A'QUA D'OR",
         short_name: "A'QUA D'OR",
         description: "A'QUA D'OR Swimming School",
