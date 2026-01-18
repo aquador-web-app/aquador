@@ -15,6 +15,8 @@
 
   import { formatCurrencyUSD, formatCurrencyHTG, formatDateFrSafe } from "../../lib/dateUtils";
   import CalendarView from "../../components/CalendarView";
+  import useConfirmLogoutOnBack from "../../hooks/useConfirmLogoutOnBack";
+
 
 
   // === Reused blocks from existing dashboards ===
@@ -37,6 +39,19 @@
     const [role, setRole] = useState(null);
     const [loadingProfile, setLoadingProfile] = useState(true);
     const [showSignOutConfirm, setShowSignOutConfirm] = useState(false)
+    useConfirmLogoutOnBack((unlock) => {
+  setShowSignOutConfirm(true);
+
+  const original = handleLogout;
+
+  const wrappedLogout = async () => {
+    await original();
+    unlock();
+  };
+
+  window.__teacherLogoutConfirm = wrappedLogout;
+});
+
 
 
     // commissions metrics
@@ -462,17 +477,22 @@
             <h2 className="text-lg font-bold mb-4">Êtes-vous sûr de vouloir vous déconnecter ?</h2>
             <div className="flex justify-end gap-3">
               <button
-                onClick={() => setShowSignOutConfirm(false)}
-                className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300"
-              >
-                Annuler
-              </button>
-              <button
-                onClick={handleLogout}
-                className="px-3 py-1 rounded bg-red-600 text-white hover:bg-red-700"
-              >
-                Oui, déconnecter
-              </button>
+  onClick={() => {
+    setShowSignOutConfirm(false);
+    window.__teacherLogoutConfirm = null;
+  }}
+  className="px-3 py-1 rounded bg-gray-200"
+>
+  Annuler
+</button>
+
+<button
+  onClick={window.__teacherLogoutConfirm}
+  className="px-3 py-1 rounded bg-red-600 text-white"
+>
+  Oui, déconnecter
+</button>
+
             </div>
           </div>
         </div>

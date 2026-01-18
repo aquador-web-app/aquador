@@ -52,6 +52,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from "recharts"
 import { FaChalkboardUser, FaDollarSign, FaLaptopFile } from "react-icons/fa6";
+import useConfirmLogoutOnBack from "../../hooks/useConfirmLogoutOnBack";
 
 
 
@@ -86,6 +87,21 @@ const goToTabAnd = (tab, fn) => {
   const [commission, setCommission] = useState(0)  
   const [referralLink, setReferralLink] = useState("")
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false)
+  useConfirmLogoutOnBack((unlock) => {
+  setShowSignOutConfirm(true);
+
+  const original = handleLogout;
+
+  // patch logout so unlock is called after action
+  const wrappedLogout = async () => {
+    await original();
+    unlock();
+  };
+
+  // temporarily replace handler
+  window.__userLogoutConfirm = wrappedLogout;
+});
+
   const [recentReferrals, setRecentReferrals] = useState([])
   const [recentInvoices, setRecentInvoices] = useState([])
   const [notifications, setNotifications] = useState([])
@@ -1672,17 +1688,22 @@ if (!membershipReady) return <div>Loading...</div>;
             <h2 className="text-lg font-bold mb-4">Êtes-vous sûr de vouloir vous déconnecter ?</h2>
             <div className="flex justify-end gap-3">
               <button
-                onClick={() => setShowSignOutConfirm(false)}
-                className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300"
-              >
-                Annuler
-              </button>
-              <button
-                onClick={handleLogout}
-                className="px-3 py-1 rounded bg-red-600 text-white hover:bg-red-700"
-              >
-                Oui, déconnecter
-              </button>
+  onClick={() => {
+    setShowSignOutConfirm(false);
+    window.__userLogoutConfirm = null;
+  }}
+  className="px-3 py-1 rounded bg-gray-200"
+>
+  Annuler
+</button>
+
+<button
+  onClick={window.__userLogoutConfirm}
+  className="px-3 py-1 rounded bg-red-600 text-white"
+>
+  Oui, déconnecter
+</button>
+
             </div>
           </div>
         </div>
