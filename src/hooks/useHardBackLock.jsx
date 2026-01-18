@@ -1,12 +1,11 @@
 import { useEffect } from "react"
 
 /**
- * HARD back/forward lock
+ * HARD back/forward lock (PRODUCTION SAFE)
  * ✅ Allows refresh
- * ❌ Blocks single back
- * ❌ Blocks double back
- * ❌ Blocks swipe gestures
- * ❌ Blocks forward resurrection
+ * ❌ Blocks back
+ * ❌ Blocks forward
+ * ❌ Blocks BFCache resurrection (desktop Chrome/Edge)
  */
 export default function useHardBackLock() {
   useEffect(() => {
@@ -17,7 +16,7 @@ export default function useHardBackLock() {
       window.history.pushState({ locked: true }, "", window.location.href)
     }
 
-    // Prime the history with MULTIPLE guards
+    // Prime history stack
     lock()
     lock()
     lock()
@@ -28,11 +27,22 @@ export default function useHardBackLock() {
       lock()
     }
 
+    const onPageShow = (e) => {
+      // 🔥 THIS is the missing fix
+      if (e.persisted) {
+        lock()
+        lock()
+        lock()
+      }
+    }
+
     window.addEventListener("popstate", onPopState)
+    window.addEventListener("pageshow", onPageShow)
 
     return () => {
       active = false
       window.removeEventListener("popstate", onPopState)
+      window.removeEventListener("pageshow", onPageShow)
     }
   }, [])
 }

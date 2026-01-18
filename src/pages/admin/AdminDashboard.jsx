@@ -426,7 +426,7 @@ setStatsLoaded(true);
 useEffect(() => {
   async function fetchRole() {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return navigate("/login");
+    if (!user) return;
 
     const { data, error } = await supabase
       .from("profiles")
@@ -1358,9 +1358,16 @@ const totalUtilisateursPlateforme =
   window.location.replace("/login")
 }
 
+useEffect(() => {
+  window.__ADMIN_CTX__ = { activeTab, setActiveTab };
+  window.__ADMIN_CLOSE_SIDEBAR__ = () => setSidebarOpen(false);
 
-window.__ADMIN_CTX__ = { activeTab, setActiveTab };
-window.__ADMIN_CLOSE_SIDEBAR__ = () => setSidebarOpen(false);
+  return () => {
+    delete window.__ADMIN_CTX__;
+    delete window.__ADMIN_CLOSE_SIDEBAR__;
+  };
+}, [activeTab]);
+
   return (
     <div className="flex h-screen bg-gray-100">
       {/* Sidebar */}

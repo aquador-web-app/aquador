@@ -1,14 +1,11 @@
 // src/App.jsx
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom"
+import { Routes, Route, Navigate } from "react-router-dom"
 import { useAuth } from "./context/AuthContext"
 import { useEffect } from "react";
-import { supabase } from "./lib/supabaseClient"
-import { useNavigate } from "react-router-dom";
 
 
 // Pages (public)
 import Home from "./pages/Home"
-import Club from "./pages/Club/ClubHome"
 import EcoleLanding from "./pages/EcoleLanding"
 import ClubLanding from "./pages/ClubLanding"
 import ClubGuestDashboard from "./pages/Club/ClubGuestDashboard";
@@ -34,8 +31,6 @@ import AdminReferralDetails from "./pages/admin/AdminReferralDetails";
 import AdminMembershipApproval from "./pages/admin/AdminMembershipApproval";
 
 
-// Assistant
-import AssistantDashboard from "./pages/Assistant/AssistantDashboard"
 
 // Teacher
 import TeacherDashboard from "./pages/teacher/TeacherDashboard"
@@ -65,7 +60,6 @@ import WhatsAppButton from "./components/WhatsAppButton";
 
 export default function App() {
   const { loading, user } = useAuth()
-  const navigate = useNavigate()
 
 
   // 👇 Listen for custom "navigateToUserProfile" events from other pages
@@ -82,26 +76,12 @@ export default function App() {
   return () => window.removeEventListener("openUserProfile", handler);
 }, []);
 
-useEffect(() => {
-  const {
-    data: { subscription },
-  } = supabase.auth.onAuthStateChange((_event, session) => {
-    if (!session) {
-      navigate("/login", { replace: true })
-    }
-  })
-
-  return () => subscription.unsubscribe()
-}, [navigate])
-
-
 
   // Show a global loader while we resolve auth session
   if (loading) return <Loader />
 
   return (
     <>
-    <router>
       <Routes>
       {/* PUBLIC */}
       <Route path="/" element={<Home />} />
@@ -141,7 +121,7 @@ useEffect(() => {
         <Route path="referrals-details" element={<AdminReferralDetails />} />
         <Route path="club-membership" element={<AdminClubMembership />}/>
         <Route
-  path="membership  approval"
+  path="membership-approval"
   element={<AdminMembershipApproval />}
 />
         <Route
@@ -183,18 +163,7 @@ useEffect(() => {
         }
       />
 
-      {/* ASSISTANT */}
-      <Route
-        path="/admin"
-        element={
-          <ProtectedRoute roles={['assistant']}>
-            <AdminDashboard />
-          </ProtectedRoute>
-        }
-      >
-        <Route index element={<AdminDashboard />} />
-      </Route>
-
+  
       {/* TEACHER */}
       <Route
         path="/teacher"
@@ -242,7 +211,6 @@ useEffect(() => {
       {/* FALLBACK */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
-    </router>
     {/* Floating WhatsApp Button (always visible) */}
     <WhatsAppButton />
   </>

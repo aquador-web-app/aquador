@@ -1,6 +1,5 @@
   // src/pages/teacher/TeacherDashboard.jsx
   import { useEffect, useMemo, useState } from "react";
-  import { useNavigate } from "react-router-dom";
   import { supabase } from "../../lib/supabaseClient";
   import useHardBackLock from "../../hooks/useHardBackLock"
   import { motion } from "framer-motion";
@@ -32,7 +31,6 @@
 
   export default function TeacherDashboard() {
     useHardBackLock()
-    const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState("overview"); // overview | commissions | presence | bulletins
     const [bulletinSubTab, setBulletinSubTab] = useState("list"); // list | form | fiches
     const [profile, setProfile] = useState(null);
@@ -63,7 +61,7 @@
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        navigate("/login");
+        window.location.replace("/login");
         return;
       }
 
