@@ -40,7 +40,7 @@ serve(async (req) => {
       email
     )
   `)
-  .eq("id", payload.payment_id)
+  .eq("id", payment_id)
   .single();
 
 if (error) throw error;
