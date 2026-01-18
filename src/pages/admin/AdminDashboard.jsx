@@ -51,6 +51,7 @@ import AdminClubOverview from "./AdminClubOverview";
 import AdminMembershipApproval from "./AdminMembershipApproval";
 import AdminMembershipUsers from "./AdminMembershipUsers";
 import HoverOverlay from "../../components/HoverOverlay";
+import useConfirmLogoutOnBack from "../../hooks/useConfirmLogoutOnBack";
 
 
 
@@ -158,6 +159,13 @@ export default function AdminDashboard() {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState("overview")
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false)
+  useConfirmLogoutOnBack((unlock) => {
+  setShowSignOutConfirm(true);
+
+  // Store unlock so Cancel can re-enable back
+  window.__UNLOCK_BACK__ = unlock;
+});
+
   const [openReports, setOpenReports] = useState(false)
   const [userCount, setUserCount] = useState(0)
   const [courseCount, setCourseCount] = useState(0)
@@ -1725,7 +1733,10 @@ useEffect(() => {
             <h2 className="text-lg font-bold mb-4">Êtes-vous sûr de vouloir vous déconnecter ?</h2>
             <div className="flex justify-end gap-3">
               <button
-                onClick={() => setShowSignOutConfirm(false)}
+                onClick={() => {
+                  setShowSignOutConfirm(false);
+                  window.__UNLOCK_BACK__?.();
+                }}                
                 className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300"
               >
                 Annuler
