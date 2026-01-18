@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 
 export default function Login() {
@@ -7,7 +7,6 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [show, setShow] = useState(false)
   const [err, setErr] = useState('')
-  const navigate = useNavigate()
   const [savedAccounts, setSavedAccounts] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
 
@@ -73,39 +72,34 @@ if (clubErr) {
 }
 
 // CASE 1 — SCHOOL REAL user (not auto-created club placeholder)
-// CASE 1 — SCHOOL REAL user (not auto-created club placeholder)
+// CASE 1 — SCHOOL REAL user
 if (schoolProf && schoolProf.role && schoolProf.role !== "student_placeholder") {
   const role = (schoolProf.role || "").toLowerCase();
 
   switch (role) {
     case "admin":
     case "assistant":
-      navigate("/admin");
+      window.location.replace("/admin");
       return;
 
     case "teacher":
-      navigate("/teacher");
+      window.location.replace("/teacher");
       return;
 
     case "influencer":
     case "student":
-      navigate("/user");
-      return;
-
-    // ⭐ FIX: fallback ALWAYS sends to /user instead of "/"
     default:
-      navigate("/user");
+      window.location.replace("/user");
       return;
   }
 }
 
-
 // CASE 2 — CLUB ONLY user
 if (!schoolProf && clubProf) {
-  console.log("Club-only user → Redirecting to Club Dashboard");
-  navigate("/user");
+  window.location.replace("/user");
   return;
 }
+
 
 // CASE 3 — NO PROFILE ANYWHERE
 setErr("Profil introuvable.");

@@ -1349,18 +1349,15 @@ const totalUtilisateursPlateforme =
   }
 
   const handleSignOut = async () => {
-  setShowSignOutConfirm(false);
+  setShowSignOutConfirm(false)
 
   // 1️⃣ Kill Supabase session
-  await supabase.auth.signOut();
+  await supabase.auth.signOut()
 
-  // 2️⃣ Destroy dashboard history (critical with hard back lock)
-  window.history.replaceState(null, "", "/login");
-  window.history.pushState(null, "", "/login");
+  // 2️⃣ HARD browser-level redirect (kills ALL history)
+  window.location.replace("/login")
+}
 
-  // 3️⃣ Navigate cleanly
-  navigate("/login", { replace: true });
-};
 
 window.__ADMIN_CTX__ = { activeTab, setActiveTab };
 window.__ADMIN_CLOSE_SIDEBAR__ = () => setSidebarOpen(false);

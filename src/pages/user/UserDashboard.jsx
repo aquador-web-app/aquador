@@ -720,9 +720,12 @@ useEffect(() => {
 
 
   const handleLogout = async () => {
-    await supabase.auth.signOut()
-    navigate("/ecolelanding") // back to landing page
-  }
+  await supabase.auth.signOut();
+
+  // 🔥 HARD browser-level redirect (kills history)
+  window.location.replace("/login");
+};
+
 
   const renderContent = () => {
   // If user is club-only and activeTab is a school tab → redirect internally

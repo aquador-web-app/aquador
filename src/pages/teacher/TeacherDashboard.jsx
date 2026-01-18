@@ -292,9 +292,12 @@
     );
 
     const handleLogout = async () => {
-      await supabase.auth.signOut();
-      navigate("/ecolelanding");
-    };
+  await supabase.auth.signOut();
+
+  // 🔥 HARD browser-level redirect (kills history)
+  window.location.replace("/login");
+};
+
 
     // Hard gate so only teachers (and optionally assistants) can access
     const isTeacherOrAssistant = useMemo(

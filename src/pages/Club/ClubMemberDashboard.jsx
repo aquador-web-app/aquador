@@ -2,6 +2,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
+import useHardBackLock from "../../hooks/useHardBackLock"
+
 
 function formatDateFR(d) {
   if (!d) return "—";
@@ -27,6 +29,7 @@ function statusLabel(status) {
 }
 
 export default function ClubMemberDashboard() {
+  useHardBackLock()
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
