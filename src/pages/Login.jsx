@@ -24,6 +24,12 @@ if (loading) {
   );
 }
 
+useEffect(() => {
+  if (user) {
+    navigate("/dashboard", { replace: true });
+  }
+}, [user, navigate]);
+
 
 
   useEffect(() => {
@@ -96,24 +102,21 @@ if (schoolProf && schoolProf.role && schoolProf.role !== "student_placeholder") 
   const role = (schoolProf.role || "").toLowerCase();
 
   switch (role) {
-    case "admin":
-    case "assistant":
-      window.location.replace("/admin");
+  case "admin":
+  case "assistant":
+    navigate("/admin", { replace: true });
+    return;
 
-      return;
+  case "teacher":
+    navigate("/teacher", { replace: true });
+    return;
 
-    case "teacher":
-      window.location.replace("/teacher");
-
-      return;
-
-    case "influencer":
-    case "student":
-    default:
-      window.location.replace("/user");
-
-      return;
-  }
+  case "influencer":
+  case "student":
+  default:
+    navigate("/user", { replace: true });
+    return;
+}
 }
 
 // CASE 2 — CLUB ONLY user
