@@ -26,20 +26,25 @@ serve(async (req) => {
     );
 
     const { data: payment, error } = await supabase
-      .from("payments")
-      .select(`
-        id,
-        amount,
-        method,
-        invoice_id,
-        profiles (
-          full_name
-        )
-      `)
-      .eq("id", payment_id)
-      .single();
+  .from("payments")
+  .select(`
+    id,
+    amount,
+    method,
+    status,
+    invoice_id,
+    created_at,
+    profiles:profiles!payments_created_by_fkey (
+      id,
+      full_name,
+      email
+    )
+  `)
+  .eq("id", payload.payment_id)
+  .single();
 
-    if (error) throw error;
+if (error) throw error;
+
 
     const actionUrl =
       `https://clubaquador.com/admin/invoices/${payment.invoice_id}`;
