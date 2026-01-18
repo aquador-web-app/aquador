@@ -52,12 +52,11 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from "recharts"
 import { FaChalkboardUser, FaDollarSign, FaLaptopFile } from "react-icons/fa6";
-import useHardBackLock from "../../hooks/useHardBackLock"
+
 
 
 
 export default function UserDashboard() {
-  useHardBackLock()
   const { user } = useAuth()
   const [hasUnpaid, setHasUnpaid] = useState(false)
   const navigate = useNavigate()
@@ -723,7 +722,7 @@ useEffect(() => {
   await supabase.auth.signOut();
 
   // 🔥 HARD browser-level redirect (kills history)
-  window.location.replace("/login");
+  navigate("/login", { replace: true });
 };
 
 

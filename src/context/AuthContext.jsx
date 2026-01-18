@@ -1,57 +1,61 @@
-import { createContext, useContext, useState, useEffect } from "react"
+import { createContext, useContext, useEffect, useState } from "react"
 import { supabase } from "../lib/supabaseClient"
 
-const AuthContext = createContext()
+const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    const loadUser = async () => {
-      setLoading(true)
-      const { data: { session } } = await supabase.auth.getSession()
-
-      if (session?.user) {
-        // Récupérer profil dans la table "profiles"
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", session.user.id)
-          .single()
-
-        setUser({ ...session.user, ...profile })
-      } else {
-        setUser(null)
-      }
+  // 🔐 Single resolver for session → profile → user
+  const resolveUser = async (session) => {
+    if (!session?.user) {
+      setUser(null)
       setLoading(false)
+      return
     }
 
-    loadUser()
+    setLoading(true)
 
-    // Écoute des changements (connexion/déconnexion)
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", session.user.id)
-          .single()
-          .then(({ data }) => {
-            setUser({ ...session.user, ...data })
-          })
-      } else {
-        setUser(null)
-      }
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", session.user.id)
+      .maybeSingle()
+
+    if (error) {
+      console.error("❌ Profile fetch error:", error)
+      setUser(null)
+    } else {
+      setUser({ ...session.user, ...profile })
+    }
+
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    let mounted = true
+
+    // 1️⃣ Initial load
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (mounted) resolveUser(session)
+    })
+
+    // 2️⃣ Auth changes (login / logout / refresh)
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (mounted) resolveUser(session)
     })
 
     return () => {
-      listener.subscription.unsubscribe()
+      mounted = false
+      subscription.unsubscribe()
     }
   }, [])
 
   return (
-    <AuthContext.Provider value={{ user, setUser, loading }}>
+    <AuthContext.Provider value={{ user, loading }}>
       {children}
     </AuthContext.Provider>
   )

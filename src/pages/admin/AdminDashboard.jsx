@@ -51,7 +51,9 @@ import AdminClubOverview from "./AdminClubOverview";
 import AdminMembershipApproval from "./AdminMembershipApproval";
 import AdminMembershipUsers from "./AdminMembershipUsers";
 import HoverOverlay from "../../components/HoverOverlay";
-import useHardBackLock from "../../hooks/useHardBackLock"
+
+
+
 
 
 
@@ -153,7 +155,6 @@ function isToday(birthDate) {
 
 
 export default function AdminDashboard() {
-  useHardBackLock()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState("overview")
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false)
@@ -1355,7 +1356,7 @@ const totalUtilisateursPlateforme =
   await supabase.auth.signOut()
 
   // 2️⃣ HARD browser-level redirect (kills ALL history)
-  window.location.replace("/login")
+  navigate("/login", { replace: true })
 }
 
 useEffect(() => {

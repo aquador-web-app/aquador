@@ -1,7 +1,7 @@
   // src/pages/teacher/TeacherDashboard.jsx
   import { useEffect, useMemo, useState } from "react";
   import { supabase } from "../../lib/supabaseClient";
-  import useHardBackLock from "../../hooks/useHardBackLock"
+  import { useNavigate } from "react-router-dom";
   import { motion } from "framer-motion";
   import {
     FaChartBar,
@@ -30,7 +30,7 @@
   import AdminFicheTechniques from "../admin/AdminFicheTechniques";       // Fiche technique manager :contentReference[oaicite:7]{index=7}
 
   export default function TeacherDashboard() {
-    useHardBackLock()
+    const navigate = useNavigate()
     const [activeTab, setActiveTab] = useState("overview"); // overview | commissions | presence | bulletins
     const [bulletinSubTab, setBulletinSubTab] = useState("list"); // list | form | fiches
     const [profile, setProfile] = useState(null);
@@ -57,28 +57,6 @@
     if (isMobile()) setSidebarOpen(false);
   };
 
-  useEffect(() => {
-    (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        window.location.replace("/login");
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, full_name, role, referral_code")
-        .eq("id", user.id)
-        .single();
-
-      if (!error && data) {
-        setProfile(data);
-        setRole(data.role);
-      }
-
-      setLoadingProfile(false); // ✅ ADD THIS
-    })();
-  }, []);
 
 
     // Load commissions + requests (same data model used in user dashboard) :contentReference[oaicite:8]{index=8}
@@ -293,7 +271,7 @@
   await supabase.auth.signOut();
 
   // 🔥 HARD browser-level redirect (kills history)
-  window.location.replace("/login");
+  navigate("/login", { replace: true });
 };
 
 

@@ -114,6 +114,7 @@ export default function App() {
           </ProtectedRoute>
         }
       >
+        
         <Route index element={<AdminDashboard />} />
         <Route path="documents" element={<AdminDocuments />} />
         <Route path="calendar" element={<AdminCalendarManager />} />
@@ -125,13 +126,14 @@ export default function App() {
   element={<AdminMembershipApproval />}
 />
         <Route
-          path="/admin/appearance"
-          element={
-            <ProtectedRoute roles={['admin']}>
-              <AdminAppearance />
-            </ProtectedRoute>
-          }
-        />
+  path="appearance"
+  element={
+    <ProtectedRoute roles={['admin']}>
+      <AdminAppearance />
+    </ProtectedRoute>
+  }
+/>
+
       </Route>
       <Route
   path="/admin/user-profile/:id"

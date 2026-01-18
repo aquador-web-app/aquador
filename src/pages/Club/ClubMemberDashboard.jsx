@@ -1,7 +1,7 @@
 // src/pages/Club/ClubMemberDashboard.jsx
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
-import useHardBackLock from "../../hooks/useHardBackLock"
+import { useNavigate } from "react-router-dom";
 
 
 function formatDateFR(d) {
@@ -28,7 +28,7 @@ function statusLabel(status) {
 }
 
 export default function ClubMemberDashboard() {
-  useHardBackLock()
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [profile, setProfile] = useState(null);
@@ -58,7 +58,7 @@ export default function ClubMemberDashboard() {
         setErr("Vous devez être connecté pour voir votre profil.");
         setLoading(false);
         // Option: redirect to club login
-        window.location.replace("/club/login");
+        navigate("/club/login", { replace: true });
         return;
       }
 

@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 
 export default function Login() {
+   const navigate = useNavigate()   // ✅ REQUIRED
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [show, setShow] = useState(false)
@@ -79,24 +80,24 @@ if (schoolProf && schoolProf.role && schoolProf.role !== "student_placeholder") 
   switch (role) {
     case "admin":
     case "assistant":
-      window.location.replace("/admin");
+      navigate("/admin", { replace: true });
       return;
 
     case "teacher":
-      window.location.replace("/teacher");
+      navigate("/teacher", { replace: true });
       return;
 
     case "influencer":
     case "student":
     default:
-      window.location.replace("/user");
+      navigate("/user", { replace: true })
       return;
   }
 }
 
 // CASE 2 — CLUB ONLY user
 if (!schoolProf && clubProf) {
-  window.location.replace("/user");
+  navigate("/user", { replace: true })
   return;
 }
 
