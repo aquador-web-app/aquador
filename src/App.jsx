@@ -2,6 +2,8 @@
 import { Routes, Route, Navigate } from "react-router-dom"
 import { useAuth } from "./context/AuthContext"
 import { useEffect } from "react";
+import AuthGate from "./components/AuthGate";
+
 
 
 // Pages (public)
