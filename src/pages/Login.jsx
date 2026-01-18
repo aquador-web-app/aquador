@@ -24,11 +24,6 @@ if (loading) {
   );
 }
 
-useEffect(() => {
-  if (!loading && user) {
-    navigate("/", { replace: true });
-  }
-}, [loading, user, navigate]);
 
 
   useEffect(() => {
@@ -103,17 +98,20 @@ if (schoolProf && schoolProf.role && schoolProf.role !== "student_placeholder") 
   switch (role) {
     case "admin":
     case "assistant":
-      navigate("/admin", { replace: true });
+      window.location.replace("/admin");
+
       return;
 
     case "teacher":
-      navigate("/teacher", { replace: true });
+      window.location.replace("/teacher");
+
       return;
 
     case "influencer":
     case "student":
     default:
-      navigate("/user", { replace: true })
+      window.location.replace("/user");
+
       return;
   }
 }

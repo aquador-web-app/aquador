@@ -109,9 +109,9 @@ export default function App() {
       <Route
         path="/admin"
         element={
-          <ProtectedRoute roles={['admin','assistant']}>
+          <AuthGate roles={['admin','assistant']}>
             <AdminDashboard />
-          </ProtectedRoute>
+          </AuthGate>
         }
       >
         
@@ -170,9 +170,9 @@ export default function App() {
       <Route
         path="/teacher"
         element={
-          <ProtectedRoute roles={['teacher']}>
+          <AuthGate roles={['teacher']}>
             <TeacherDashboard />
-          </ProtectedRoute>
+          </AuthGate>
         }
       >
         <Route index element={<TeacherDashboard />} />
@@ -182,9 +182,9 @@ export default function App() {
       <Route
         path="/user"
         element={
-          <ProtectedRoute>
+          <AuthGate>
             <UserDashboard />
-          </ProtectedRoute>
+          </AuthGate>
         }
       >
         <Route index element={<UserDashboard />} />
