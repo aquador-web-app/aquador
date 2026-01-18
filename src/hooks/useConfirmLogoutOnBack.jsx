@@ -4,18 +4,20 @@ export default function useConfirmLogoutOnBack(onConfirm) {
   const blockedRef = useRef(false);
 
   useEffect(() => {
-    // Prime history so back doesn't leave immediately
-    window.history.pushState(null, "", window.location.href);
+    // Insert a locked history entry
+    window.history.pushState({ __lock: true }, "", window.location.href);
 
-    const onPopState = () => {
+    const onPopState = (event) => {
+      // Only react to our own lock entry
+      if (!event.state?.__lock) return;
+
       if (blockedRef.current) return;
-
       blockedRef.current = true;
 
-      // Immediately push back to prevent navigation
-      window.history.pushState(null, "", window.location.href);
+      // Restore locked state immediately
+      window.history.pushState({ __lock: true }, "", window.location.href);
 
-      // Ask app to show confirmation UI
+      // Ask app to confirm logout
       onConfirm(() => {
         blockedRef.current = false;
       });
