@@ -20,17 +20,23 @@ export default function Login() {
   }, []);
 
   useEffect(() => {
-  if (loading) return;
+  if (loading || !user) return;
 
-  if (user) {
-    // User already logged in → never show login page
-    navigate("/dashboard", { replace: true });
+  const role = user.role?.toLowerCase();
+
+  if (role === "admin" || role === "assistant") {
+    navigate("/admin", { replace: true });
+  } else if (role === "teacher") {
+    navigate("/teacher", { replace: true });
+  } else {
+    navigate("/user", { replace: true });
   }
 }, [user, loading, navigate]);
 
 if (!loading && user) {
   return null;
 }
+
   
 
   const submit = async (e) => {
