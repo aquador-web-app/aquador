@@ -13,29 +13,17 @@ export default function Login() {
   const [err, setErr] = useState('')
   const [savedAccounts, setSavedAccounts] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
+  
+if (!loading && user) {
+  return null;
+}
 
   useEffect(() => {
     const accs = JSON.parse(localStorage.getItem("savedAccounts") || "[]");
     setSavedAccounts(accs);
   }, []);
 
-  useEffect(() => {
-  if (loading || !user) return;
 
-  const role = user.role?.toLowerCase();
-
-  if (role === "admin" || role === "assistant") {
-    navigate("/admin", { replace: true });
-  } else if (role === "teacher") {
-    navigate("/teacher", { replace: true });
-  } else {
-    navigate("/user", { replace: true });
-  }
-}, [user, loading, navigate]);
-
-if (!loading && user) {
-  return null;
-}
 
   
 
