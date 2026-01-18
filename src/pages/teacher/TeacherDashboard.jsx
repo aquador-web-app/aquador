@@ -2,6 +2,7 @@
   import { useEffect, useMemo, useState } from "react";
   import { useNavigate } from "react-router-dom";
   import { supabase } from "../../lib/supabaseClient";
+  import useHardBackLock from "../../hooks/useHardBackLock"
   import { motion } from "framer-motion";
   import {
     FaChartBar,
@@ -30,6 +31,7 @@
   import AdminFicheTechniques from "../admin/AdminFicheTechniques";       // Fiche technique manager :contentReference[oaicite:7]{index=7}
 
   export default function TeacherDashboard() {
+    useHardBackLock()
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState("overview"); // overview | commissions | presence | bulletins
     const [bulletinSubTab, setBulletinSubTab] = useState("list"); // list | form | fiches
