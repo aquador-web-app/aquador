@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import { useAuth } from "../context/AuthContext";
+
 
 export default function Login() {
-   const navigate = useNavigate()   // ✅ REQUIRED
+  const navigate = useNavigate()   // ✅ REQUIRED
+  const { user, loading } = useAuth();   // ✅ REQUIRED
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [show, setShow] = useState(false)
@@ -15,6 +18,16 @@ export default function Login() {
     const accs = JSON.parse(localStorage.getItem("savedAccounts") || "[]");
     setSavedAccounts(accs);
   }, []);
+
+  useEffect(() => {
+  if (loading) return;
+
+  if (user) {
+    // User already logged in → never show login page
+    navigate("/dashboard", { replace: true });
+  }
+}, [user, loading, navigate]);
+
   
 
   const submit = async (e) => {
