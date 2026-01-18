@@ -51,6 +51,7 @@ import AdminClubOverview from "./AdminClubOverview";
 import AdminMembershipApproval from "./AdminMembershipApproval";
 import AdminMembershipUsers from "./AdminMembershipUsers";
 import HoverOverlay from "../../components/HoverOverlay";
+import useHardBackLock from "../../hooks/useHardBackLock"
 
 
 
@@ -152,6 +153,7 @@ function isToday(birthDate) {
 
 
 export default function AdminDashboard() {
+  useHardBackLock()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState("overview")
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false)
@@ -1346,10 +1348,20 @@ const totalUtilisateursPlateforme =
     }
   }
 
-  const handleSignOut = () => {
-    setShowSignOutConfirm(false)
-    navigate("/ecole-landing")
-  }
+  const handleSignOut = async () => {
+  setShowSignOutConfirm(false);
+
+  // 1️⃣ Kill Supabase session
+  await supabase.auth.signOut();
+
+  // 2️⃣ Destroy dashboard history (critical with hard back lock)
+  window.history.replaceState(null, "", "/login");
+  window.history.pushState(null, "", "/login");
+
+  // 3️⃣ Navigate cleanly
+  navigate("/login", { replace: true });
+};
+
 window.__ADMIN_CTX__ = { activeTab, setActiveTab };
 window.__ADMIN_CLOSE_SIDEBAR__ = () => setSidebarOpen(false);
   return (
