@@ -14,9 +14,20 @@ export default function Login() {
   const [savedAccounts, setSavedAccounts] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
   
-if (!loading && user) {
+// ⬅️ ADD THIS AT THE VERY TOP OF THE COMPONENT BODY
+
+if (loading) {
+  return (
+    <div className="min-h-screen flex items-center justify-center text-gray-500">
+      Chargement…
+    </div>
+  );
+}
+
+if (user) {
   return null;
 }
+
 
   useEffect(() => {
     const accs = JSON.parse(localStorage.getItem("savedAccounts") || "[]");

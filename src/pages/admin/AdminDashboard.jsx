@@ -1364,7 +1364,7 @@ const totalUtilisateursPlateforme =
   await supabase.auth.signOut()
 
   // 2️⃣ HARD browser-level redirect (kills ALL history)
-  navigate("/login", { replace: true })
+  window.location.replace("/login");
 }
 
 useEffect(() => {
