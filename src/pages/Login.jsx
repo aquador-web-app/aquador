@@ -24,9 +24,11 @@ if (loading) {
   );
 }
 
-if (user) {
-  return null;
-}
+useEffect(() => {
+  if (!loading && user) {
+    navigate("/", { replace: true });
+  }
+}, [loading, user, navigate]);
 
 
   useEffect(() => {
