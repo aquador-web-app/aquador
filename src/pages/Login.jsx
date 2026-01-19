@@ -7,12 +7,12 @@ import usePWAHardwareBack from "../hooks/usePWAHardwareBack";
 
 
 export default function Login() {
-  usePWAHardwareBack({
-  onExit: () => {
-    // Do nothing or just prevent exit
-    console.log("Back pressed on login");
-  },
-});
+//  usePWAHardwareBack({
+//  onExit: () => {
+//    // Do nothing or just prevent exit
+//    console.log("Back pressed on login");
+//  },
+//});
 
 
   const navigate = useNavigate()   // ✅ REQUIRED
@@ -23,16 +23,15 @@ export default function Login() {
   const [err, setErr] = useState('')
   const [savedAccounts, setSavedAccounts] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
-  
-// ⬅️ ADD THIS AT THE VERY TOP OF THE COMPONENT BODY
+  const [showExitModal, setShowExitModal] = useState(false);
 
-if (loading) {
-  return (
-    <div className="min-h-screen flex items-center justify-center text-gray-500">
-      Chargement…
-    </div>
-  );
-}
+usePWAHardwareBack({
+  onExit: () => {
+    setShowExitModal(true);
+  },
+});
+
+  
 
 useEffect(() => {
   if (user) {
@@ -48,7 +47,15 @@ useEffect(() => {
   }, []);
 
 
+// ⬅️ ADD THIS AT THE VERY TOP OF THE COMPONENT BODY
 
+if (loading) {
+  return (
+    <div className="min-h-screen flex items-center justify-center text-gray-500">
+      Chargement…
+    </div>
+  );
+}
   
 
   const submit = async (e) => {
