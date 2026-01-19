@@ -1,5 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react"
 import { supabase } from "../lib/supabaseClient"
+import OneSignal from "react-onesignal"
+
 
 const AuthContext = createContext(null)
 
@@ -27,8 +29,24 @@ export function AuthProvider({ children }) {
       console.error("❌ Profile fetch error:", error)
       setUser(null)
     } else {
-      setUser({ ...session.user, ...profile })
+  const mergedUser = { ...session.user, ...profile }
+  setUser(mergedUser)
+
+  // 🔔 LINK DEVICE TO USER FOR PUSH (THIS IS THE KEY LINE)
+  try {
+    await OneSignal.login(session.user.id)
+
+    // OPTIONAL: tag role (for admin pushes later)
+    if (profile?.role) {
+      await OneSignal.sendTag("role", profile.role)
     }
+
+    console.log("🔔 OneSignal linked to user", session.user.id)
+  } catch (err) {
+    console.error("❌ OneSignal login failed", err)
+  }
+}
+
 
     setLoading(false)
   }
