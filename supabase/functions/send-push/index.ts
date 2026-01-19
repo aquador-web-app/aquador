@@ -32,19 +32,23 @@ serve(async (req) => {
     const message = notification.text;
 
     // 🎯 TARGETING
-    let target: any = {};
+    // 🎯 TARGETING
+const DEFAULT_ADMIN_ID = "5c654666-0607-4163-92dd-86d84dcb0b1a";
 
-    if (notification.user_id) {
-      // Push to one user
-      target = {
-        include_external_user_ids: [notification.user_id],
-      };
-    } else {
-      // Admin broadcast
-      target = {
-        included_segments: ["Admins"],
-      };
-    }
+let target: any = {};
+
+if (notification.user_id) {
+  // 👤 Push to specific user
+  target = {
+    include_external_user_ids: [notification.user_id],
+  };
+} else {
+  // 🚨 Fallback: send to default admin
+  target = {
+    include_external_user_ids: [DEFAULT_ADMIN_ID],
+  };
+}
+
 
     // 📡 SEND TO ONESIGNAL
     const res = await fetch("https://onesignal.com/api/v1/notifications", {
