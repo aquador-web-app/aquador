@@ -3,6 +3,8 @@ import { Routes, Route, Navigate } from "react-router-dom"
 import { useAuth } from "./context/AuthContext"
 import { useEffect } from "react";
 import AuthGate from "./components/AuthGate";
+import { useLocation } from "react-router-dom";
+import { isPWA } from "./lib/isPWA";
 
 
 
@@ -59,6 +61,18 @@ import DefaultRedirect from "./components/DefaultRedirect"
 import Loader from "./components/Loader"
 import WhatsAppButton from "./components/WhatsAppButton";
 
+function RequireLoginForPWA({ children }) {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+
+  // ✅ Only enforce login when running as PWA
+  if (isPWA() && !user && location.pathname !== "/login") {
+    return <Navigate to="/login" replace />;
+  }
+
+  return children;
+}
+
 
 export default function App() {
   const { loading, user } = useAuth()
@@ -83,7 +97,7 @@ export default function App() {
   if (loading) return <Loader />
 
   return (
-    <>
+    <RequireLoginForPWA>
       <Routes>
       {/* PUBLIC */}
       <Route path="/" element={<Navigate to="/login" replace />} />
@@ -217,6 +231,6 @@ export default function App() {
     </Routes>
     {/* Floating WhatsApp Button (always visible) */}
     <WhatsAppButton />
-  </>
+  </RequireLoginForPWA>
   )
 }
