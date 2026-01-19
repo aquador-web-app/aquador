@@ -12,20 +12,12 @@ export default function usePWAHardwareBack({ onExit }) {
     if (!isPWA()) return;
 
     const handler = (event) => {
-      try {
-        // Push a dummy state to keep app alive
-        window.history.pushState(null, "", window.location.href);
+      event.preventDefault();
 
-        if (typeof onExit === "function") {
-          onExit();
-        }
-      } catch (err) {
-        console.error("PWA back handler error", err);
+      if (typeof onExit === "function") {
+        onExit();
       }
     };
-
-    // Push initial state
-    window.history.pushState(null, "", window.location.href);
 
     window.addEventListener("popstate", handler);
 

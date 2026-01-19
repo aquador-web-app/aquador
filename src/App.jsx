@@ -64,21 +64,6 @@ import WhatsAppButton from "./components/WhatsAppButton";
 
 export default function App() {
   const { loading, user } = useAuth()
-  
-useEffect(() => {
-  // 🛡️ PWA cold start protection
-  if (
-    isPWA() &&
-    (
-      window.location.pathname === "" ||
-      window.location.pathname === "/" ||
-      window.location.pathname === "/index.html"
-    )
-  ) {
-    window.location.replace("/login");
-  }
-}, []);
-
 
   // 👇 Listen for custom "navigateToUserProfile" events from other pages
   useEffect(() => {
