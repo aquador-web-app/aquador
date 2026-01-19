@@ -65,10 +65,11 @@ function RequireLoginForPWA({ children }) {
   const { user, loading } = useAuth();
   const location = useLocation();
 
-  // ✅ Only enforce login when running as PWA
-  if (isPWA() && !user && location.pathname !== "/login") {
-    return <Navigate to="/login" replace />;
+ useEffect(() => {
+  if (isPWA() && window.location.pathname === "") {
+    window.location.replace("/login");
   }
+}, []);
 
   return children;
 }

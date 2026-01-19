@@ -2,9 +2,18 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from "../context/AuthContext";
+import usePWAHardwareBack from "../hooks/usePWAHardwareBack";
+
 
 
 export default function Login() {
+  usePWAHardwareBack({
+  onExit: () => {
+    // show your existing "Déconnecter ? Oui / Non" modal
+    setShowExitModal(true);
+  },
+});
+
   const navigate = useNavigate()   // ✅ REQUIRED
   const { user, loading } = useAuth();   // ✅ REQUIRED
   const [email, setEmail] = useState('')
