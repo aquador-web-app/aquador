@@ -32,8 +32,10 @@ serve(async (req) => {
     const message = notification.text;
 
     // 🎯 TARGETING
-    // 🎯 TARGETING
-const DEFAULT_ADMIN_ID = "5c654666-0607-4163-92dd-86d84dcb0b1a";
+    const DEFAULT_ADMIN_IDS = [
+  "5c654666-0607-4163-92dd-86d84dcb0b1a",
+  "c301ae24-84eb-4254-a61d-dc8e19efb52f",
+];
 
 let target: any = {};
 
@@ -43,11 +45,12 @@ if (notification.user_id) {
     include_external_user_ids: [notification.user_id],
   };
 } else {
-  // 🚨 Fallback: send to default admin
+  // 🚨 Fallback: send to ALL default admins
   target = {
-    include_external_user_ids: [DEFAULT_ADMIN_ID],
+    include_external_user_ids: DEFAULT_ADMIN_IDS,
   };
 }
+
 
 
     // 📡 SEND TO ONESIGNAL
@@ -59,6 +62,7 @@ if (notification.user_id) {
       },
       body: JSON.stringify({
         app_id: ONESIGNAL_APP_ID,
+        external_id: notification.id,
         headings: { en: title },
         contents: { en: message },
         ...target,
