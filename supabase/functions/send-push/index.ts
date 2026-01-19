@@ -69,17 +69,20 @@ if (notification.user_id) {
       }),
     });
 
-    if (!res.ok) {
-      const err = await res.text();
-      console.error("❌ OneSignal error:", err);
-      return new Response("Push failed", { status: 500 });
-    }
+    const result = await res.json();
+console.log("📡 OneSignal response:", result);
 
-    // ✅ Mark as sent
-    await supabase
-      .from("notifications")
-      .update({ push_sent_at: new Date().toISOString() })
-      .eq("id", notification.id);
+if (!res.ok || !result.recipients || result.recipients === 0) {
+  console.error("❌ Push not delivered", result);
+  return new Response("Push not delivered", { status: 200 });
+}
+
+// ✅ Mark as sent ONLY if delivered
+await supabase
+  .from("notifications")
+  .update({ push_sent_at: new Date().toISOString() })
+  .eq("id", notification.id);
+
 
     return new Response("Push sent", { status: 200 });
   } catch (err) {
