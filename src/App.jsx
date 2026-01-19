@@ -61,22 +61,23 @@ import DefaultRedirect from "./components/DefaultRedirect"
 import Loader from "./components/Loader"
 import WhatsAppButton from "./components/WhatsAppButton";
 
-function RequireLoginForPWA({ children }) {
-  const { user, loading } = useAuth();
-  const location = useLocation();
-
- useEffect(() => {
-  if (isPWA() && window.location.pathname === "") {
-    window.location.replace("/login");
-  }
-}, []);
-
-  return children;
-}
-
 
 export default function App() {
   const { loading, user } = useAuth()
+  
+useEffect(() => {
+  // 🛡️ PWA cold start protection
+  if (
+    isPWA() &&
+    (
+      window.location.pathname === "" ||
+      window.location.pathname === "/" ||
+      window.location.pathname === "/index.html"
+    )
+  ) {
+    window.location.replace("/login");
+  }
+}, []);
 
 
   // 👇 Listen for custom "navigateToUserProfile" events from other pages
@@ -98,7 +99,7 @@ export default function App() {
   if (loading) return <Loader />
 
   return (
-    <RequireLoginForPWA>
+    <>
       <Routes>
       {/* PUBLIC */}
       <Route path="/" element={<Navigate to="/login" replace />} />
@@ -232,6 +233,6 @@ export default function App() {
     </Routes>
     {/* Floating WhatsApp Button (always visible) */}
     <WhatsAppButton />
-  </RequireLoginForPWA>
+  </>
   )
 }
