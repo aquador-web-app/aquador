@@ -9,10 +9,11 @@ import usePWAHardwareBack from "../hooks/usePWAHardwareBack";
 export default function Login() {
   usePWAHardwareBack({
   onExit: () => {
-    // show your existing "Déconnecter ? Oui / Non" modal
-    setShowExitModal(true);
+    // Do nothing or just prevent exit
+    console.log("Back pressed on login");
   },
 });
+
 
   const navigate = useNavigate()   // ✅ REQUIRED
   const { user, loading } = useAuth();   // ✅ REQUIRED
