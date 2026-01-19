@@ -3,9 +3,6 @@ import { Routes, Route, Navigate } from "react-router-dom"
 import { useAuth } from "./context/AuthContext"
 import { useEffect } from "react";
 import AuthGate from "./components/AuthGate";
-import { useLocation } from "react-router-dom";
-import { isPWA } from "./lib/isPWA";
-
 
 
 // Pages (public)
@@ -214,7 +211,7 @@ export default function App() {
 
 
       {/* FALLBACK */}
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
     {/* Floating WhatsApp Button (always visible) */}
     <WhatsAppButton />
