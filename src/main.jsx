@@ -8,9 +8,14 @@ import { AuthProvider } from "./context/AuthContext"
 import { GlobalAlertProvider } from "./components/GlobalAlert"
 import OneSignal from 'react-onesignal'
 
-// 🔄 Auto-reload app when a new Service Worker takes control
+// 🔄 Reload ONCE when a new Service Worker takes control
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.addEventListener("controllerchange", () => {
+    const reloaded = sessionStorage.getItem("sw-reloaded");
+
+    if (reloaded) return;
+
+    sessionStorage.setItem("sw-reloaded", "true");
     window.location.reload();
   });
 }
