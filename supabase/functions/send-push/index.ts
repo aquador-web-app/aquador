@@ -63,20 +63,21 @@ if (notification.user_id) {
       body: JSON.stringify({
   app_id: ONESIGNAL_APP_ID,
 
-  // ✅ UNIQUE → do NOT replace
-  collapse_id: notification.id,
-
-  // ✅ GROUPING → stack visually
-  android_group: "aquador_notifications",
-  ios_thread_id: "aquador_notifications",
+  // 🚫 DO NOT include collapse_id
+  // 🚫 DO NOT include external_id
 
   headings: { en: title },
   contents: { en: message },
+
+  // ✅ Same group/thread = visual grouping
+  android_group: "aquador_notifications",
+  ios_thread_id: "aquador_notifications",
+
   ...target,
 
   data: {
-    notification_id: notification.id,
     category: notification.category,
+    notification_id: notification.id,
   },
 }),
 
