@@ -3,6 +3,23 @@ import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from "../context/AuthContext";
 import usePWAHardwareBack from "../hooks/usePWAHardwareBack";
+import { useInstallPrompt } from "../hooks/useInstallPrompt";
+
+function InstallButton() {
+  const { canInstall, install } = useInstallPrompt();
+
+  if (!canInstall) return null;
+
+  return (
+    <button
+      onClick={install}
+      className="mt-4 w-full bg-green-600 text-white py-2 rounded-lg font-semibold"
+    >
+      📲 Installer l’application
+    </button>
+  );
+}
+
 
 
 
@@ -250,7 +267,7 @@ setErr("Profil introuvable.");
           Se connecter
         </button>
       </form>
-
+<InstallButton />
       {/* Links */}
       <div className="text-center mt-4 text-sm">
         Pas de compte ?{" "}
