@@ -65,12 +65,14 @@ export default function App() {
   // 👇 Listen for custom "navigateToUserProfile" events from other pages
   useEffect(() => {
   const handler = (e) => {
-    const id = e.detail?.id;
-    if (id) {
-      window.location.hash = `#/admin/users/${id}`; // optional fallback
-      window.dispatchEvent(new CustomEvent("openUserProfileGlobal", { detail: { id } }));
-    }
-  };
+  const id = e.detail?.id;
+  if (id) {
+    window.dispatchEvent(
+      new CustomEvent("openUserProfileGlobal", { detail: { id } })
+    );
+  }
+};
+
   window.addEventListener("openUserProfile", handler);
 
   return () => window.removeEventListener("openUserProfile", handler);
@@ -84,7 +86,7 @@ export default function App() {
     <>
       <Routes>
       {/* PUBLIC */}
-      <Route path="/" element={<Home />} />
+      <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/ecole" element={<EcoleLanding />} />
       <Route path="/club/signup" element={<ClubSignup />} />
       <Route path="/club" element={<ClubLanding />} />
@@ -188,10 +190,12 @@ export default function App() {
         }
       >
         <Route index element={<UserDashboard />} />
-      </Route>
-
         <Route path="commissions" element={<UserCommissions />} />
         <Route path="change-password" element={<ChangePassword />} />
+      </Route>
+
+        
+        
       
       <Route path="/club/guest-dashboard" element={<ClubGuestDashboard />} />
       <Route path="/club/scan" element={<ClubQRScanner />} />
