@@ -847,7 +847,7 @@ const totalUtilisateursPlateforme =
     <div className="absolute top-0 left-0 h-1 w-full bg-gradient-to-r from-blue-500 to-teal-400 rounded-t-2xl"></div>
     <p className="text-gray-500 font-medium">Utilisateurs</p>
     <h3 className="text-3xl font-bold text-blue-600 mt-1">
-  {statsLoaded ? userCount : "—"}
+  {userCount}
 </h3>
   </motion.div>
   <HoverOverlay
