@@ -270,37 +270,27 @@ const realtimeRefresh = (type) => {
       case "profiles":
         fetchStats();
         fetchBirthdays();
-        fetchUnread();
         break;
 
       case "enrollments":
         fetchStats();
         fetchSessions();
-        fetchUnread();
         break;
 
       case "invoices":
         fetchStats();
-        fetchUnread();
         break;
 
       case "attendance":
         fetchStats();
-        fetchUnread();
-        break;
-
-      case "notifications":
-        fetchUnread();
         break;
 
       case "consents":
         fetchStats();
-        fetchUnread();
         break;
 
       default:
         fetchStats();
-        fetchUnread();
     }
   });
 };
@@ -714,14 +704,35 @@ useEffect(() => {
     )
 
     .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "notifications" },
-      (payload) => {
-        if (!payload.new?.user_id) {
-          realtimeRefresh("notifications");
-        }
-      }
-    )
+  "postgres_changes",
+  {
+    event: "UPDATE",
+    schema: "public",
+    table: "notifications",
+  },
+  (payload) => {
+    // Only global admin notifications
+    if (payload.new?.user_id === null) {
+      // ✅ IMMEDIATE update – NO debounce
+      fetchUnread();
+    }
+  }
+)
+
+.on(
+  "postgres_changes",
+  {
+    event: "INSERT",
+    schema: "public",
+    table: "notifications",
+  },
+  (payload) => {
+    if (payload.new?.user_id === null) {
+      fetchUnread();
+    }
+  }
+)
+
 
     .subscribe();
 
@@ -1805,7 +1816,14 @@ const totalUtilisateursPlateforme =
 {openClub && (
   <div className="ml-4 mt-2 flex flex-col space-y-2">
 
-    <SidebarBtn id="club-overview" icon={<FaChartBar />} label="Aperçu Club" />
+    <SidebarBtn
+  id="club-overview"
+  icon={<FaChartBar />}
+  label="Aperçu Club"
+  activeTab={activeTab}
+  setActiveTab={setActiveTab}
+  closeSidebar={() => setSidebarOpen(false)}
+/>
     <SubGroup title="Users"  prefix="club-users">
     
     <SidebarSub
