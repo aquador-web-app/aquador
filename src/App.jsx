@@ -90,6 +90,40 @@ export default function App() {
     setTimeout(linkOneSignal, 1500);
   }, [user?.id]);
 
+  // 🔔 Handle OneSignal notifications when app is OPEN (foreground)
+useEffect(() => {
+  const handler = (event) => {
+    const notification = event.getNotification();
+
+    // ❌ prevent browser from trying to show a system push
+    event.preventDefault();
+
+    console.log("🔔 OneSignal foreground notification:", notification);
+
+    // 👉 IMPORTANT:
+    // Do NOT call fetchUnread() here (App.jsx doesn't have it)
+    // Just emit a global event that dashboards already react to
+    window.dispatchEvent(
+      new CustomEvent("onesignal-foreground-notification", {
+        detail: notification,
+      })
+    );
+  };
+
+  OneSignal.Notifications.addEventListener(
+    "foregroundWillDisplay",
+    handler
+  );
+
+  return () => {
+    OneSignal.Notifications.removeEventListener(
+      "foregroundWillDisplay",
+      handler
+    );
+  };
+}, []);
+
+
 
   // 👇 Listen for custom "navigateToUserProfile" events from other pages
   useEffect(() => {
