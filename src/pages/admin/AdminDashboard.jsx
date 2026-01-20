@@ -270,19 +270,23 @@ const realtimeRefresh = (type) => {
       case "profiles":
         fetchStats();
         fetchBirthdays();
+        fetchUnread();
         break;
 
       case "enrollments":
         fetchStats();
         fetchSessions();
+        fetchUnread();
         break;
 
       case "invoices":
         fetchStats();
+        fetchUnread();
         break;
 
       case "attendance":
         fetchStats();
+        fetchUnread();
         break;
 
       case "notifications":
@@ -291,10 +295,12 @@ const realtimeRefresh = (type) => {
 
       case "consents":
         fetchStats();
+        fetchUnread();
         break;
 
       default:
         fetchStats();
+        fetchUnread();
     }
   });
 };
