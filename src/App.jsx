@@ -52,6 +52,7 @@ import Signup from "./pages/signup"
 import ForgotPassword from "./pages/ForgotPassword"
 import ResetPassword from "./pages/ResetPassword"
 import ChangePassword from "./pages/ChangePassword"
+import PostLogin from "./pages/PostLogin"
 
 // Components
 import ProtectedRoute from "./components/ProtectedRoute"
