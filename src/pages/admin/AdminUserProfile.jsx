@@ -121,6 +121,7 @@ export default function AdminUserProfile({ profileId: propId, onBack, onAddChild
   const [enrollments, setEnrollments] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [referrals, setReferrals] = useState([]);
+  const [referrer, setReferrer] = useState(null);
   const [credit, setCredit] = useState(0);
   const [tab, setTab] = useState("infos");
   const [saving, setSaving] = useState(false);
@@ -279,6 +280,21 @@ console.log("Enrollments fetched", ens, ensErr);
         .eq("referrer_user_id", p.id)
         .order("created_at", { ascending: false });
 
+                // 🔗 Who referred THIS user?
+        const { data: refRow } = await supabase
+          .from("referrals")
+          .select(`
+            id,
+            created_at,
+            referrer:referrer_user_id (
+              full_name,
+              referral_code,
+              is_active
+            )
+          `)
+          .eq("referred_user_id", p.id)
+          .maybeSingle();
+
       if (!alive) return;
       setProfile(p);
       setParent(parentRes?.data || null);
@@ -286,6 +302,7 @@ console.log("Enrollments fetched", ens, ensErr);
       setEnrollments(ens || []);
       setInvoices(invs || []);
       setReferrals(refs || []);
+      setReferrer(refRow?.referrer || null);
       // === Load credit balance ===
       const { data: creditRow } = await supabase
         .from("credits")
@@ -480,6 +497,27 @@ console.log("Enrollments fetched", ens, ensErr);
                 <Field label="Adresse" value={profile.address || "—"} />
                 <Field label="Type d'inscription" value={profile.signup_type || "—"} />
                 <Field label="Code parrainage" value={profile.referral_code || "—"} />
+                <Field
+  label="Referré par"
+  value={
+    referrer ? (
+      <button
+        className="text-blue-600 underline"
+        onClick={() => {
+          onBack?.();
+          window.dispatchEvent(
+            new CustomEvent("openUserProfile", {
+              detail: { id: referrer.id },
+            })
+          );
+        }}
+      >
+        {referrer.full_name} - {referrer.referral_code} - {referrer.is_active ? "Actif(ve)" : "Inactif(ve)"}
+      </button>
+    ) : "—"
+  }
+/>
+
                 <div className="md:col-span-1">
                   <label className="block text-sm text-gray-500 mb-1">Lien de parrainage</label>
                   <div className="flex items-center gap-2">

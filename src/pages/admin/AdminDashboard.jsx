@@ -183,7 +183,9 @@ function isToday(birthDate) {
 
 export default function AdminDashboard() {
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState("overview")
+  const [activeTab, setActiveTab] = useState(() => {
+  return sessionStorage.getItem("adminActiveTab") || "overview";
+});
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false)
 
 
@@ -524,6 +526,12 @@ useEffect(() => {
 
   fetchRole();
 }, []);
+
+useEffect(() => {
+  if (activeTab) {
+    sessionStorage.setItem("adminActiveTab", activeTab);
+  }
+}, [activeTab]);
 
 
 useEffect(() => {
