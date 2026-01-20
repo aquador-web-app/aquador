@@ -11,48 +11,38 @@ export function AuthProvider({ children }) {
 
   // 🔐 Single resolver for session → profile → user
   const resolveUser = async (session) => {
+  try {
     if (!session?.user) {
-      setUser(null)
-      setLoading(false)
-      return
+      setUser(null);
+      return;
     }
 
-    setLoading(true)
+    setLoading(true);
 
-    const { data: profile, error } = await supabase
+    const { data: profile } = await supabase
       .from("profiles")
       .select("*")
       .eq("id", session.user.id)
-      .maybeSingle()
+      .maybeSingle();
 
-    if (error) {
-      console.error("❌ Profile fetch error:", error)
-      setUser(null)
-    } else {
-  const mergedUser = { ...session.user, ...profile }
-  setUser(mergedUser)
+    // 🔴 HARD NORMALIZATION
+    const safeUser = {
+      id: session.user.id,
+      email: session.user.email,
+      role: profile?.role ?? "user",        // ALWAYS DEFINED
+      full_name: profile?.full_name ?? "",
+      permissions: profile?.permissions ?? [],
+    };
 
-  // 🔔 OneSignal must NEVER block auth
-try {
-  OneSignal.login(session.user.id)
-    .then(() => {
-      if (profile?.role) {
-        OneSignal.sendTag("role", profile.role)
-      }
-      console.log("🔔 OneSignal linked to user", session.user.id)
-    })
-    .catch((err) => {
-      console.error("❌ OneSignal login failed", err)
-    })
-} catch (err) {
-  console.error("❌ OneSignal setup error", err)
-}
-
-}
-
-
-    setLoading(false)
+    setUser(safeUser);
+  } catch (err) {
+    console.error("❌ resolveUser crash", err);
+    setUser(null);
+  } finally {
+    setLoading(false);
   }
+};
+
 
   useEffect(() => {
     let mounted = true

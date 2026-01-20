@@ -55,11 +55,13 @@ async function bootstrap() {
   ReactDOM.createRoot(document.getElementById("root")).render(
     <React.StrictMode>
       <BrowserRouter>
-        <AuthProvider>
-          <GlobalAlertProvider>
-            <App />
-          </GlobalAlertProvider>
-        </AuthProvider>
+        <ErrorBoundary>
+          <AuthProvider>
+            <GlobalAlertProvider>
+              <App />
+            </GlobalAlertProvider>
+          </AuthProvider>
+        </ErrorBoundary>
       </BrowserRouter>
     </React.StrictMode>
   );
