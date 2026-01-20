@@ -48,13 +48,6 @@ usePWAHardwareBack({
   },
 });
 
-  
-
-useEffect(() => {
-  if (!loading && user) {
-    navigate("/dashboard", { replace: true });
-  }
-}, [user, loading, navigate]);
 
 
 

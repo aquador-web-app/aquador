@@ -91,16 +91,6 @@ export default function App() {
       <Route path="/club/signup" element={<ClubSignup />} />
       <Route path="/club" element={<ClubLanding />} />
 
-      {/* Single entry that routes a logged-in user to the correct dashboard by role */}
-      <Route
-        path="/dashboard"
-        element={
-          <ProtectedRoute>
-            <DefaultRedirect />
-          </ProtectedRoute>
-        }
-      />
-
       {/* AUTH */}
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
@@ -215,7 +205,19 @@ export default function App() {
 
 
       {/* FALLBACK */}
-      <Route path="*" element={<Navigate to="/login" replace />} />
+      <Route
+  path="*"
+  element={
+    user?.role === "admin" || user?.role === "assistant"
+      ? <Navigate to="/admin" replace />
+      : user?.role === "teacher"
+      ? <Navigate to="/teacher" replace />
+      : user
+      ? <Navigate to="/user" replace />
+      : <Navigate to="/login" replace />
+  }
+/>
+
     </Routes>
     {/* Floating WhatsApp Button (always visible) */}
     <WhatsAppButton />
