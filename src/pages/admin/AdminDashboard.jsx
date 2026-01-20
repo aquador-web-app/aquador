@@ -1824,58 +1824,100 @@ const totalUtilisateursPlateforme =
   setActiveTab={setActiveTab}
   closeSidebar={() => setSidebarOpen(false)}
 />
-    <SubGroup title="Users"  prefix="club-users">
-    
-    <SidebarSub
-      id="club-users-members"
-      label="Utilisateurs"
-    />
- {role !== "assistant" && (
-    <>
+    <SubGroup
+  title="Users"
+  prefix="club-users"
+  activeTab={activeTab}
+  setActiveTab={setActiveTab}
+  closeSidebar={() => setSidebarOpen(false)}
+>
+  <SidebarSub
+    id="club-users-members"
+    label="Utilisateurs"
+    activeTab={activeTab}
+    setActiveTab={setActiveTab}
+    closeSidebar={() => setSidebarOpen(false)}
+  />
+
+  {role !== "assistant" && (
     <SidebarSub
       id="club-users-approval"
       label="Approbation"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
     />
-</>
- )}
-  </SubGroup>
+  )}
+</SubGroup>
+
 
     
     {/* Calendrier Club — assistants can see it */}
     {isClubTabVisibleToAssistant("calendar") && (
-      <SidebarBtn id="calendar" icon={<FaCalendarAlt />} label="Calendrier Club" />
+      <SidebarBtn
+  id="calendar"
+  icon={<FaCalendarAlt />}
+  label="Calendrier Club"
+  activeTab={activeTab}
+  setActiveTab={setActiveTab}
+  closeSidebar={() => setSidebarOpen(false)}
+/>
     )}
 
     {/* Réservations */}
     {role !== "assistant" && (
-      <SidebarBtn id="club-bookings" icon={<FaMoneyBillTransfer />} label="Réservations" />
+      <SidebarBtn
+  id="club-bookings"
+  icon={<FaMoneyBillTransfer />}
+  label="Réservations"
+  activeTab={activeTab}
+  setActiveTab={setActiveTab}
+  closeSidebar={() => setSidebarOpen(false)}
+/>
     )}
 
     {/* ===== MEMBERSHIP GROUP ===== */}
 {role !== "assistant" && (
-  <SubGroup title="Membership" prefix="club-membership">
-    
-    <SidebarSub
-      id="club-membership-plans"
-      label="Plans Membership"
-    />
+  <SubGroup
+  title="Membership"
+  prefix="club-membership"
+  activeTab={activeTab}
+  setActiveTab={setActiveTab}
+  closeSidebar={() => setSidebarOpen(false)}
+>
+  <SidebarSub
+    id="club-membership-plans"
+    label="Plans Membership"
+    activeTab={activeTab}
+    setActiveTab={setActiveTab}
+    closeSidebar={() => setSidebarOpen(false)}
+  />
 
-    <SidebarSub
-      id="club-membership-invoices"
-      label="Factures Membership"
-    />
+  <SidebarSub
+    id="club-membership-invoices"
+    label="Factures Membership"
+    activeTab={activeTab}
+    setActiveTab={setActiveTab}
+    closeSidebar={() => setSidebarOpen(false)}
+  />
 
-    <SidebarSub
-      id="club-membership-payments"
-      label="Paiements Membership"
-    />
+  <SidebarSub
+    id="club-membership-payments"
+    label="Paiements Membership"
+    activeTab={activeTab}
+    setActiveTab={setActiveTab}
+    closeSidebar={() => setSidebarOpen(false)}
+  />
 
-    <SidebarSub
-      id="club-membership-invoices-templates"
-      label="Templates Facture Membership"
-    />
+  <SidebarSub
+    id="club-membership-invoices-templates"
+    label="Templates Facture Membership"
+    activeTab={activeTab}
+    setActiveTab={setActiveTab}
+    closeSidebar={() => setSidebarOpen(false)}
+  />
+</SubGroup>
 
-  </SubGroup>
 )}
 
 
@@ -1884,26 +1926,51 @@ const totalUtilisateursPlateforme =
 {/*  BOOKINGS (Club) Group    */}
 {/* ========================= */}
 {role !== "assistant" && (
-  <SubGroup title="Bookings" prefix="club-invoices">
-    <SidebarSub
-      id="club-invoices"
-      label="Factures Club"
-    />
-    <SidebarSub
-      id="club-invoices-payment"
-      label="Paiements Club"
-    />
-    <SidebarSub
-      id="club-invoices-templates"
-      label="Templates Factures Club"
-    />
-  </SubGroup>
+  <SubGroup
+  title="Bookings"
+  prefix="club-invoices"
+  activeTab={activeTab}
+  setActiveTab={setActiveTab}
+  closeSidebar={() => setSidebarOpen(false)}
+>
+  <SidebarSub
+    id="club-invoices"
+    label="Factures Club"
+    activeTab={activeTab}
+    setActiveTab={setActiveTab}
+    closeSidebar={() => setSidebarOpen(false)}
+  />
+
+  <SidebarSub
+    id="club-invoices-payment"
+    label="Paiements Club"
+    activeTab={activeTab}
+    setActiveTab={setActiveTab}
+    closeSidebar={() => setSidebarOpen(false)}
+  />
+
+  <SidebarSub
+    id="club-invoices-templates"
+    label="Templates Factures Club"
+    activeTab={activeTab}
+    setActiveTab={setActiveTab}
+    closeSidebar={() => setSidebarOpen(false)}
+  />
+</SubGroup>
+
 )}
 
 
     {/* Scanner QR — assistants can see it */}
     {isClubTabVisibleToAssistant("club-scan") && (
-      <SidebarBtn id="club-scan" icon={<FaCheckToSlot />} label="Scanner QR" />
+      <SidebarBtn
+  id="club-scan"
+  icon={<FaCheckToSlot />}
+  label="Scanner QR"
+  activeTab={activeTab}
+  setActiveTab={setActiveTab}
+  closeSidebar={() => setSidebarOpen(false)}
+/>
     )}
 
   </div>
