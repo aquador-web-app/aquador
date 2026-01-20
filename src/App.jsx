@@ -1,5 +1,6 @@
 // src/App.jsx
 import { Routes, Route, Navigate } from "react-router-dom"
+import OneSignal from "react-onesignal";
 import { useAuth } from "./context/AuthContext"
 import { useEffect } from "react";
 import AuthGate from "./components/AuthGate";
@@ -61,6 +62,34 @@ import WhatsAppButton from "./components/WhatsAppButton";
 
 export default function App() {
   const { loading, user } = useAuth()
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const linkOneSignal = async () => {
+      try {
+        const isEnabled = await OneSignal.Notifications.permission;
+
+        if (isEnabled) {
+          await OneSignal.login(user.id);
+
+          if (user.role) {
+            await OneSignal.sendTag("role", user.role);
+          }
+
+          console.log("🔔 OneSignal re-linked after PWA install", user.id);
+        } else {
+          console.log("🔕 Notifications not permitted yet");
+        }
+      } catch (err) {
+        console.error("❌ OneSignal relink failed", err);
+      }
+    };
+
+    // slight delay = service worker ready
+    setTimeout(linkOneSignal, 1500);
+  }, [user?.id]);
+
 
   // 👇 Listen for custom "navigateToUserProfile" events from other pages
   useEffect(() => {
@@ -198,11 +227,6 @@ export default function App() {
     </ProtectedRoute>
   }
 />
-
-
-      
-
-
 
       {/* FALLBACK */}
       <Route
