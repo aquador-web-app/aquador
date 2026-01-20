@@ -16,6 +16,8 @@ import "react-phone-number-input/style.css";
 import { AuthProvider } from "./context/AuthContext";
 import { GlobalAlertProvider } from "./components/GlobalAlert";
 import OneSignal from "react-onesignal";
+import ErrorBoundary from "./components/ErrorBoundary";
+
 
 // 🧨 Optional SW reset via ?sw-reset
 if ("serviceWorker" in navigator && window.location.search.includes("sw-reset")) {
