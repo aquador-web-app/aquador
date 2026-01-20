@@ -51,10 +51,6 @@ import AdminClubOverview from "./AdminClubOverview";
 import AdminMembershipApproval from "./AdminMembershipApproval";
 import AdminMembershipUsers from "./AdminMembershipUsers";
 import HoverOverlay from "../../components/HoverOverlay";
-import useConfirmLogoutOnBack from "../../hooks/useConfirmLogoutOnBack";
-
-
-
 
 
 
@@ -159,12 +155,6 @@ export default function AdminDashboard() {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState("overview")
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false)
-  useConfirmLogoutOnBack((unlock) => {
-  setShowSignOutConfirm(true);
-
-  // Store unlock so Cancel can re-enable back
-  window.__UNLOCK_BACK__ = unlock;
-});
 
   const [openReports, setOpenReports] = useState(false)
   const [userCount, setUserCount] = useState(0)
