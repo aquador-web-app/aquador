@@ -54,15 +54,12 @@ import HoverOverlay from "../../components/HoverOverlay";
 
 
 
-function SidebarBtn({ id, icon, label }) {
-  const { activeTab, setActiveTab } = window.__ADMIN_CTX__;
+function SidebarBtn({ id, icon, label, activeTab, setActiveTab, closeSidebar }) {
   return (
     <button
       onClick={() => {
         setActiveTab(id);
-        if (window.innerWidth < 768) {
-          window.__ADMIN_CLOSE_SIDEBAR__?.();
-        }
+        closeSidebar();
       }}
       className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-left ${
         activeTab === id
@@ -76,24 +73,24 @@ function SidebarBtn({ id, icon, label }) {
 }
 
 
-function SidebarSub({ id, label }) {
-  const { activeTab, setActiveTab } = window.__ADMIN_CTX__;
+
+function SidebarSub({
+  id,
+  label,
+  activeTab,
+  setActiveTab,
+  closeSidebar,
+}) {
   const isActive = activeTab === id;
 
   return (
     <button
       onClick={() => {
         setActiveTab(id);
-        if (window.innerWidth < 768) {
-          window.__ADMIN_CLOSE_SIDEBAR__?.();
-        }
+        closeSidebar();
       }}
       className={`
-        text-left w-full
-        px-3 py-2
-        rounded-lg
-        text-sm
-        transition
+        text-left w-full px-3 py-2 rounded-lg text-sm transition
         ${
           isActive
             ? "bg-aquaBlue text-white"
@@ -107,24 +104,51 @@ function SidebarSub({ id, label }) {
 }
 
 
-function SubGroup({ title, prefix, children }) {
-  const { activeTab, setActiveTab } = window.__ADMIN_CTX__;
+
+function SubGroup({
+  title,
+  prefix,
+  defaultTab,        // 👈 NEW
+  activeTab,
+  setActiveTab,
+  closeSidebar,
+  children,
+}) {
   const open = activeTab.startsWith(prefix);
+
   return (
     <div>
       <button
-        onClick={() => setActiveTab(open ? "" : `${prefix}`)}
+        onClick={() => {
+          if (!open && defaultTab) {
+            // 👇 go directly to first sub-tab
+            setActiveTab(defaultTab);
+            closeSidebar();
+          } else {
+            // toggle close only
+            setActiveTab("");
+          }
+        }}
         className={`flex items-center justify-between w-full px-3 py-2 rounded-lg ${
-          open ? "bg-aquaBlue text-white" : "text-gray-100 hover:bg-orange-700"
+          open
+            ? "bg-aquaBlue text-white"
+            : "text-gray-100 hover:bg-orange-700"
         }`}
       >
         <span>{title}</span>
         <span>{open ? "▲" : "▼"}</span>
       </button>
-      {open && <div className="ml-4 mt-1 space-y-1">{children}</div>}
+
+      {open && (
+        <div className="ml-4 mt-1 space-y-1">
+          {children}
+        </div>
+      )}
     </div>
   );
 }
+
+
 
 
 function getHaitiNow() {
@@ -177,7 +201,6 @@ export default function AdminDashboard() {
 });
   const [birthdays, setBirthdays] = useState([]);
   const [sessions, setSessions] = useState([]);
-  const [tab, setTab] = useState("users"); // 'users' | 'finance'
   const [selectedProfileId, setSelectedProfileId] = useState(null);
   const [influencerCount, setInfluencerCount] = useState(0);
   const [activeEnrollmentCount, setActiveEnrollmentCount] = useState(0);
@@ -205,6 +228,9 @@ const [consentHovered, setConsentHovered] = useState(false);
 const newUsersCardRef = useRef(null);
 const [newUsersHovered, setNewUsersHovered] = useState(false);
 
+
+const didInitEcoleRef = useRef(false);
+const didInitClubRef = useRef(false);
 
 
 
@@ -514,18 +540,6 @@ const upcoming = data.filter((u) => {
   setBirthdays(upcoming);
 }
 
-
-const TabBtn = ({ id, label }) => (
-    <button
-      onClick={() => setTab(id)}
-      className={`px-4 py-2 rounded-t-md border-b-2 ${
-        tab === id ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500"
-      }`}
-      style={{ marginRight: 8 }}
-    >
-      {label}
-    </button>
-  );
 
 async function fetchSessions() {
   const haitiNow = getHaitiNow();
@@ -1357,15 +1371,6 @@ const totalUtilisateursPlateforme =
   window.location.replace("/login");
 }
 
-useEffect(() => {
-  window.__ADMIN_CTX__ = { activeTab, setActiveTab };
-  window.__ADMIN_CLOSE_SIDEBAR__ = () => setSidebarOpen(false);
-
-  return () => {
-    delete window.__ADMIN_CTX__;
-    delete window.__ADMIN_CLOSE_SIDEBAR__;
-  };
-}, [activeTab]);
 
   return (
     <div className="flex h-screen bg-gray-100">
@@ -1414,15 +1419,23 @@ useEffect(() => {
 
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
 
-  {/* ========================= */}
+{/* ========================= */}
 {/*      ÉCOLE SECTION        */}
 {/* ========================= */}
 
 <button
   onClick={() => {
-    const newVal = !openEcole;
-    setOpenEcole(newVal);
-    if (newVal) setActiveTab("overview");  // 👈 DEFAULT TAB WHEN OPENING CLUB
+    setOpenEcole((prev) => {
+      const next = !prev;
+
+      // ✅ set default ONLY the first time it opens
+      if (next && !didInitEcoleRef.current) {
+        setActiveTab("overview");
+        didInitEcoleRef.current = true;
+      }
+
+      return next;
+    });
   }}
   className={`flex items-center justify-between w-full px-3 py-2 rounded-lg 
     ${openEcole ? "bg-aquaBlue text-white" : "text-gray-100 hover:bg-orange-700"}`}
@@ -1430,6 +1443,7 @@ useEffect(() => {
   <span className="flex items-center gap-2">🏫 École</span>
   <span>{openEcole ? "▲" : "▼"}</span>
 </button>
+
 
 {openEcole && (
   <div className="ml-4 mt-2 flex flex-col space-y-2">
@@ -1439,153 +1453,300 @@ useEffect(() => {
 
     {/* Users */}
     {!isHidden("users") && (
-      <SidebarBtn id="users" icon={<FaUsers />} label="Utilisateurs" />
+      <SidebarBtn
+  id="users"
+  icon={<FaUsers />}
+  label="Utilisateurs"
+  activeTab={activeTab}
+  setActiveTab={setActiveTab}
+  closeSidebar={() => setSidebarOpen(false)}
+/>
+
     )}
 
     {/* Classes */}
     {!isHidden("classes") && (
-      <SubGroup title="Classes" prefix="classes">
-        <SidebarSub id="classes-courses" label="Cours" />
-        <SidebarSub id="classes-sessions" label="Sessions" />
-        <SidebarSub id="classes-enrollments" label="Inscriptions" />
+      <SubGroup
+        title="Classes"
+        prefix="classes"
+        defaultTab="classes-courses"
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        closeSidebar={() => setSidebarOpen(false)}
+      >
+        <SidebarSub id="classes-courses" label="Cours" {...{ activeTab, setActiveTab }} closeSidebar={() => setSidebarOpen(false)} />
+        <SidebarSub id="classes-sessions" label="Sessions" {...{ activeTab, setActiveTab }} closeSidebar={() => setSidebarOpen(false)} />
+        <SidebarSub id="classes-enrollments" label="Inscriptions" {...{ activeTab, setActiveTab }} closeSidebar={() => setSidebarOpen(false)} />
       </SubGroup>
     )}
 
     {/* Plans */}
     {!isHidden("plans") && (
-      <SidebarBtn id="plans" icon={<FaClipboardList />} label="Plans" />
+      <SidebarBtn
+        id="plans"
+        icon={<FaClipboardList />}
+        label="Plans"
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        closeSidebar={() => setSidebarOpen(false)}
+      />
     )}
 
-    {/* Invoices / Facturation */}
     {!isHidden("invoices") && (
-      <SubGroup title="Facturation" prefix="invoices">
-        <SidebarSub id="invoices" label="Factures" />
-        <SidebarSub id="invoicespayment" label="Paiements" />
+      <SubGroup
+        title="Facturation"
+        prefix="invoices"
+        defaultTab="invoices"
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        closeSidebar={() => setSidebarOpen(false)}
+      >
+        <SidebarSub id="invoices" label="Factures" {...{ activeTab, setActiveTab }} closeSidebar={() => setSidebarOpen(false)} />
+        <SidebarSub id="invoicespayment" label="Paiements" {...{ activeTab, setActiveTab }} closeSidebar={() => setSidebarOpen(false)} />
         {!isHidden("invoices-templates") && (
-          <SidebarSub id="invoices-templates" label="Templates Factures" />
+          <SidebarSub id="invoices-templates" label="Templates Factures" {...{ activeTab, setActiveTab }} closeSidebar={() => setSidebarOpen(false)} />
         )}
       </SubGroup>
     )}
 
     {/* Parrainage */}
     {!isHidden("manage-referrals") && (
-      <SidebarBtn id="manage-referrals" icon={<FaUserFriends />} label="Parrainage" />
+      <SidebarBtn
+        id="manage-referrals"
+        icon={<FaUserFriends />}
+        label="Parrainage"
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        closeSidebar={() => setSidebarOpen(false)}
+      />
     )}
 
     {/* Emails */}
     {!isHidden("emails") && (
-      <SubGroup title="Emails" prefix="emails">
-        <SidebarSub id="emails-templates" label="Templates" />
-        <SidebarSub id="emails-queue" label="Queue" />
-        <SidebarSub id="emails-send" label="Envoyer Email" />
+      <SubGroup
+        title="Emails"
+        prefix="emails"
+        defaultTab="emails-send"
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        closeSidebar={() => setSidebarOpen(false)}
+      >
+        <SidebarSub id="emails-templates" label="Templates" {...{ activeTab, setActiveTab }} closeSidebar={() => setSidebarOpen(false)} />
+        <SidebarSub id="emails-queue" label="Queue" {...{ activeTab, setActiveTab }} closeSidebar={() => setSidebarOpen(false)} />
+        <SidebarSub id="emails-send" label="Envoyer Email" {...{ activeTab, setActiveTab }} closeSidebar={() => setSidebarOpen(false)} />
       </SubGroup>
     )}
 
     {/* === Notifications === */}
     {!isHidden("notifications") && (
-      <div>
-        <button
-          onClick={() =>
-            setActiveTab(
-              activeTab.startsWith("notifications") ? "" : "notifications"
-            )
-          }
-          className={`flex items-center justify-between w-full px-3 py-2 rounded-lg ${
-            activeTab.startsWith("notifications")
-              ? "bg-aquaBlue text-white"
-              : "text-gray-100 hover:bg-orange-700"
-          }`}
-        >
-          <span className="flex items-center gap-2">Notifications</span>
-
-          {unreadCount > 0 && (
-            <span className="bg-red-600 text-white text-xs px-2 py-0.5 rounded-full">
-              {unreadCount}
-            </span>
-          )}
-
-          <span>{activeTab.startsWith("notifications") ? "▲" : "▼"}</span>
-        </button>
-
-        {activeTab.startsWith("notifications") && (
-          <div className="ml-6 mt-2 flex flex-col space-y-2">
-            <button
-              onClick={() => setActiveTab("notifications-all")}
-              className={`text-left px-2 py-1 rounded ${
-                activeTab === "notifications-all"
-                  ? "bg-aquaBlue text-white"
-                  : "text-gray-100 hover:bg-orange-700"
-              }`}
-            >
-              Toutes
-            </button>
-
-            {!isHidden("notifications-templates") && (
-              <button
-                onClick={() => setActiveTab("notifications-templates")}
-                className={`text-left px-2 py-1 rounded ${
-                  activeTab === "notifications-templates"
-                    ? "bg-aquaBlue text-white"
-                    : "text-gray-100 hover:bg-orange-700"
-                }`}
-              >
-                Templates
-              </button>
-            )}
-          </div>
+  <SubGroup
+    title={
+      <span className="flex items-center gap-2">
+        <FaBell />
+        Notifications
+        {unreadCount > 0 && (
+          <span className="bg-red-600 text-white text-xs px-2 py-0.5 rounded-full">
+            {unreadCount}
+          </span>
         )}
-      </div>
+      </span>
+    }
+    prefix="notifications"
+    defaultTab="notifications-all"
+    activeTab={activeTab}
+    setActiveTab={setActiveTab}
+    closeSidebar={() => setSidebarOpen(false)}
+  >
+    <SidebarSub
+      id="notifications-all"
+      label="Toutes"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    />
+
+    {!isHidden("notifications-templates") && (
+      <SidebarSub
+        id="notifications-templates"
+        label="Templates"
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        closeSidebar={() => setSidebarOpen(false)}
+      />
     )}
+  </SubGroup>
+)}
+
 
     {/* Commissions */}
     {!isHidden("commissions") && (
-      <SubGroup title="Commissions" prefix="commissions">
-        <SidebarSub id="commissions-manage" label="Gérer" />
-        <SidebarSub id="commissions-payments" label="Paiements" />
+      <SubGroup
+        title="Commissions"
+        prefix="commissions"
+        defaultTab="commissions-manage"
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        closeSidebar={() => setSidebarOpen(false)}
+      >
+        <SidebarSub id="commissions-manage" label="Gérer" {...{ activeTab, setActiveTab }} closeSidebar={() => setSidebarOpen(false)} />
+        <SidebarSub id="commissions-payments" label="Paiements" {...{ activeTab, setActiveTab }} closeSidebar={() => setSidebarOpen(false)} />
       </SubGroup>
     )}
 
     {/* Présences */}
     {!isHidden("manage-attendance") && (
-      <SidebarBtn id="manage-attendance" icon={<FaCheckToSlot />} label="Présences" />
-    )}
+  <SidebarBtn
+    id="manage-attendance"
+    icon={<FaCheckToSlot />}
+    label="Présences"
+    activeTab={activeTab}
+    setActiveTab={setActiveTab}
+    closeSidebar={() => setSidebarOpen(false)}
+  />
+)}
+
 
     {/* Boutique */}
     {!isHidden("boutique") && (
-      <SubGroup title="Boutique" prefix="boutique">
-        <SidebarSub id="boutique-products" label="Produits" />
-        <SidebarSub id="boutique-invoices" label="Factures" />
-        <SidebarSub id="boutique-invoices-templates" label="Template" />
-      </SubGroup>
-    )}
+  <SubGroup
+    title="Boutique"
+    prefix="boutique"
+    defaultTab="boutique-products"
+    activeTab={activeTab}
+    setActiveTab={setActiveTab}
+    closeSidebar={() => setSidebarOpen(false)}
+  >
+    <SidebarSub
+      id="boutique-products"
+      label="Produits"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    />
+
+    <SidebarSub
+      id="boutique-invoices"
+      label="Factures"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    />
+
+    <SidebarSub
+      id="boutique-invoices-templates"
+      label="Template"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    />
+  </SubGroup>
+)}
+
 
     {/* Bulletins */}
     {!isHidden("bulletins") && (
-      <SubGroup title="Bulletins" prefix="bulletins">
-        <SidebarSub id="bulletins-form" label="Bulletins" />
-        <SidebarSub id="bulletins-fiches-techniques" label="Fiches Techniques" />
-        <SidebarSub id="bulletinsetfiches" label="Bulletins + Fiches" />
-        {!isHidden("bulletins-template") && (
-          <SidebarSub id="bulletins-template" label="Template Bulletin" />
-        )}
-        {!isHidden("fiches-template") && (
-          <SidebarSub id="fiches-template" label="Template Fiche" />
-        )}
-      </SubGroup>
+  <SubGroup
+    title="Bulletins"
+    prefix="bulletins"
+    defaultTab="bulletins-form"
+    activeTab={activeTab}
+    setActiveTab={setActiveTab}
+    closeSidebar={() => setSidebarOpen(false)}
+  >
+    <SidebarSub
+      id="bulletins-form"
+      label="Bulletins"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    />
+
+    <SidebarSub
+      id="bulletins-fiches-techniques"
+      label="Fiches Techniques"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    />
+
+    <SidebarSub
+      id="bulletinsetfiches"
+      label="Bulletins + Fiches"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    />
+
+    {!isHidden("bulletins-template") && (
+      <SidebarSub
+        id="bulletins-template"
+        label="Template Bulletin"
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        closeSidebar={() => setSidebarOpen(false)}
+      />
     )}
+
+    {!isHidden("fiches-template") && (
+      <SidebarSub
+        id="fiches-template"
+        label="Template Fiche"
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        closeSidebar={() => setSidebarOpen(false)}
+      />
+    )}
+  </SubGroup>
+)}
+
 
     {/* Rapports */}
     {!isHidden("reports") && (
-      <SubGroup title="Rapports" prefix="reports">
-        <SidebarSub id="reports-general" label="CSV + PDF" />
-        <SidebarSub id="reports-attendance" label="Présences" />
-        <SidebarSub id="reports-p&l" label="Entrées / Dépenses" />
-      </SubGroup>
-    )}
+  <SubGroup
+    title="Rapports"
+    prefix="reports"
+    defaultTab="reports-general"
+    activeTab={activeTab}
+    setActiveTab={setActiveTab}
+    closeSidebar={() => setSidebarOpen(false)}
+  >
+    <SidebarSub
+      id="reports-general"
+      label="CSV + PDF"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    />
+
+    <SidebarSub
+      id="reports-attendance"
+      label="Présences"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    />
+
+    <SidebarSub
+      id="reports-p&l"
+      label="Entrées / Dépenses"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    />
+  </SubGroup>
+)}
+
 
     {/* Salaires */}
     {!isHidden("salary") && (
-      <SidebarBtn id="salary" icon={<FaMoneyBill1Wave />} label="Salaires" />
+      <SidebarBtn
+        id="salary"
+        icon={<FaMoneyBill1Wave />}
+        label="Salaires"
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        closeSidebar={() => setSidebarOpen(false)}
+      />
     )}
 
   </div>
@@ -1598,9 +1759,17 @@ useEffect(() => {
 
 <button
   onClick={() => {
-    const newVal = !openClub;
-    setOpenClub(newVal);
-    if (newVal) setActiveTab("club-overview");  // 👈 DEFAULT TAB WHEN OPENING CLUB
+    setOpenClub((prev) => {
+      const next = !prev;
+
+      // ✅ set default ONLY the first time it opens
+      if (next && !didInitClubRef.current) {
+        setActiveTab("club-overview");
+        didInitClubRef.current = true;
+      }
+
+      return next;
+    });
   }}
   className={`flex items-center justify-between w-full px-3 py-2 rounded-lg 
     ${openClub ? "bg-aquaBlue text-white" : "text-gray-100 hover:bg-orange-700"}`}
@@ -1608,6 +1777,7 @@ useEffect(() => {
   <span className="flex items-center gap-2">🏝️ Club</span>
   <span>{openClub ? "▲" : "▼"}</span>
 </button>
+
 
 {openClub && (
   <div className="ml-4 mt-2 flex flex-col space-y-2">
@@ -1725,7 +1895,6 @@ useEffect(() => {
               <button
                 onClick={() => {
                   setShowSignOutConfirm(false);
-                  window.__UNLOCK_BACK__?.();
                 }}                
                 className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300"
               >
