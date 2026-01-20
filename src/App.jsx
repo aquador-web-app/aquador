@@ -159,6 +159,8 @@ useEffect(() => {
       <Route path="/signup" element={<Signup />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/post-login" element={<PostLogin />} />
+
 
       {/* ADMIN (nested under /admin with AdminDashboard) */}
       <Route

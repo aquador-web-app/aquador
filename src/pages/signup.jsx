@@ -22,6 +22,10 @@ export default function Signup() {
   const [signedDocs, setSignedDocs] = useState([]); // [{form_name, url}]
   const [err, setErr] = useState('')
   const [country, setCountry] = useState("HT");
+  const [children, setChildren] = useState([
+    { first_name: "", middle_name: "", last_name: "", birth_date: "", sex: "" }
+  ]);
+
 
 useEffect(() => {
   try {
@@ -55,6 +59,31 @@ useEffect(() => {
   const baseCode = useMemo(() => buildBaseCode(form), [form])
 
   const onChange = (k, v) => setForm((s) => ({ ...s, [k]: v }))
+
+  const addChild = () => {
+  setChildren((s) => [
+    ...s,
+    { first_name: "", middle_name: "", last_name: "", birth_date: "", sex: "" }
+  ]);
+};
+
+
+const updateChild = (index, newChild) => {
+  setChildren((s) =>
+    s.map((c, i) => (i === index ? newChild : c))
+  );
+};
+
+const buildChildFullName = (c) =>
+  [c.first_name, c.middle_name, c.last_name]
+    .filter(Boolean)
+    .join(" ");
+
+
+const removeChild = (index) => {
+  setChildren((s) => s.filter((_, i) => i !== index));
+};
+
 
   const submit = async (e) => {
     e.preventDefault()
@@ -151,12 +180,22 @@ if (!session?.access_token) {
       first_lesson: form.first_lesson || "",
       medical_note: form.medical_note || "",
       is_active: true,
+      // 👇 ADD THIS
+      children:
+  form.signup_type === "me"
+    ? []
+    : children.map(c => ({
+        first_name: c.first_name,
+        middle_name: c.middle_name || null,
+        last_name: c.last_name,
+        birth_date: c.birth_date || null,
+        sex: c.sex || null,
+      })),
     }),
   }
 );
 
-
-      navigate('/login')
+      navigate("/post-login", { replace: true })
     } catch (err) {
       console.error('Signup error:', err)
       setErr(`Erreur: ${err.message}`)
@@ -298,6 +337,90 @@ if (!session?.access_token) {
               <option value="children_only">Enfants seulement</option>
             </select>
           </div>
+          {form.signup_type !== "me" && (
+  <div className="md:col-span-2 border rounded-xl p-4 bg-gray-50">
+    <h3 className="font-semibold mb-3">Enfant(s) à inscrire</h3>
+
+    {children.map((child, index) => (
+      <div key={index} className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-2">
+        <input
+  className="input"
+  placeholder="Prénom"
+  value={child.first_name}
+  onChange={(e) =>
+    updateChild(index, { ...child, first_name: e.target.value })
+  }
+  required
+/>
+
+<input
+  className="input"
+  placeholder="Deuxième prénom"
+  value={child.middle_name}
+  onChange={(e) =>
+    updateChild(index, { ...child, middle_name: e.target.value })
+  }
+/>
+
+<input
+  className="input"
+  placeholder="Nom"
+  value={child.last_name}
+  onChange={(e) =>
+    updateChild(index, { ...child, last_name: e.target.value })
+  }
+  required
+/>
+
+
+        <input
+          type="date"
+          className="input"
+          value={child.birth_date}
+          onChange={(e) =>
+            updateChild(index, {
+              ...child,
+              birth_date: e.target.value,
+            })
+          }
+          required
+        />
+
+        <select
+          className="select"
+          value={child.sex}
+          onChange={(e) =>
+            updateChild(index, {
+              ...child,
+              sex: e.target.value,
+            })
+          }
+          required
+        >
+          <option value="">Sexe</option>
+          <option value="M">M</option>
+          <option value="F">F</option>
+        </select>
+
+        <button
+          type="button"
+          onClick={() => removeChild(index)}
+          className="text-red-600 text-sm underline"
+        >
+          Supprimer
+        </button>
+      </div>
+    ))}
+
+    <button
+      type="button"
+      onClick={addChild}
+      className="text-blue-600 text-sm underline"
+    >
+      + Ajouter un enfant
+    </button>
+  </div>
+)}
           <div>
             <label className="label">Première leçon ?</label>
             <select
@@ -342,6 +465,28 @@ if (!session?.access_token) {
           return;
         }
 
+        if (form.signup_type !== "me") {
+  if (children.length === 0) {
+    setErr("Veuillez ajouter au moins un enfant.");
+    return;
+  }
+
+  if (
+  children.some(
+  c =>
+    !c.first_name.trim() ||
+    !c.last_name.trim() ||
+    !c.birth_date ||
+    !c.sex
+)
+) {
+  setErr("Veuillez compléter le nom, la date de naissance et le sexe de chaque enfant.");
+  return;
+}
+
+}
+
+
         setShowDocsModal(true);
       }
     }}
@@ -360,6 +505,7 @@ if (!session?.access_token) {
         {showDocsModal && (
           <SignupDocsModal
             fullName={[form.first_name, form.middle_name, form.last_name].filter(Boolean).join(" ")}
+            childrenNames={children.map(buildChildFullName).filter(Boolean)}
             signupType={form.signup_type}
             onClose={() => setShowDocsModal(false)}
             onDone={(results) => {

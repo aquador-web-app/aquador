@@ -79,6 +79,7 @@ async function sendHTMLToPDFAndUpload({ html, formName, fullName, safeName }) {
  */
 export default function SignupDocsModal({
   fullName = "",
+  childrenNames = [], // 👈 ADD THIS
   signupType = "me",
   enabledDocs = { rules: true, accord: true, consent: true },
   initialStep,
@@ -104,7 +105,7 @@ function getPrevEnabledStep(current) {
   [fullName]
 );
 if (!safeName || safeName.length < 2) {
-  throw new Error("Nom invalide pour la génération des documents.");
+  return null; // or loader
 }
 
 const FIRST_ENABLED_STEP = useMemo(() => {
@@ -203,11 +204,43 @@ useEffect(() => {
   const [accordParentSignature, setAccordParentSignature] = useState(null);
   const [accordIdNumber, setAccordIdNumber] = useState(""); // NIF/CIN
   const [accordSigningFor, setAccordSigningFor] = useState(""); // Personne dont je suis responsable (enfants, etc.)
+  useEffect(() => {
+  if (
+    (signupType === "me_student" || signupType === "children_only") &&
+    childrenNames.length > 0
+  ) {
+    const joined = childrenNames.join(", ");
+
+    setRulesSigningFor((prev) => (prev ? prev : joined));
+    setAccordSigningFor((prev) => (prev ? prev : joined));
+  }
+}, [signupType, childrenNames]);
+
 
   // === Step 3: Consentement (photo/vidéo) ===
   const [consentSignature, setConsentSignature] = useState(null);
   const [consentParentSignature, setConsentParentSignature] = useState(null);
-  const [consentNames, setConsentNames] = useState([""]); // dynamic list (self + children)
+  const [consentNames, setConsentNames] = useState([]); // dynamic list (self + children)
+  useEffect(() => {
+  const names = [];
+
+  if (fullName) {
+    names.push(fullName); // adult always first
+  }
+
+  if (
+    (signupType === "me_student" || signupType === "children_only") &&
+    childrenNames.length > 0
+  ) {
+    names.push(...childrenNames);
+  }
+
+  // Only initialize once (do not overwrite manual edits)
+  setConsentNames((prev) =>
+    prev.length ? prev : names.length ? names : [""]
+  );
+}, [fullName, childrenNames, signupType]);
+
   const addConsentRow = () => setConsentNames((s) => [...s, ""]);
   const removeConsentRow = (idx) =>
     setConsentNames((s) => s.filter((_, i) => i !== idx));
@@ -652,14 +685,19 @@ Des frais d’adhésion annuels de USD 30.00 devront être versés au début de 
   fullName,
   safeName: safeName,
 });
-      setResults((r) => [...r, { form_name: "Accord du participant", url }]);
-      // Next
-      const next = getNextEnabledStep(2);
+      const newResults = [
+  ...results,
+  { form_name: "Accord du participant", url },
+];
+setResults(newResults);
+
+const next = getNextEnabledStep(2);
 if (next) setStep(next);
 else {
-  onDone?.(results);
+  onDone?.(newResults);
   onClose?.();
 }
+
 
     } catch (err) {
       setUiError(err.message || String(err));
@@ -731,7 +769,6 @@ try {
     // 3️⃣ Record results
     const item = { form_name: "Règlements", url: pdfUrl };
     if (idUrl) item.id_file_url = idUrl;
-    setResults((r) => [...r, item]);
 
     // 4️⃣ Insert both into `documents` table
     try {
@@ -768,13 +805,18 @@ try {
     }
 
     // 5️⃣ Move to next step (ACCORD DU PARTICIPANT)
+    const newResults = [...results, item];
+setResults(newResults);
+
     setSaving(false);
-    const next = getNextEnabledStep(1);
+const next = getNextEnabledStep(1);
+
 if (next) setStep(next);
 else {
-  onDone?.(results);
+  onDone?.(newResults);
   onClose?.();
 }
+
 
 
     // 5️⃣ Done — close modal and continue
@@ -817,10 +859,15 @@ async function saveContent() {
 });
 
 
-    setResults((r) => [...r, { form_name: "Formulaire de consentement", url }]);
+    const newResults = [
+  ...results,
+  { form_name: "Formulaire de consentement", url },
+];
 
-    onDone?.([...results, { form_name: "Formulaire de consentement", url }]);
-    onClose?.();
+setResults(newResults);
+onDone?.(newResults);
+onClose?.();
+
   } catch (err) {
     setUiError(err.message || String(err));
   } finally {
