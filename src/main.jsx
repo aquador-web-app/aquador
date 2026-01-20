@@ -1,36 +1,44 @@
-// 🛑 CRITICAL: Fix blank page when PWA resumes without hash
-if (!window.location.hash) {
-  window.location.replace("/#/login");
+// 🛑 CRITICAL: Fix blank page when PWA resumes at "/"
+if (
+  window.location.pathname === "/" &&
+  !window.location.search &&
+  !window.location.hash
+) {
+  window.location.replace("/login");
 }
 
-import React from 'react'
-import ReactDOM from 'react-dom/client'
-import { BrowserRouter } from "react-router-dom"
-import App from './App'
-import './styles/index.css'
-import 'react-phone-number-input/style.css'
-import { AuthProvider } from "./context/AuthContext"
-import { GlobalAlertProvider } from "./components/GlobalAlert"
-import OneSignal from 'react-onesignal'
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { BrowserRouter } from "react-router-dom";
+import App from "./App";
+import "./styles/index.css";
+import "react-phone-number-input/style.css";
+import { AuthProvider } from "./context/AuthContext";
+import { GlobalAlertProvider } from "./components/GlobalAlert";
+import OneSignal from "react-onesignal";
+
+// 🧨 Optional SW reset via ?sw-reset
+if ("serviceWorker" in navigator && window.location.search.includes("sw-reset")) {
+  navigator.serviceWorker.getRegistrations().then((regs) => {
+    regs.forEach((reg) => reg.unregister());
+  });
+
+  caches.keys().then((keys) => {
+    keys.forEach((key) => caches.delete(key));
+  });
+}
 
 // 🔄 Reload ONCE when a new Service Worker takes control
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.addEventListener("controllerchange", () => {
-    const reloaded = sessionStorage.getItem("sw-reloaded");
-
-    if (reloaded) return;
-
+    if (sessionStorage.getItem("sw-reloaded")) return;
     sessionStorage.setItem("sw-reloaded", "true");
     window.location.reload();
   });
 }
 
 async function bootstrap() {
-  const allowedHosts = [
-    "clubaquador.com",
-    "www.clubaquador.com",
-  ];
-
+  const allowedHosts = ["clubaquador.com", "www.clubaquador.com"];
   const isProdDomain = allowedHosts.includes(window.location.hostname);
 
   if (isProdDomain) {
@@ -42,8 +50,6 @@ async function bootstrap() {
     } catch (err) {
       console.error("❌ OneSignal init failed", err);
     }
-  } else {
-    console.log("ℹ️ OneSignal skipped on", window.location.hostname);
   }
 
   ReactDOM.createRoot(document.getElementById("root")).render(

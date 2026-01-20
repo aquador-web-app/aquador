@@ -75,6 +75,16 @@ try {
     }
   }, [])
 
+  useEffect(() => {
+  const timer = setTimeout(() => {
+    console.error("⏱️ Auth timeout fallback");
+    setUser(null);
+    setLoading(false);
+  }, 5000);
+
+  return () => clearTimeout(timer);
+}, []);
+
   return (
     <AuthContext.Provider value={{ user, loading }}>
       {children}
