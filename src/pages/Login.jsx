@@ -48,6 +48,25 @@ usePWAHardwareBack({
   },
 });
 
+  
+useEffect(() => {
+  if (loading || !user) return;
+
+  const role = (user.role || "").toLowerCase();
+
+  if (role === "admin" || role === "assistant") {
+    navigate("/admin", { replace: true });
+    return;
+  }
+
+  if (role === "teacher") {
+    navigate("/teacher", { replace: true });
+    return;
+  }
+
+  // default: normal user / influencer / student / club user
+  navigate("/user", { replace: true });
+}, [user, loading, navigate]);
 
 
 
