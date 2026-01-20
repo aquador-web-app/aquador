@@ -108,7 +108,7 @@ function SidebarSub({
 function SubGroup({
   title,
   prefix,
-  defaultTab,        // 👈 NEW
+  defaultTab,
   activeTab,
   setActiveTab,
   closeSidebar,
@@ -116,16 +116,24 @@ function SubGroup({
 }) {
   const open = activeTab.startsWith(prefix);
 
+  // 🔑 detect mobile sidebar (PWA)
+  const isMobile = typeof window !== "undefined" &&
+    window.matchMedia("(max-width: 767px)").matches;
+
   return (
     <div>
       <button
         onClick={() => {
+          // 📱 MOBILE / PWA → ONLY expand / collapse
+          if (isMobile) {
+            setActiveTab(open ? "" : prefix);
+            return;
+          }
+
+          // 🖥️ DESKTOP → auto-navigate to default tab
           if (!open && defaultTab) {
-            // 👇 go directly to first sub-tab
             setActiveTab(defaultTab);
-            closeSidebar();
           } else {
-            // toggle close only
             setActiveTab("");
           }
         }}
@@ -147,6 +155,7 @@ function SubGroup({
     </div>
   );
 }
+
 
 
 
