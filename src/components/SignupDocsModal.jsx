@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
-import SignaturePad from "./SignaturePad";
+import SignatureField from "./SignatureField";
 import { sanitizeFullName } from "../lib/sanitizeFullName";
 
 
@@ -1092,43 +1092,50 @@ async function saveContent() {
           {/* Signature area (Pad) */}
           <div className="grid grid-cols-1 gap-4">
             {step === 1 && (
-              <div className="sm:col-span-2">
-                <div className="text-sm font-semibold mb-2">Signature</div>
-                <SignaturePad onSave={setRulesSignature} />
-              </div>
-            )}
+  <SignatureField
+    label="Signature"
+    value={rulesSignature}
+    onChange={setRulesSignature}
+  />
+)}
 
-            {step === 2 && (
-              <>
-                <div>
-                  <div className="text-sm font-semibold mb-2">Signature du participant</div>
-                  <SignaturePad onSave={setAccordSignature} />
-                </div>
-                {needParentSection && (
-                  <div>
-                    <div className="text-sm font-semibold mb-2">Signature du parent/tuteur</div>
-                    <SignaturePad onSave={setAccordParentSignature} />
-                  </div>
-                )}
-              </>
-            )}
+{step === 2 && (
+  <>
+    <SignatureField
+      label="Signature du participant"
+      value={accordSignature}
+      onChange={setAccordSignature}
+    />
 
-            {step === 3 && (
-              <>
-                <div>
-                  <div className="text-sm font-semibold mb-2">Signature (adulte)</div>
-                  <SignaturePad onSave={setConsentSignature} />
-                </div>
-                {needParentSection && (
-                  <div>
-                    <div className="text-sm font-semibold mb-2">Signature du parent/tuteur</div>
-                    <SignaturePad onSave={setConsentParentSignature} />
-                  </div>
-                )}
-              </>
-            )}
+    {needParentSection && (
+      <SignatureField
+        label="Signature du parent / tuteur"
+        value={accordParentSignature}
+        onChange={setAccordParentSignature}
+      />
+    )}
+  </>
+)}
+
+{step === 3 && (
+  <>
+    <SignatureField
+      label="Signature (adulte)"
+      value={consentSignature}
+      onChange={setConsentSignature}
+    />
+
+    {needParentSection && (
+      <SignatureField
+        label="Signature du parent / tuteur"
+        value={consentParentSignature}
+        onChange={setConsentParentSignature}
+      />
+    )}
+  </>
+)}
           </div>
-        </div>
+        </div>  
 
         {/* Footer buttons */}
         <div className="px-4 sm:px-6 py-3 border-t flex items-center justify-between">
