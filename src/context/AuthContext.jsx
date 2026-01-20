@@ -32,19 +32,22 @@ export function AuthProvider({ children }) {
   const mergedUser = { ...session.user, ...profile }
   setUser(mergedUser)
 
-  // 🔔 LINK DEVICE TO USER FOR PUSH (THIS IS THE KEY LINE)
-  try {
-    await OneSignal.login(session.user.id)
+  // 🔔 OneSignal must NEVER block auth
+try {
+  OneSignal.login(session.user.id)
+    .then(() => {
+      if (profile?.role) {
+        OneSignal.sendTag("role", profile.role)
+      }
+      console.log("🔔 OneSignal linked to user", session.user.id)
+    })
+    .catch((err) => {
+      console.error("❌ OneSignal login failed", err)
+    })
+} catch (err) {
+  console.error("❌ OneSignal setup error", err)
+}
 
-    // OPTIONAL: tag role (for admin pushes later)
-    if (profile?.role) {
-      await OneSignal.sendTag("role", profile.role)
-    }
-
-    console.log("🔔 OneSignal linked to user", session.user.id)
-  } catch (err) {
-    console.error("❌ OneSignal login failed", err)
-  }
 }
 
 
