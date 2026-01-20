@@ -5,7 +5,7 @@ if (!window.location.hash) {
 
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { HashRouter } from 'react-router-dom'
+import { BrowserRouter } from "react-router-dom"
 import App from './App'
 import './styles/index.css'
 import 'react-phone-number-input/style.css'
@@ -48,13 +48,13 @@ async function bootstrap() {
 
   ReactDOM.createRoot(document.getElementById("root")).render(
     <React.StrictMode>
-      <HashRouter>
+      <BrowserRouter>
         <AuthProvider>
           <GlobalAlertProvider>
             <App />
           </GlobalAlertProvider>
         </AuthProvider>
-      </HashRouter>
+      </BrowserRouter>
     </React.StrictMode>
   );
 }
