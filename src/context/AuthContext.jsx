@@ -1,87 +1,105 @@
-import { createContext, useContext, useEffect, useState } from "react"
-import { supabase } from "../lib/supabaseClient"
-import OneSignal from "react-onesignal"
+import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { supabase } from "../lib/supabaseClient";
+import OneSignal from "react-onesignal";
 
-
-const AuthContext = createContext(null)
+const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // 🔐 Single resolver for session → profile → user
+  const resolvingRef = useRef(false);
+
+  // 🔐 SAFE resolver: session is truth; profile is optional
   const resolveUser = async (session) => {
-  try {
-    if (!session?.user) {
-      setUser(null);
-      return;
+    // prevent overlapping resolves
+    if (resolvingRef.current) return;
+    resolvingRef.current = true;
+
+    try {
+      if (!session?.user) {
+        setUser(null);
+        return;
+      }
+
+      setLoading(true);
+
+      let profile = null;
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", session.user.id)
+          .maybeSingle();
+
+        if (error) console.warn("⚠️ Profile fetch error:", error);
+        profile = data;
+      } catch (e) {
+        console.warn("⚠️ Profile fetch threw:", e);
+      }
+
+      const safeUser = {
+        id: session.user.id,
+        email: session.user.email,
+        role: profile?.role ?? "user",
+        full_name: profile?.full_name ?? "",
+        permissions: Array.isArray(profile?.permissions) ? profile.permissions : [],
+      };
+
+      setUser(safeUser);
+
+      // 🔔 OneSignal must NEVER block auth
+      try {
+        OneSignal.login(session.user.id).catch(() => {});
+        if (safeUser.role) OneSignal.sendTag("role", safeUser.role).catch(() => {});
+      } catch {
+        // ignore
+      }
+    } finally {
+      setLoading(false);
+      resolvingRef.current = false;
     }
+  };
 
-    setLoading(true);
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", session.user.id)
-      .maybeSingle();
-
-    // 🔴 HARD NORMALIZATION
-    const safeUser = {
-      id: session.user.id,
-      email: session.user.email,
-      role: profile?.role ?? "user",        // ALWAYS DEFINED
-      full_name: profile?.full_name ?? "",
-      permissions: profile?.permissions ?? [],
-    };
-
-    setUser(safeUser);
-  } catch (err) {
-    console.error("❌ resolveUser crash", err);
-    setUser(null);
-  } finally {
-    setLoading(false);
-  }
-};
-
-
+  // 1️⃣ initial session + auth changes
   useEffect(() => {
-    let mounted = true
+    let mounted = true;
 
-    // 1️⃣ Initial load
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (mounted) resolveUser(session)
-    })
+      if (mounted) resolveUser(session);
+    });
 
-    // 2️⃣ Auth changes (login / logout / refresh)
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (mounted) resolveUser(session)
-    })
+    const { data: { subscription } } =
+      supabase.auth.onAuthStateChange((_event, session) => {
+        if (mounted) resolveUser(session);
+      });
 
     return () => {
-      mounted = false
-      subscription.unsubscribe()
-    }
-  }, [])
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
 
+  // 2️⃣ ⏱️ loader failsafe (NEVER logs out)
   useEffect(() => {
-  const timer = setTimeout(() => {
-    console.error("⏱️ Auth timeout fallback");
-    setUser(null);
-    setLoading(false);
-  }, 5000);
+    if (!loading) return;
 
-  return () => clearTimeout(timer);
-}, []);
+    const timer = setTimeout(() => {
+      // If we're still loading after 12s, stop the loader but DON'T clear user.
+      console.error("⏱️ Auth loader timeout — stopping loader (no logout)");
+      setLoading(false);
+    }, 12000);
+
+    return () => clearTimeout(timer);
+  }, [loading]);
 
   return (
     <AuthContext.Provider value={{ user, loading }}>
       {children}
     </AuthContext.Provider>
-  )
+  );
 }
 
 export function useAuth() {
-  return useContext(AuthContext)
+  return useContext(AuthContext);
 }
