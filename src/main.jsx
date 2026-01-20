@@ -1,3 +1,8 @@
+// 🛑 CRITICAL: Fix blank page when PWA resumes without hash
+if (!window.location.hash) {
+  window.location.replace("/#/login");
+}
+
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
