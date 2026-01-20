@@ -157,9 +157,6 @@ function SubGroup({
 }
 
 
-
-
-
 function getHaitiNow() {
   return new Date(
     new Date().toLocaleString("en-US", { timeZone: "America/Port-au-Prince" })
@@ -189,7 +186,7 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("overview")
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false)
 
-  const [openReports, setOpenReports] = useState(false)
+
   const [userCount, setUserCount] = useState(0)
   const [courseCount, setCourseCount] = useState(0)
   const [parentCount, setParentCount] = useState(0);
@@ -244,6 +241,64 @@ const didInitClubRef = useRef(false);
 
 
 const [role, setRole] = useState(null);
+
+// =============================
+// 🔄 Realtime refresh (debounced)
+// =============================
+const refreshTimeout = useRef(null);
+
+function debounceRefresh(fn, delay = 400) {
+  clearTimeout(refreshTimeout.current);
+  refreshTimeout.current = setTimeout(fn, delay);
+}
+
+const fetchUnread = async () => {
+  const { count, error } = await supabase
+    .from("notifications")
+    .select("*", { count: "exact", head: true })
+    .eq("read", false)
+    .is("user_id", null);
+
+  if (!error) {
+    setUnreadCount(count || 0);
+  }
+};
+
+const realtimeRefresh = (type) => {
+  debounceRefresh(() => {
+    switch (type) {
+      case "profiles":
+        fetchStats();
+        fetchBirthdays();
+        break;
+
+      case "enrollments":
+        fetchStats();
+        fetchSessions();
+        break;
+
+      case "invoices":
+        fetchStats();
+        break;
+
+      case "attendance":
+        fetchStats();
+        break;
+
+      case "notifications":
+        fetchUnread();
+        break;
+
+      case "consents":
+        fetchStats();
+        break;
+
+      default:
+        fetchStats();
+    }
+  });
+};
+
 
 const fetchStats = async () => {
   setStatsLoaded(false);
@@ -475,52 +530,6 @@ useEffect(() => {
 }, []);
 
 
-
-useEffect(() => {
-  let isMounted = true;
-
-  async function fetchUnread() {
-    // ✅ Only admin/global notifications (user_id IS NULL)
-    const { count, error } = await supabase
-      .from("notifications")
-      .select("*", { count: "exact", head: true })
-      .eq("read", false)
-      .is("user_id", null);
-
-    if (!error && isMounted) {
-      setUnreadCount(count || 0);
-    } else if (error) {
-      console.error("❌ Error fetching admin notifications:", error.message);
-    }
-  }
-
-  // 🔹 Initial load
-  fetchUnread();
-
-  // 🔹 Realtime updates
-  const channel = supabase
-  .channel("admin_notifications_realtime")
-  .on(
-    "postgres_changes",
-    { event: "*", schema: "public", table: "notifications" },
-    (payload) => {
-      if (!payload.new?.user_id) {
-        fetchUnread();
-      }
-    }
-  )
-  .subscribe();
-
-
-  return () => {
-    isMounted = false;
-    supabase.removeChannel(channel);
-  };
-}, []);
-
-
-
-
 useEffect(() => {
   fetchBirthdays();
   fetchSessions();
@@ -668,56 +677,42 @@ useEffect(() => {
   const channel = supabase
     .channel("admin-dashboard-realtime")
 
-    // 👤 USERS / PROFILES
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "profiles" },
-      () => {
-        console.log("🔄 profiles changed → refresh stats");
-        fetchStats();
-        fetchBirthdays();
-      }
+      () => realtimeRefresh("profiles")
     )
 
-    // 🧾 ENROLLMENTS
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "enrollments" },
-      () => {
-        console.log("🔄 enrollments changed → refresh stats & sessions");
-        fetchStats();
-        fetchSessions();
-      }
+      () => realtimeRefresh("enrollments")
     )
 
-    // 💰 INVOICES
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "invoices" },
-      () => {
-        console.log("🔄 invoices changed → refresh stats");
-        fetchStats();
-      }
+      () => realtimeRefresh("invoices")
     )
 
-    // 📄 CONSENTEMENTS SIGNÉS (storage trigger already writes DB)
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "attendance" },
+      () => realtimeRefresh("attendance")
+    )
+
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "consentements_signed" },
-      () => {
-        console.log("🔄 consentements changed → refresh stats");
-        fetchStats();
-      }
+      () => realtimeRefresh("consents")
     )
 
-    // 🔔 ADMIN NOTIFICATIONS
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "notifications" },
       (payload) => {
         if (!payload.new?.user_id) {
-          console.log("🔔 admin notification update");
-          setUnreadCount((prev) => prev + 1);
+          realtimeRefresh("notifications");
         }
       }
     )
@@ -728,6 +723,7 @@ useEffect(() => {
     supabase.removeChannel(channel);
   };
 }, []);
+
 
 useEffect(() => {
   fetchStats();
@@ -1458,7 +1454,14 @@ const totalUtilisateursPlateforme =
   <div className="ml-4 mt-2 flex flex-col space-y-2">
 
     {/* Aperçu */}
-    <SidebarBtn id="overview" icon={<FaChartBar />} label="Aperçu" />
+    <SidebarBtn
+  id="overview"
+  icon={<FaChartBar />}
+  label="Aperçu"
+  activeTab={activeTab}
+  setActiveTab={setActiveTab}
+  closeSidebar={() => setSidebarOpen(false)}
+/>
 
     {/* Users */}
     {!isHidden("users") && (
