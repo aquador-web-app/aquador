@@ -724,6 +724,11 @@ useEffect(() => {
   };
 }, []);
 
+// 🔔 Initial unread notifications count
+useEffect(() => {
+  fetchUnread();
+}, []);
+
 
 useEffect(() => {
   fetchStats();
