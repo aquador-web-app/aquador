@@ -79,7 +79,9 @@ const goToTabAnd = (tab, fn) => {
 
 
   // States
-  const [activeTab, setActiveTab] = useState("overview")
+  const [activeTab, setActiveTab] = useState(() => {
+    return sessionStorage.getItem("userDashboardActiveTab") || "overview";
+  });
   const [invoiceSubTab, setInvoiceSubTab] = useState("factures");
   const [referrals, setReferrals] = useState([])
   const [invoices, setInvoices] = useState([])
@@ -95,7 +97,10 @@ const goToTabAnd = (tab, fn) => {
   const [credit, setCredit] = useState(0);
   const [pendingCommission, setPendingCommission] = useState(0) // not yet requested
   const [requests, setRequests] = useState([])                  // last commission requests
-  const [showAddChildForm, setShowAddChildForm] = useState(false);
+  const [showAddChildForm, setShowAddChildForm] = useState(() => {
+  return sessionStorage.getItem("userDashboard_showAddChildForm") === "true";
+});
+
   const [openClasses, setOpenClasses] = useState(false);
   const [openCommissions, setOpenCommissions] = useState(false);
   const [openBoutique, setOpenBoutique] = useState(false);
@@ -115,6 +120,19 @@ const goToTabAnd = (tab, fn) => {
     );
   }
 }, [clubStatus]);
+
+useEffect(() => {
+  sessionStorage.setItem(
+    "userDashboard_showAddChildForm",
+    showAddChildForm ? "true" : "false"
+  );
+}, [showAddChildForm]);
+
+useEffect(() => {
+  if (activeTab) {
+    sessionStorage.setItem("userDashboardActiveTab", activeTab);
+  }
+}, [activeTab]);
 
 
   useEffect(() => {
@@ -152,19 +170,24 @@ const goToTabAnd = (tab, fn) => {
 
 // 🎯 Determine default tab based on combined membership
 useEffect(() => {
-  if (!membershipReady) return; // wait until both school + club are known
+  if (!membershipReady) return;
 
-  // 1️⃣ Club-only → go to Club Aperçu
+  // 🚫 Do NOT override if a tab was already restored
+  const storedTab = sessionStorage.getItem("userDashboardActiveTab");
+  if (storedTab) return;
+
+  // 1️⃣ Club-only → default to club overview
   if (!isSchoolMember && isClubMember) {
     setActiveTab("club-overview");
     return;
   }
 
-  // 2️⃣ School-only OR School+Club → go to School Aperçu
+  // 2️⃣ School (or school+club) → default to overview
   if (isSchoolMember) {
     setActiveTab("overview");
   }
 }, [membershipReady, isSchoolMember, isClubMember]);
+
 
 
   
@@ -775,15 +798,16 @@ useEffect(() => {
   {/* RIGHT COLUMN — Buttons */}
   <div className="flex justify-center md:justify-center items-center gap-4 mt-4 md:mt-0">
     <button
-      onClick={() => {
-  setActiveTab("profile");
-  closeSidebarOnMobile();
-    setShowAddChildForm(true); // 👈 immediately open the form
+  onClick={() => {
+    setActiveTab("profile");
+    setShowAddChildForm(true);
+    sessionStorage.setItem("userDashboard_showAddChildForm", "true");
   }}
-      className="px-5 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow hover:bg-blue-700 transition-all"
-    >
-      Ajouter une personne
-    </button>
+  className="px-5 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow hover:bg-blue-700 transition-all"
+>
+  Ajouter une personne
+</button>
+
 
     <button
       onClick={() => {

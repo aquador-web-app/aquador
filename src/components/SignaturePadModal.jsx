@@ -1,19 +1,44 @@
-import { useRef } from "react";
+import { useRef, useEffect } from "react";
 import SignatureCanvas from "react-signature-canvas";
 
 export default function SignaturePadModal({ open, onClose, onSave }) {
-  const ref = useRef(null);
+  const sigRef = useRef(null);
+  const wrapperRef = useRef(null);
 
-  if (!open) return null;
+  // ✅ Hooks are ALWAYS called
+  useEffect(() => {
+    if (!open) return;
 
-  const clear = () => ref.current?.clear();
+    // Wait until SignatureCanvas is mounted
+    requestAnimationFrame(() => {
+      if (!sigRef.current || !wrapperRef.current) return;
+
+      const canvas = sigRef.current.getCanvas?.();
+      if (!canvas) return;
+
+      const rect = wrapperRef.current.getBoundingClientRect();
+      const ratio = window.devicePixelRatio || 1;
+
+      // 🔥 Critical: real canvas resolution
+      canvas.width = rect.width * ratio;
+      canvas.height = rect.height * ratio;
+
+      const ctx = canvas.getContext("2d");
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    });
+  }, [open]);
+
+  const clear = () => sigRef.current?.clear();
 
   const save = () => {
-    if (!ref.current || ref.current.isEmpty()) return;
-    const data = ref.current.toDataURL("image/png");
+    if (!sigRef.current || sigRef.current.isEmpty()) return;
+    const data = sigRef.current.toDataURL("image/png");
     onSave(data);
     onClose();
   };
+
+  // ✅ Conditional rendering AFTER hooks
+  if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-[9999] bg-black/70 flex items-center justify-center">
@@ -21,21 +46,32 @@ export default function SignaturePadModal({ open, onClose, onSave }) {
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b">
           <h2 className="font-semibold">Signer</h2>
-          <button onClick={onClose} className="text-sm px-3 py-1 rounded bg-gray-100">
+          <button
+            onClick={onClose}
+            className="text-sm px-3 py-1 rounded bg-gray-100"
+          >
             Fermer
           </button>
         </div>
 
         {/* Canvas */}
-        <div className="flex-1 bg-gray-100 p-2">
+        <div ref={wrapperRef} className="flex-1 bg-gray-100 p-2">
           <SignatureCanvas
-            ref={ref}
-            penColor="black"
-            backgroundColor="white"
-            canvasProps={{
-              className: "w-full h-full rounded-md",
-            }}
-          />
+  ref={sigRef}
+  penColor="#000000"
+  backgroundColor="white"
+  minWidth={2.5}
+  maxWidth={5}
+  throttle={8}
+  velocityFilterWeight={0.3}
+  canvasProps={{
+    style: {
+      width: "100%",
+      height: "100%",
+      borderRadius: "8px",
+    },
+  }}
+/>
         </div>
 
         {/* Actions */}

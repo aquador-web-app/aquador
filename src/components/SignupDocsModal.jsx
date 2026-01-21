@@ -204,23 +204,54 @@ useEffect(() => {
   const [accordParentSignature, setAccordParentSignature] = useState(null);
   const [accordIdNumber, setAccordIdNumber] = useState(""); // NIF/CIN
   const [accordSigningFor, setAccordSigningFor] = useState(""); // Personne dont je suis responsable (enfants, etc.)
-  useEffect(() => {
-  if (
-    (signupType === "me_student" || signupType === "children_only") &&
-    childrenNames.length > 0
-  ) {
-    const joined = childrenNames.join(", ");
-
-    setRulesSigningFor((prev) => (prev ? prev : joined));
-    setAccordSigningFor((prev) => (prev ? prev : joined));
-  }
-}, [signupType, childrenNames]);
 
 
   // === Step 3: Consentement (photo/vidéo) ===
   const [consentSignature, setConsentSignature] = useState(null);
   const [consentParentSignature, setConsentParentSignature] = useState(null);
   const [consentNames, setConsentNames] = useState([]); // dynamic list (self + children)
+
+  // ✅ SINGLE SOURCE OF TRUTH — DO NOT DUPLICATE
+useEffect(() => {
+  if (!fullName) return;
+
+  // 1️⃣ children_only → ONLY children
+  if (signupType === "children_only") {
+    const joinedChildren = childrenNames.join(", ");
+
+    setRulesSigningFor((prev) => (prev ? prev : joinedChildren));
+    setAccordSigningFor((prev) => (prev ? prev : joinedChildren));
+
+    setConsentNames((prev) =>
+      prev.length ? prev : [...childrenNames]
+    );
+    return;
+  }
+
+  // 2️⃣ me_student → adult + children
+  if (signupType === "me_student") {
+    const joinedAll = [fullName, ...childrenNames].join(", ");
+
+    setRulesSigningFor((prev) => (prev ? prev : joinedAll));
+    setAccordSigningFor((prev) => (prev ? prev : joinedAll));
+
+    setConsentNames((prev) =>
+      prev.length ? prev : [fullName, ...childrenNames]
+    );
+    return;
+  }
+
+  // 3️⃣ me → adult only
+  setRulesSigningFor((prev) => (prev ? prev : fullName));
+  setAccordSigningFor((prev) => (prev ? prev : fullName));
+
+  setConsentNames((prev) =>
+    prev.length ? prev : [fullName]
+  );
+}, [signupType, fullName, childrenNames]);
+
+
+
   useEffect(() => {
   const names = [];
 
@@ -933,7 +964,7 @@ onClose?.();
                   className="w-full border rounded-md px-3 py-2"
                   value={accordIdNumber}
                   onChange={(e) => setAccordIdNumber(e.target.value)}
-                  placeholder="Ex.: 004-697-213-8"
+                  placeholder="Ex.: 000-000-000-0 ou 0000000000"
                 />
               </div>
               <div className="sm:col-span-2">

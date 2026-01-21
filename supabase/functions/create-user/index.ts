@@ -60,111 +60,173 @@ async function generateUniqueChildEmail(first: string, last: string) {
     i++;
   }
 }
-async function createChildWithFullFlow({
+async function createChild({
   parent_id,
   first_name,
   middle_name,
   last_name,
   birth_date,
   sex,
-  referral_code,
+  referral_code = null, // ✅ ADD THIS
 }) {
-  console.log("👶 Creating child profile for parent:", parent_id);
+  // 1) Try view first (to get same address / referral as UI)
+      let { data: parent, error: parentErr } = await supabaseAdmin
+        .from("profiles_with_unpaid")
+        .select("id, signup_type, phone, address, referral_code, household_sequence")
+        .eq("id", parent_id)
+        .maybeSingle();
 
-  // 1) Load parent
-  let { data: parent } = await supabaseAdmin
-    .from("profiles_with_unpaid")
-    .select("id, signup_type, phone, address, referral_code, household_sequence")
-    .eq("id", parent_id)
-    .maybeSingle();
+      if (parentErr) {
+        console.error("❌ Error loading parent from view:", parentErr);
+      }
 
-  if (!parent) {
-    const { data: parent2 } = await supabaseAdmin
-      .from("profiles")
-      .select("id, signup_type, phone, address, referral_code, household_sequence")
-      .eq("id", parent_id)
-      .maybeSingle();
+      // 2) Fallback to real table if needed
+      if (!parent) {
+        const { data: parent2, error: parentErr2 } = await supabaseAdmin
+          .from("profiles")
+          .select("id, signup_type, phone, address, referral_code, household_sequence")
+          .eq("id", parent_id)
+          .maybeSingle();
 
-    parent = parent2;
-  }
+        if (parentErr2) {
+          console.error("❌ Error loading parent from base table:", parentErr2);
+        }
 
-  if (!parent) throw new Error("Parent not found");
+        parent = parent2;
+      }
 
-  // Upgrade parent signup type if needed
-  if (parent.signup_type === "me") {
-    await supabaseAdmin
-      .from("profiles")
-      .update({ signup_type: "me_student" })
-      .eq("id", parent_id);
-  }
+      if (!parent) throw new Error("Parent not found");
 
-  // Generate fake child auth
-  const safeFirst = sanitizeEmailPart(first_name || "child");
-  const safeLast = sanitizeEmailPart(last_name || "");
-  const fakeEmail = await generateUniqueChildEmail(safeFirst, safeLast);
-  const fakePassword = crypto.randomUUID();
+      console.log("👨‍👩‍👧 Parent snapshot:", {
+        id: parent.id,
+        signup_type: parent.signup_type,
+        address: parent.address,
+        referral_code: parent.referral_code,
+        household_sequence: parent.household_sequence,
+      });
 
-  const { data: authChild, error: authErr } =
-    await supabaseAdmin.auth.admin.createUser({
-      email: fakeEmail,
-      password: fakePassword,
-      email_confirm: true,
-    });
+      // upgrade parent type if necessary
+      if (parent.signup_type === "me") {
+        await supabaseAdmin
+          .from("profiles")
+          .update({ signup_type: "me_student" })
+          .eq("id", parent_id);
+      }
 
-  if (authErr) throw new Error(authErr.message);
-  const childId = authChild.user.id;
+      // generate unique dummy email
+      const safeFirst = sanitizeEmailPart(first_name || "child");
+      const safeLast  = sanitizeEmailPart(last_name || "");
+      const fakeEmail = await generateUniqueChildEmail(safeFirst, safeLast);
+      const fakePassword = crypto.randomUUID();
 
-  // Create child profile
-  await supabaseAdmin.from("profiles").upsert(
-    {
-      id: childId,
-      parent_id,
-      first_name,
-      middle_name,
-      last_name,
-      referral_code,
-      role: "student",
-      signup_type: "child",
-      is_active: true,
-      email: fakeEmail,
-      phone: parent.phone,
-      address: parent.address,
-      sex,
-      birth_date,
-      created_by: "parent",
-    },
-    { onConflict: "id" }
-  );
+      // ✅ create auth user for child
+      const { data: authChild, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+        email: fakeEmail,
+        password: fakePassword,
+        email_confirm: true,
+      });
+      if (authErr) throw new Error(`Child auth creation error: ${authErr.message}`);
+      const childId = authChild.user?.id;
+      if (!childId) throw new Error("Missing userId from child auth creation");
 
-  // Household + invoice logic (UNCHANGED)
-  await supabaseAdmin.rpc("assign_household_sequence_for_user", {
-    user_id: childId,
-  });
+      // ✅ create profile linked to auth user
+      const { error: profileErr } = await supabaseAdmin
+        .from("profiles")
+        .upsert(
+          {
+            id: childId,
+            parent_id,
+            first_name,
+            middle_name,
+            last_name,
+            referral_code, // you can keep child's own code in profile
+            role: "student",
+            signup_type: "child",
+            is_active: true,
+            email: fakeEmail,
+            phone: parent.phone,
+            address: parent.address,
+            sex: sex || null,
+            birth_date: birth_date || null,
+            created_by: "parent",
+          },
+          { onConflict: "id" }
+        );
+      if (profileErr) throw new Error(`Child profile upsert error: ${profileErr.message}`);
 
-  const { data: childRow } = await supabaseAdmin
-    .from("profiles")
-    .select("household_sequence")
-    .eq("id", childId)
-    .single();
+      // recalc household + referral
+      await supabaseAdmin.rpc("assign_household_sequence_for_user", { user_id: childId });
 
-  const householdSeq =
-    childRow?.household_sequence || parent.household_sequence || 1;
-  const refCode = parent.referral_code || "XX00";
-  const monthValue = firstOfNextMonth();
+      // retrieve updated values for child (mainly sequence)
+      const { data: childRow } = await supabaseAdmin
+        .from("profiles")
+        .select("household_sequence")
+        .eq("id", childId)
+        .single();
 
-  await supabaseAdmin
-    .from("invoices")
-    .update({
-      invoice_no: `${householdSeq}-${refCode}-1`,
-      description1: "Frais d'inscription (enfant)",
-      amount1: 60,
-      total: 60,
-      signup_type: "child",
-      household_sequence: householdSeq,
-      address: parent.address,
-    })
-    .eq("user_id", childId)
-    .eq("month", monthValue);
+      const householdSeq =
+        childRow?.household_sequence || parent.household_sequence || 1;
+      const refCode = parent.referral_code || "XX00";
+      const parentAddress = parent.address || null;
+
+      // ALWAYS first invoice for child = householdSeq + parentRefCode + "-1"
+const invoiceNo = `${householdSeq}-${refCode}-1`;
+
+
+      const regAmount = 60;
+      const childFullName = [first_name, middle_name, last_name]
+        .filter(Boolean)
+        .join(" ");
+
+      // For the "registration" month
+      const monthValue = firstOfNextMonth();
+
+      const { data: existingInv } = await supabaseAdmin
+        .from("invoices")
+        .select("id, invoice_no, address")
+        .eq("user_id", childId)
+        .eq("month", monthValue)
+        .maybeSingle();
+
+      console.log("📌 CHILD INVOICE DEBUG:", {
+        childId,
+        parentId: parent_id,
+        parentAddress,
+        householdSeq,
+        refCode,
+        invoiceNo,
+        hasExistingInvoice: !!existingInv,
+        existingInvoiceId: existingInv?.id || null,
+        existingInvoiceNo: existingInv?.invoice_no || null,
+      });
+
+      // The registration invoice was created by the trigger.
+// We always UPDATE it (never insert)
+const { error: updErr } = await supabaseAdmin
+  .from("invoices")
+  .update({
+    invoice_no: invoiceNo,
+    full_name: childFullName,
+    description1: "Frais d'inscription (enfant)",
+    amount1: regAmount,
+    total: regAmount,
+    signup_type: "child",
+    household_sequence: householdSeq,
+    address: parentAddress,
+  })
+  .eq("user_id", childId)
+  .eq("month", monthValue);
+
+if (updErr) {
+  throw new Error(`Child invoice update error: ${updErr.message}`);
+}
+
+console.log("♻️ Child invoice UPDATED (trigger invoice reused):", {
+  invoiceNo,
+  address: parentAddress,
+});
+
+return childId;
 }
 
 
@@ -190,14 +252,15 @@ serve(async (req) => {
   email: body.email,
 });
 
+const hasChildrenAtSignup =
+  Array.isArray(body.children) && body.children.length > 0;
 
     // ensure full structure
     const expectedKeys = [
       "user_id", "email", "password", "first_name", "middle_name", "last_name",
       "birth_date", "sex", "phone", "address", "role", "signup_type",
       "parent_id", "referral_code", "referrer_code", "referrer_user_id",
-      "first_lesson", "medical_note", "is_active",
-      "children" // ✅ ADD THIS
+      "first_lesson", "medical_note", "is_active", "children",
     ];
     for (const key of expectedKeys) if (!(key in body)) body[key] = null;
 
@@ -244,6 +307,28 @@ serve(async (req) => {
   referrer_user_id,
 });
 
+
+    // ===============================================================
+    // 1️⃣ CHILD FLOW — parent adds child (with auth & invoice)
+    // ===============================================================
+    if (flow.isChild) {
+      console.log("👶 Creating child profile for parent:", parent_id);
+      const childId = await createChild({
+  parent_id,
+  first_name,
+  middle_name,
+  last_name,
+  birth_date,
+  sex,
+});
+
+console.log("✅ Child setup complete:", childId);
+
+return new Response(
+  JSON.stringify({ success: true, child: childId }),
+  { status: 200, headers: corsHeaders }
+);
+    }
 
     // ===============================================================
     // 2️⃣ MAIN USER FLOW (self / admin / referral)
@@ -295,32 +380,6 @@ serve(async (req) => {
       );
     if (profErr) throw new Error(`Profile upsert error: ${profErr.message}`);
 
-// ===============================================================
-// 👶 CHILDREN CREATED DURING SIGNUP (same logic as later UI)
-// ===============================================================
-if (!flow.isChild && Array.isArray(body.children) && body.children.length > 0) {
-  for (const child of body.children) {
-    if (!child.full_name || !child.full_name.trim()) continue;
-
-    const parts = child.full_name.trim().split(" ");
-    const childFirst = parts[0];
-    const childLast = parts.slice(1).join(" ");
-
-    await createChildWithFullFlow({
-      parent_id: userId,          // ✅ THIS is what triggers child logic
-      first_name: childFirst,
-      middle_name: null,
-      last_name: childLast,
-      birth_date: child.birth_date || null,
-      sex: child.sex || null,
-      referral_code: referral_code || null,
-    });
-  }
-}
-
-
-
-
     // ---------- Referral linking (robust) ----------
 if (!flow.isChild && referrer_code && referrer_code.trim() !== "") {
   console.log("🔗 STEP 3 — ABOUT TO CALL link_referral", {
@@ -339,6 +398,28 @@ if (!flow.isChild && referrer_code && referrer_code.trim() !== "") {
     console.log("✅ Referral linked:", data);
   }
 }
+
+// ===============================================================
+// 3️⃣ FLOW 2 — children added at signup
+// ===============================================================
+if (hasChildrenAtSignup) {
+  console.log("👶 FLOW 2 — adding children at signup for parent:", userId);
+
+  for (const child of body.children) {
+    if (!child.first_name || !child.last_name) continue;
+
+    await createChild({
+      parent_id: userId,
+      first_name: child.first_name,
+      middle_name: child.middle_name || null,
+      last_name: child.last_name,
+      birth_date: child.birth_date || null,
+      sex: child.sex || null,
+    });
+  }
+}
+
+
 
 
     // ---------- Invoice for main user (unchanged for now) ----------

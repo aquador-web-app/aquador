@@ -48,7 +48,7 @@ export default function UserProfile({ userId, onAddChild }) {
 useEffect(() => {
   const fetchChildren = async () => {
     const { data, error } = await supabase
-      .from("profiles_with_unpaid")
+      .from("profiles")
       .select("id, full_name, birth_date, is_active, parent_id")
       .eq("parent_id", profile.id);
 
@@ -324,6 +324,24 @@ function timeRangeWithFallback(start_time, end_time, duration_hours) {
     const index = (d - 1 + 7) % 7;
   return days[index];
   };
+
+  const signingParticipants = [
+  {
+    id: profile.id,
+    full_name: profile.full_name,
+    birth_date: profile.birth_date,
+    role: "responsable",
+  },
+  ...children.map((c) => ({
+    id: c.id,
+    full_name: c.full_name,
+    birth_date: c.birth_date,
+    role: "dependant",
+  })),
+];
+
+const childrenNames = children.map((c) => c.full_name);
+
 
   return (
     <div className="p-4 sm:p-6 space-y-6">
@@ -809,6 +827,7 @@ function timeRangeWithFallback(start_time, end_time, duration_hours) {
   {showResignModal && (
   <SignupDocsModal
     fullName={profile.full_name}
+    childrenNames={childrenNames} 
     signupType={profile.signup_type || "me"}
     enabledDocs={docChoice}
     initialStep={initialStep}
