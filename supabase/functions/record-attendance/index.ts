@@ -51,70 +51,69 @@ serve(async (req) => {
       });
     }
 
-    // --- NEW RULE: Attendance blocked based on invoice status + date ---
-const today = new Date();
-const day = today.getDate();
+// --- NEW RULE: Attendance blocked based on invoice status + Haiti date ---
+const haitiNow = new Date(
+  new Date().toLocaleString("en-US", { timeZone: "America/Port-au-Prince" })
+);
+const day = haitiNow.getDate();
 
+// Find PARENT (invoices belong to parent, not child)
+const { data: prof } = await supabase
+  .from("profiles")
+  .select("parent_id")
+  .eq("id", profile_id)
+  .maybeSingle();
+
+const invoiceOwnerId = prof?.parent_id ?? profile_id;
+
+// Only enforce after the 7th
 if (day >= 8) {
+  // Current month boundaries (Haiti)
+  const monthStart = new Date(haitiNow.getFullYear(), haitiNow.getMonth(), 1)
+    .toISOString()
+    .slice(0, 10);
+
+  const monthEnd = new Date(haitiNow.getFullYear(), haitiNow.getMonth() + 1, 0)
+    .toISOString()
+    .slice(0, 10);
 
   const { data: invoices, error: invErr } = await supabase
     .from("invoices")
-    .select("id, status, total, paid_total")
-    .eq("user_id", profile_id);
+    .select("status, total, paid_total")
+    .eq("user_id", invoiceOwnerId)
+    .gte("issued_at", monthStart)
+    .lte("issued_at", monthEnd);
 
   if (invErr) throw invErr;
 
-  // Always treat as array
   const list = invoices ?? [];
 
-  // Compute real outstanding balances
-  const balances = list
-    .map(inv => {
-      const balance = Number(inv.total) - Number(inv.paid_total);
-      const isUnpaid = (inv.status === "pending" && inv.paid_total === 0);
-      const isPartial = (
-        (inv.status === "partial") ||
-        (inv.status === "pending" && inv.paid_total > 0)
-      );
+  const unpaid = list.some(
+    (i) => i.status === "pending" && Number(i.paid_total) === 0
+  );
 
-      return {
-        id: inv.id,
-        status: inv.status,
-        balance,
-        isUnpaid,
-        isPartial,
-      };
-    })
-    .filter(inv => inv.balance > 0); // only invoices NOT fully paid
+  const partial = list.some(
+    (i) =>
+      i.status === "partial" ||
+      (i.status === "pending" && Number(i.paid_total) > 0)
+  );
 
-  if (balances.length > 0) {
+  let block = false;
 
-    const hasUnpaid = balances.some(inv => inv.isUnpaid);
-    const hasPartial = balances.some(inv => inv.isPartial);
+  if (day >= 8 && day <= 15 && unpaid) block = true;
+  if (day >= 16 && (unpaid || partial)) block = true;
 
-    let block = false;
-
-    // 8 → 15 : block ONLY unpaid
-    if (day >= 8 && day <= 15) {
-      if (hasUnpaid) block = true;
-    }
-
-    // 16 → end : block unpaid + partial
-    if (day >= 16) {
-      if (hasUnpaid || hasPartial) block = true;
-    }
-
-    if (block) {
-      return new Response(
-        JSON.stringify({
-          error:
-            "Merci de régler votre facture avant de pouvoir avoir accès au cours.",
-        }),
-        { status: 403, headers: corsHeaders }
-      );
-    }
+  if (block) {
+    return new Response(
+      JSON.stringify({
+        error:
+          "Merci de régler votre facture avant de pouvoir accéder au cours.",
+      }),
+      { status: 403, headers: corsHeaders }
+    );
   }
 }
+
 
 
     // 2) Find an ACTIVE session on attended_on among those enrollments
