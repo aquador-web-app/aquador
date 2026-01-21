@@ -843,6 +843,8 @@ const totalUtilisateursPlateforme =
 
       {/* === Animated Overview Stats === */}
 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+   {role !== "assistant" && (
+    <>
   {/* Utilisateurs (total on platform) + centered hover breakdown */}
   <motion.div
   ref={userCardRef}
@@ -858,6 +860,7 @@ const totalUtilisateursPlateforme =
   {userCount}
 </h3>
   </motion.div>
+ 
   <HoverOverlay
   anchorRef={userCardRef}
   visible={userHovered}
@@ -915,6 +918,8 @@ const totalUtilisateursPlateforme =
 )}
   </div>
 </HoverOverlay>
+</>
+   )}
 
   {/* Notifications non lues */}
 <motion.div
@@ -986,9 +991,11 @@ const totalUtilisateursPlateforme =
             className="flex justify-between gap-3 bg-red-50 px-2 py-1 rounded-md"
           >
             <span className="truncate">{r.name}</span>
+            {role !== "assistant" && (
             <b className="text-red-600 whitespace-nowrap">
               {formatCurrencyUSD(r.remaining)}
             </b>
+            )}
           </li>
         ))}
       </ul>
@@ -1045,18 +1052,17 @@ const totalUtilisateursPlateforme =
 
 
   {/* Commissions en attente */}
+  {role !== "assistant" && (
   <motion.div
-  className="relative bg-white rounded-2xl p-6 border border-gray-100 shadow-sm cursor-pointer"
-  whileHover={{ scale: 1.03, y: -3 }}
-
-  onClick={() => {
-  if (role !== "assistant") setActiveTab("commissions");
-}}
+    className="relative bg-white rounded-2xl p-6 border border-gray-100 shadow-sm cursor-pointer"
+    whileHover={{ scale: 1.03, y: -3 }}
+    onClick={() => setActiveTab("commissions")}
   >
     <div className="absolute top-0 left-0 h-1 w-full bg-gradient-to-r from-orange-400 to-yellow-400 rounded-t-2xl"></div>
     <p className="text-gray-500 font-medium">Commissions en attente</p>
     <h3 className="text-3xl font-bold text-orange-500">{formatCurrencyUSD(commissions)}</h3>
   </motion.div>
+  )}
 
   {/* Nouveaux inscrits (mois en cours) */}
 <motion.div
