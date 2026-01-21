@@ -271,9 +271,20 @@ serve(async (req) => {
 
   try {
     // ✅ Parse request ONCE
-    const body = await req.json();
-    invoice_id = body.invoice_id;
-    const source = body.source || "on_demand";
+    let body: any = {};
+
+try {
+  const raw = await req.text();
+  if (raw && raw.trim().length > 0) {
+    body = JSON.parse(raw);
+  }
+} catch (e) {
+  console.warn("⚠️ Failed to parse JSON body, continuing safely");
+}
+
+invoice_id = body?.invoice_id ?? null;
+const source = body?.source || "on_demand";
+
 
     if (!invoice_id) {
       return new Response(JSON.stringify({ error: "Missing invoice_id" }), {
