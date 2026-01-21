@@ -3,6 +3,21 @@ import { useState, useEffect, useMemo } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { formatMonth } from "../../lib/dateUtils";
 
+function getAcademicYearFromMonth(monthValue) {
+  if (!monthValue) return "";
+
+  const [year, month] = monthValue.split("-").map(Number);
+
+  // September (9) → December
+  if (month >= 9) {
+    return `${year}-${year + 1}`;
+  }
+
+  // January → August
+  return `${year - 1}-${year}`;
+}
+
+
 export default function AdminFicheTechnique() {
   const [students, setStudents] = useState([]);
   const [studentId, setStudentId] = useState("");
@@ -21,6 +36,7 @@ export default function AdminFicheTechnique() {
     long_pied_gauche: 0,
     long_pied_droit: 0,
     saut_avec: 0,
+    saut_elan_bras_gauche: 0,
     saut_elan_bras_droit: 0,
     saut_stable_bras_gauche: 0,
     saut_stable_bras_droit: 0,
@@ -84,6 +100,14 @@ export default function AdminFicheTechnique() {
     }));
   }, [studentId, students]);
 
+  useEffect(() => {
+  if (!monthValue) return;
+
+  const ay = getAcademicYearFromMonth(monthValue);
+  setAcademicYear(ay);
+}, [monthValue]);
+
+
   // === Auto-load fiche (robust match with proper date) ===
 useEffect(() => {
   if (!studentId || !monthValue || !students.length) return;
@@ -136,6 +160,7 @@ useEffect(() => {
         long_pied_gauche: 0,
         long_pied_droit: 0,
         saut_avec: 0,
+        saut_elan_bras_gauche: 0,
         saut_elan_bras_droit: 0,
         saut_stable_bras_gauche: 0,
         saut_stable_bras_droit: 0,
@@ -167,6 +192,7 @@ useEffect(() => {
       long_pied_gauche: num(measure.long_pied_gauche),
       long_pied_droit: num(measure.long_pied_droit),
       saut_avec: num(measure.saut_avec),
+      saut_elan_bras_gauche: num(measure.saut_elan_bras_gauche),
       saut_elan_bras_droit: num(measure.saut_elan_bras_droit),
       saut_stable_bras_gauche: num(measure.saut_stable_bras_gauche),
       saut_stable_bras_droit: num(measure.saut_stable_bras_droit),
@@ -193,8 +219,8 @@ useEffect(() => {
 
   return (
     <div className="p-8 space-y-8 bg-gray-50 min-h-screen">
-      <h2 className="text-3xl font-bold text-[#001f5c]">
-        📏 Fiche Technique — A’QUA D’OR
+      <h2 className="text-center text-2xl font-bold text-[#001f5c]">
+        📏 Fiche Technique
       </h2>
 
       {/* Info Élève */}
@@ -221,12 +247,35 @@ useEffect(() => {
 
           <div>
             <label className="text-sm text-gray-600 block mb-1">Mois</label>
-            <input
-              type="month"
-              className="border rounded-lg px-3 py-2 w-full"
-              value={monthValue}
-              onChange={(e) => setMonthValue(e.target.value)}
-            />
+            <div>
+  <select
+    className="border rounded-lg px-3 py-2 w-full"
+    value={monthValue}
+    onChange={(e) => setMonthValue(e.target.value)}
+  >
+    {Array.from({ length: 12 }).map((_, i) => {
+      const year = Number(monthValue.split("-")[0]);
+      const date = new Date(year, i, 1);
+
+      const value = `${year}-${String(i + 1).padStart(2, "0")}`;
+
+      const rawLabel = date.toLocaleDateString("fr-FR", {
+        month: "long",
+        year: "numeric",
+      });
+
+      const label =
+        rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1);
+
+      return (
+        <option key={value} value={value}>
+          {label}
+        </option>
+      );
+    })}
+  </select>
+</div>
+
           </div>
 
           <div>
@@ -246,9 +295,9 @@ useEffect(() => {
             </label>
             <input
               type="text"
-              className="border rounded-lg px-3 py-2 w-full text-center"
+              readOnly
+              className="border rounded-lg px-3 py-2 w-full text-center bg-gray-100 cursor-not-allowed"
               value={academicYear}
-              onChange={(e) => setAcademicYear(e.target.value)}
             />
           </div>
         </div>
@@ -260,12 +309,13 @@ useEffect(() => {
           e.preventDefault();
           saveFiche();
         }}
-        className="bg-white border border-gray-300 rounded-xl px-6 py-6 shadow-sm mx-auto text-sm max-w-2xl"
+        className="bg-white border border-gray-300 rounded-xl px-4 py-5 shadow-sm text-sm w-full md:max-w-2xl md:mx-auto"
       >
         <h3 className="text-lg font-semibold text-[#004e75] text-center mb-4 uppercase">
           Mesures physiques (en CM)
         </h3>
-
+{/* Desktop layout */}
+<div className="hidden md:block">
         {[
           [
             ["long_bras_gauche", "Bras G."],
@@ -274,7 +324,9 @@ useEffect(() => {
             ["long_pied_droit", "Pied D."],
           ],
           [
-            ["saut_avec", "Saut"],
+            ["saut_avec", "Saut avec Élan 2 bras"],
+            ["saut_stable_deux_bras", "Saut Stable 2 Bras"],
+            ["saut_elan_bras_gauche", "Saut Élan Bras G."],
             ["saut_elan_bras_droit", "Saut Élan Bras D."],
             ["saut_stable_bras_gauche", "Saut St. Bras G."],
             ["saut_stable_bras_droit", "Saut St. Bras D."],
@@ -283,7 +335,6 @@ useEffect(() => {
             ["largeur_ventre", "Largeur Ventre"],
             ["taille", "Taille"],
             ["poids_lbs", "Poids (LBS)"],
-            ["saut_stable_deux_bras", "Saut Stable 2 Bras"],
           ],
         ].map((row, i) => (
           <table
@@ -317,6 +368,45 @@ useEffect(() => {
             </tbody>
           </table>
         ))}
+        </div>
+        {/* Mobile layout */}
+<div className="md:hidden space-y-3">
+
+  {[
+    ["long_bras_gauche", "Bras gauche (cm)"],
+    ["long_bras_droit", "Bras droit (cm)"],
+    ["long_pied_gauche", "Pied gauche (cm)"],
+    ["long_pied_droit", "Pied droit (cm)"],
+    ["saut_avec", "Saut avec élan deux bras (cm)"],
+    ["saut_stable_deux_bras", "Saut stable deux bras (cm)"],
+    ["saut_elan_bras_gauche", "Saut élan bras gauche (cm)"],
+    ["saut_elan_bras_droit", "Saut élan bras droit (cm)"],
+    ["saut_stable_bras_gauche", "Saut stable bras gauche (cm)"],
+    ["saut_stable_bras_droit", "Saut stable bras droit (cm)"],
+    ["largeur_ventre", "Largeur ventre (cm)"],
+    ["taille", "Taille (cm)"],
+    ["poids_lbs", "Poids (lbs)"],
+  ].map(([key, label]) => (
+    <div
+  key={key}
+  className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 flex flex-col text-center gap-2 w-full"
+>
+
+      <label className="text-sm font-semibold text-gray-700 text-center">
+        {label}
+      </label>
+
+      <input
+        type="number"
+        className="w-24 mx-auto border border-gray-300 rounded text-center py-1"
+        value={measure[key] === 0 ? "" : measure[key]}
+        onChange={(e) => handleChange(key, e.target.value)}
+      />
+    </div>
+  ))}
+
+</div>
+
 
         <div className="flex justify-center mt-6">
           <button

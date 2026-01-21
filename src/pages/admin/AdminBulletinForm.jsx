@@ -1,7 +1,7 @@
 // src/pages/admin/AdminBulletinForm.jsx
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "../../lib/supabaseClient";
-import { formatMonth } from "../../lib/dateUtils";
+import { formatMonth, formatDateFrSafe } from "../../lib/dateUtils";
 
 const SCALE = ["E", "TB", "B", "AB", "A", "P"];
 
@@ -269,14 +269,14 @@ useEffect(() => {
 
   return (
     <div className="p-6 space-y-6">
-      <h2 className="text-2xl font-bold text-gray-800">📋 Gestion des Bulletins</h2>
+      <h2 className="text-center text-2xl font-bold text-gray-800">Bulletins</h2>
 
       {/* Filtres */}
-      <div className="flex flex-wrap gap-4 items-end">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
         <div>
           <label className="text-sm text-gray-600 block mb-1">Élève</label>
           <select
-            className="border rounded-lg px-3 py-2 w-64"
+            className="border rounded-lg px-3 py-2 w-64 w-full"
             value={studentId}
             onChange={(e) => setStudentId(e.target.value)}
           >
@@ -291,19 +291,36 @@ useEffect(() => {
 
         <div>
           <label className="text-sm text-gray-600 block mb-1">Mois</label>
-          <input
-            type="month"
-            className="border rounded-lg px-3 py-2"
-            value={monthValue}
-            onChange={(e) => setMonthValue(e.target.value)}
-          />
+          <select
+  className="border rounded-lg px-3 py-2 w-full"
+  value={monthValue}
+  onChange={(e) => setMonthValue(e.target.value)}
+>
+  {Array.from({ length: 12 }).map((_, i) => {
+    const date = new Date(2026, i, 1);
+    const value = `${date.getFullYear()}-${String(i + 1).padStart(2, "0")}`;
+    const rawLabel = date.toLocaleDateString("fr-FR", {
+  month: "long",
+  year: "numeric",
+});
+const label = rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1);
+
+
+    return (
+      <option key={value} value={value}>
+        {label}
+      </option>
+    );
+  })}
+</select>
+
         </div>
 
         <div>
-          <label className="text-sm text-gray-600 block mb-1">Année académique</label>
+          <label className="text-sm text-gray-600 block mb-1 ">Année académique</label>
           <input
             type="text"
-            className="border rounded-lg px-3 py-2 w-32"
+            className="border rounded-lg px-3 py-2 w-32 w-full"
             value={academicYear}
             onChange={(e) => setAcademicYear(e.target.value)}
           />
@@ -312,7 +329,7 @@ useEffect(() => {
         <button
           onClick={fetchSessionDates}
           disabled={loading}
-          className="bg-aquaBlue text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
+          className="bg-aquaBlue text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition w-full"
         >
           🔄 Recharger
         </button>
@@ -329,7 +346,8 @@ useEffect(() => {
           {globalResult}
         </div>
       )}
-
+{/* Desktop / Tablet */}
+<div className="hidden md:block overflow-x-auto">
       {/* Table */}
       <div className="bg-white rounded-2xl shadow p-6 overflow-x-auto border border-gray-100">
         <div className="flex justify-between items-center mb-3">
@@ -404,11 +422,16 @@ useEffect(() => {
           <td className="border border-gray-300 p-1">
             <div className="flex flex-col items-center">
               <input
-                type="date"
-                className="w-36 border rounded px-2 py-1 text-center"
-                value={row.date || ""}
-                onChange={(e) => updateCell(idx, "date", e.target.value)}
-              />
+  type="text"
+  readOnly
+  className="border rounded px-3 py-2 w-full text-center bg-gray-100 cursor-pointer"
+  value={row.date ? formatDateFrSafe(row.date) : ""}
+  onClick={() => {
+    const d = prompt("Entrer la date (YYYY-MM-DD)");
+    if (d) updateCell(idx, "date", d);
+  }}
+/>
+
               <span className="text-xs italic text-gray-600 mt-1 capitalize">
                 {weekday}
               </span>
@@ -430,9 +453,85 @@ useEffect(() => {
     })}
   </tbody>
 </table>
+</div>
+</div>
+{/* Mobile layout */}
+<div className="md:hidden space-y-4">
+  {/* Barème */}
+<div className="bg-white border rounded-xl p-4 text-sm text-gray-700">
+  <p className="font-semibold mb-2">Barème :</p>
+  <ul className="space-y-1">
+    <li><strong>E</strong> : Excellent</li>
+    <li><strong>TB</strong> : Très Bien</li>
+    <li><strong>B</strong> : Bien</li>
+    <li><strong>AB</strong> : Assez Bien</li>
+    <li><strong>A</strong> : À améliorer</li>
+    <li><strong>P</strong> : Passable</li>
+  </ul>
+</div>
+
+  {sessionRows.map((row, idx) => {
+      const weekday = row.date
+  ? (() => {
+      const [y, m, d] = row.date.split("-").map(Number);
+      const localDate = new Date(y, m - 1, d); // Local date, no UTC shift
+      return localDate.toLocaleDateString("fr-FR", { weekday: "long" });
+    })()
+  : "—";
+
+    return (
+      <div
+        key={idx}
+        className="bg-gray-50 border rounded-xl p-4 space-y-4 shadow-sm"
+      >
+        {/* Date */}
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-gray-500">Date</label>
+          <input
+  type="text"
+  readOnly
+  className="border rounded px-3 py-2 w-full text-center bg-gray-100 cursor-pointer"
+  value={row.date ? formatDateFrSafe(row.date) : ""}
+  onClick={() => {
+    const d = prompt("Entrer la date (YYYY-MM-DD)");
+    if (d) updateCell(idx, "date", d);
+  }}
+/>
+
+          <span className="text-xs italic text-gray-600 capitalize">
+            {weekday}
+          </span>
+        </div>
+
+        {/* Sections */}
+        {Object.entries(FIELDS).map(([section, fields]) => (
+          <div key={section}>
+            <h4 className="text-sm font-semibold text-aquaBlue mb-2">
+              {section}
+            </h4>
+
+            <div className="grid grid-cols-2 gap-3">
+              {fields.map((f) => (
+                <div key={f} className="flex flex-col gap-1">
+                  <label className="text-xs text-gray-600">
+                    {labelFor(f)}
+                  </label>
+                  <SelectScale
+                    value={row[f] || ""}
+                    onChange={(v) => updateCell(idx, f, v)}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  })}
+</div>
 
 
-        <div className="flex items-center gap-3 mt-5">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mt-5">
           <button
             onClick={saveAll}
             disabled={loading}
@@ -442,14 +541,14 @@ useEffect(() => {
           </button>
         </div>
       </div>
-    </div>
+    
   );
 }
 
 function SelectScale({ value, onChange }) {
   return (
     <select
-      className="border rounded px-2 py-1 text-sm"
+      className="border rounded px-3 py-2 text-sm min-h-[42px]"
       value={value}
       onChange={(e) => onChange(e.target.value)}
     >
@@ -462,6 +561,7 @@ function SelectScale({ value, onChange }) {
     </select>
   );
 }
+
 
 function labelFor(k) {
   const map = {
