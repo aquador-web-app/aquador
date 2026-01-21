@@ -1679,7 +1679,7 @@ const totalUtilisateursPlateforme =
       setActiveTab={setActiveTab}
       closeSidebar={() => setSidebarOpen(false)}
     />
-
+{role !== "assistant" && (
     <SidebarSub
       id="boutique-invoices-templates"
       label="Template"
@@ -1687,6 +1687,7 @@ const totalUtilisateursPlateforme =
       setActiveTab={setActiveTab}
       closeSidebar={() => setSidebarOpen(false)}
     />
+)}
   </SubGroup>
 )}
 
