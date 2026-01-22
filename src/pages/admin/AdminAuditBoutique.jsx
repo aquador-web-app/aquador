@@ -6,9 +6,12 @@ export default function AdminAuditBoutique() {
   const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState([]);
   const [rows, setRows] = useState([]);
+  const productsMap = Object.fromEntries(
+  products.map(p => [p.id, p.name])
+);
 
   const [productId, setProductId] = useState("");
-  const [source, setSource] = useState("all"); // all | registration_gift | purchase
+  const [source, setSource] = useState("all"); // all | registration | purchase
 
   // -----------------------------
   // Load products for dropdown
@@ -43,41 +46,58 @@ export default function AdminAuditBoutique() {
       // 🎁 REGISTRATION GIFTS
       // =============================
       const { data: gifts, error: giftErr } = await supabase
+      
         .from("invoice_items")
         .select(`
           id,
           created_at,
           type,
-          invoice:invoices (
+          product_id,
+          invoices!invoice_items_invoice_id_fkey (
             invoice_no,
-            user:profiles (
-              id,
-              full_name,
-              role
-            )
-          ),
-          product:products (
-            id,
-            name
+            user_id
           )
         `)
         .eq("product_id", productId)
-        .eq("type", "registration_gift");
+        .eq("type", "registration");
 
       if (giftErr) {
         console.error("❌ Gift audit error:", giftErr);
       }
 
+       console.log("RAW GIFTS", gifts); // ✅ now valid
+
+       const userIds = [
+    ...new Set(
+      (gifts || [])
+        .map(g => g.invoices?.user_id)
+        .filter(Boolean)
+    )
+  ];
+
+  let usersMap = {};
+
+  if (userIds.length > 0) {
+    const { data: users } = await supabase
+      .from("profiles")
+      .select("id, full_name, role")
+      .in("id", userIds);
+
+    usersMap = Object.fromEntries(
+      (users || []).map(u => [u.id, u])
+    );
+  }
+
       const giftRows =
-        (gifts || []).map((r) => ({
-          id: `gift-${r.id}`,
-          created_at: r.created_at,
-          user: r.invoice?.user || null,
-          product_name: r.product?.name || "—",
-          source: "registration_gift",
-          invoice_no: r.invoice?.invoice_no || "—",
-          qty: 1, // 🎁 always 1
-        })) || [];
+    (gifts || []).map((r) => ({
+      id: `gift-${r.id}`,
+      created_at: r.created_at,
+      user: usersMap[r.invoices?.user_id] || null,
+      product_name: productsMap[r.product_id] || "—",
+      source: "registration",
+      invoice_no: r.invoices?.invoice_no || "—",
+      qty: 1,
+    })) || [];
 
       // =============================
       // 🛒 BOUTIQUE PURCHASES
@@ -176,7 +196,7 @@ export default function AdminAuditBoutique() {
           onChange={(e) => setSource(e.target.value)}
         >
           <option value="all">All sources</option>
-          <option value="registration_gift">🎁 Registration</option>
+          <option value="registration">🎁 Registration</option>
           <option value="purchase">🛒 Purchase</option>
         </select>
       </div>
@@ -233,7 +253,7 @@ export default function AdminAuditBoutique() {
                   </td>
 
                   <td className="px-3 py-2">
-                    {r.source === "registration_gift"
+                    {r.source === "registration"
                       ? "🎁 Registration"
                       : "🛒 Purchase"}
                   </td>
@@ -324,7 +344,7 @@ export default function AdminAuditBoutique() {
 
         <div className="flex items-center justify-between text-sm">
           <span>
-            {r.source === "registration_gift"
+            {r.source === "registration"
               ? "🎁 Registration"
               : "🛒 Purchase"}
           </span>
