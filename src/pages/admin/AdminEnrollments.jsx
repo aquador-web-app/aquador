@@ -436,7 +436,7 @@ if (overrideEnabled && overridePlanId) {
 if (!plan) {
   alert("Aucun plan valide trouvé.");
   return;
-}
+} 
 
   // Extract the picked series key from the checkbox
   const FIRST = "-first";
@@ -482,7 +482,7 @@ effectivePrice = selectedOverridePlan?.price ?? plan.price;
 } else {
   // Auto plan
   effectivePrice = chosenPlan?.price ?? 0;
-}
+} 
 
 console.log("===== DEBUG PLAN SELECTION =====");
 console.log("courseMode:", courseMode);
@@ -559,12 +559,21 @@ alert(
     setSelectedHours([]);
     setStartDate("");
   } catch (err) {
-    console.error("RPC Error:", err);
+  console.error("RPC Error:", err);
+
+  if (
+    err?.message?.toLowerCase().includes("déjà inscrit") ||
+    err?.code === "23505"
+  ) {
+    alert("⚠️ Cet étudiant est déjà inscrit à ce créneau.");
+  } else {
     alert("Erreur inscription: " + err.message);
-  } finally {
+  }
+} finally {
     setLoading(false);
   }
 }
+
 
 // filter state (day/hour)
 const [dayFilter, setDayFilter] = useState("");    // "", "0".."6"
