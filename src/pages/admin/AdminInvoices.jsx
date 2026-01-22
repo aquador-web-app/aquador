@@ -5,18 +5,6 @@ import { ChevronDownIcon } from "@heroicons/react/24/solid";
 import DatePicker from "react-datepicker";
 import { formatDateFrSafe, formatCurrencyUSD, formatMonth } from "../../lib/dateUtils";
 
-// Formatters
-const fmtUSD = (v) => `$${Number(v || 0).toFixed(2)}`;
-
-const getInvoiceDate = (inv) => {
-  return inv.month
-    ? new Date(inv.month) // ✅ use month column directly
-    : inv.due_date
-    ? new Date(inv.due_date)
-    : inv.issued_at
-    ? new Date(inv.issued_at)
-    : null;
-};
 
 
 const monthKeyOf = (inv) => {
@@ -25,21 +13,6 @@ const monthKeyOf = (inv) => {
   return `${year}-${month}`; // e.g. "2025-11"
 };
 
-
-
-
-const monthLabelFR = (inv) => {
-  if (!inv?.month) return "";
-  const d = new Date(inv.month);
-  return d.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
-};
-
-
-// Month label from *start date* if available; else fall back.
-function monthLabelFromStart (inv) {
-  if (!inv?.month) return null;
-  return formatMonth(inv.month);
-};
 
 // Resolve pdf url whether it's a full URL or a storage path
 const getPdfLink = (inv, supabase) => {
@@ -50,7 +23,28 @@ const getPdfLink = (inv, supabase) => {
 };
 
 
-const fmt = (v) => `$${Number(v || 0).toFixed(2)}`;
+function mergedInvoiceItems(inv, invoiceItemsById) {
+  const slotItems = invoiceItems(inv).map((it, idx) => ({
+    source: "slot",
+    slot: idx + 1,
+    description: it.d,
+    amount: it.a,
+    reverted: false,
+    paid: false,
+  }));
+
+  const dbItems = (invoiceItemsById[inv.invoice_id] || []).map((it) => ({
+    source: "db",
+    id: it.id,
+    description: it.description,
+    amount: it.amount,
+    reverted: !!it.reverted,
+    paid: !!it.paid,
+  }));
+
+  return [...slotItems, ...dbItems];
+}
+
 
 function invoiceItems(inv) {
   const items = [
@@ -189,6 +183,25 @@ const [monthFilter, setMonthFilter] = useState("");
   const [expandingInvoice, setExpandingInvoice] = useState({});
   const [expandingFamily, setExpandingFamily] = useState({});
   const [nameFilter, setNameFilter] = useState("");
+  const [role, setRole] = useState(null);
+
+useEffect(() => {
+  async function fetchRole() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    if (data?.role) setRole(data.role);
+  }
+
+  fetchRole();
+}, []);
+
 
 
   const nameOptions = useMemo(() => {
@@ -332,10 +345,9 @@ const filteredInvoices = useMemo(() => {
 
   // 🧍 filter by name (show *all months* for that name)
 if (nameFilter) {
-  base = allInvoices.filter((inv) => inv.child_full_name === nameFilter);
-} else {
-  base = [...allInvoices];
+  base = base.filter((inv) => inv.child_full_name === nameFilter);
 }
+
 
 // 🗓️ filter by month (only apply if user also chose one)
 if (monthFilter) {
@@ -578,6 +590,7 @@ const lastRow = Math.min(page * PAGE_SIZE, totalFamilies);
                   invoiceItemsById={invoiceItemsById}
                   paidDates={paidDates}
                   reloadInvoices={loadInvoices}
+                  role={role} 
                 />
               ))}
             </div>
@@ -647,6 +660,7 @@ function AdminInvoiceCard({
   expandingInvoice,
   invoiceItemsById,
   reloadInvoices,
+  role,
 }) {
   const isOpen = !!expandingInvoice[inv.invoice_id];
   const balance = (inv.total || 0) - (inv.paid_total || 0);
@@ -722,19 +736,144 @@ function AdminInvoiceCard({
         </button>
       </div>
 
-      {/* Details */}
-      {isOpen && (
-        <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
-          {(invoiceItemsById[inv.invoice_id] || invoiceItems(inv)).map(
-            (it, i) => (
-              <div key={i} className="flex justify-between">
-                <span>{it.description || it.d}</span>
-                <b>{formatCurrencyUSD(it.amount || it.a)}</b>
-              </div>
-            )
+ {/* Details */}
+{isOpen && (
+  <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-2">
+    {mergedInvoiceItems(inv, invoiceItemsById).length ? (
+      mergedInvoiceItems(inv, invoiceItemsById).map((it, i) => (
+        <div
+          key={it.id || `${it.source}-${i}`}
+          className={`flex flex-col gap-1 ${
+            it.reverted ? "opacity-60 line-through" : ""
+          }`}
+        >
+          <div className="flex justify-between">
+            <span>
+              {it.description}
+              {it.reverted && (
+                <span className="ml-1 text-xs text-red-600">(reverted)</span>
+              )}
+            </span>
+            <b>{formatCurrencyUSD(it.amount)}</b>
+          </div>
+
+          {/* ACTIONS — ADMIN ONLY */}
+          {role !== "assistant" && !it.reverted && it.source === "slot" && (
+            <div className="flex gap-3 text-xs">
+              {/* 🔴 REVERT SLOT ITEM */}
+              <button
+                onClick={async () => {
+                  if (!confirm(`Revert "${it.description}" ?`)) return;
+
+                  const { error } = await supabase.rpc(
+                    "revert_invoice_slot",
+                    {
+                      p_invoice_id: inv.invoice_id,
+                      p_slot: it.slot,
+                      p_description: it.description,
+                      p_amount: it.amount,
+                    }
+                  );
+
+                  if (!error) {
+                    await reloadInvoices();
+                  } else {
+                    alert(error.message);
+                  }
+                }}
+                className="text-red-600 underline"
+              >
+                Revert
+              </button>
+
+              {/* 🔵 EDIT SLOT ITEM (THIS WAS MISSING ❌) */}
+              <button
+                onClick={async () => {
+                  const v = prompt(
+                    `New amount for "${it.description}"`,
+                    String(it.amount)
+                  );
+                  if (v === null) return;
+
+                  const newAmount = Number(v);
+                  if (Number.isNaN(newAmount) || newAmount < 0) {
+                    alert("Invalid amount");
+                    return;
+                  }
+if (inv.status === "paid") {
+  alert("Cannot edit a paid invoice");
+  return;
+}
+
+                  const { error } = await supabase.rpc(
+                    "edit_invoice_slot",
+                    {
+                      p_invoice_id: inv.invoice_id,
+                      p_slot: it.slot,
+                      p_new_amount: newAmount,
+                    }
+                  );
+
+                  if (!error) {
+                    await reloadInvoices();
+                  } else {
+                    alert(error.message);
+                  }
+                }}
+                className="text-blue-600 underline"
+              >
+                Edit
+              </button>
+            </div>
+          )}
+
+          {role !== "assistant" && !it.reverted && it.source === "db" && (
+            <div className="flex gap-3 text-xs">
+              {/* 🔴 REVERT DB ITEM */}
+              <button
+                onClick={async () => {
+                  if (!confirm("Revert this invoice item?")) return;
+
+                  const { error } = await supabase.rpc(
+                    "revert_invoice_item",
+                    { p_item_id: it.id }
+                  );
+
+                  if (!error) {
+                    const { data } = await supabase
+                      .from("invoice_items")
+                      .select(
+                        "id, description, amount, paid, reverted, created_at"
+                      )
+                      .eq("invoice_id", inv.invoice_id)
+                      .order("created_at");
+
+                    setInvoiceItemsById((prev) => ({
+                      ...prev,
+                      [inv.invoice_id]: data || [],
+                    }));
+
+                    await reloadInvoices();
+                  } else {
+                    alert(error.message);
+                  }
+                }}
+                className="text-red-600 underline"
+              >
+                Revert
+              </button>
+            </div>
           )}
         </div>
-      )}
+      ))
+    ) : (
+      <p className="text-gray-500">Aucun item.</p>
+    )}
+  </div>
+)}
+
+
+
     </div>
   );
 }
@@ -788,6 +927,7 @@ function FamilyBlock({
   invoiceItemsById,
   paidDates,
   reloadInvoices,
+  role,
 }) {
   const open = !!expandingFamily[family.familyId];
 
@@ -857,30 +997,33 @@ function FamilyBlock({
                       <div className="font-medium">{inv.child_full_name}</div>                      
                     </Td>
                     <Td>
-                      {invoiceItems(inv).length ? (
+                      {mergedInvoiceItems(inv, invoiceItemsById).filter(it => !it.reverted).length ? (
                         <div className="space-y-1 max-h-28 overflow-auto pr-1">
-                          {invoiceItems(inv).map((it, idx) => (
+                          {mergedInvoiceItems(inv, invoiceItemsById)
+        .filter(it => !it.reverted)
+        .map((it, idx) => (
                             <div key={idx} className="flex justify-between gap-3 items-center">
                               <span className="text-gray-700">
-                                {it.d}
+                                {it.description}
                               </span>
 
                               <div className="flex items-center gap-3">
                                 <span className="font-medium"> 
-                                  {formatCurrencyUSD(it.a)}
+                                  {formatCurrencyUSD(it.amount)}
                                 </span>
-
+{role !== "assistant" && it.source === "slot" && (
+  <>
                                 <button
                                   onClick={async () => {
-                                    if (!confirm(`Revert "${it.d}" ?`)) return;
+                                    if (!confirm(`Revert "${it.description}" ?`)) return;
 
                                     const { error } = await supabase.rpc(
                                       "revert_invoice_slot",
                                       {
                                         p_invoice_id: inv.invoice_id,
-                                        p_slot: idx + 1,              // 🔑 THIS IS CRITICAL
-                                        p_description: it.d,
-                                        p_amount: it.a,
+                                        p_slot: it.slot,           // 🔑 THIS IS CRITICAL
+                                        p_description: it.description,
+                                        p_amount: it.amount,
                                       }
                                     );
 
@@ -894,6 +1037,46 @@ function FamilyBlock({
                                 >
                                   Revert
                                 </button>
+                                <button
+                                  onClick={async () => {
+                                    const v = prompt(
+                                      `New amount for "${it.description}"`,
+                                      String(it.amount)
+                                    );
+                                    if (v === null) return;
+
+                                    const newAmount = Number(v);
+                                    if (Number.isNaN(newAmount) || newAmount < 0) {
+                                      alert("Invalid amount");
+                                      return;
+                                    }
+if (inv.status === "paid") {
+  alert("Cannot edit a paid invoice");
+  return;
+}
+
+                                    const { error } = await supabase.rpc(
+                                      "edit_invoice_slot",
+                                      {
+                                        p_invoice_id: inv.invoice_id,
+                                        p_slot: it.slot,
+                                        p_new_amount: newAmount,
+                                        p_new_description: it.description, // keep label
+                                      }
+                                    );
+                                    if (!error) {
+                                      await reloadInvoices();
+                                    } else {
+                                      alert(error.message);
+                                    }
+                                  }}
+                                  className="text-xs text-blue-600 hover:underline"
+                                >
+                                  Edit
+                                </button>
+                                </>
+)}
+
                               </div>
                             </div>
                           ))}
@@ -977,54 +1160,19 @@ function FamilyBlock({
                       </button>
                       {expandingInvoice[inv.invoice_id] && (
                         <div className="mt-2">
-                        {invoiceItemsById[inv.invoice_id]?.length ? (
+                        {mergedInvoiceItems(inv, invoiceItemsById).length ? (
                           <ul className="text-sm text-gray-700 list-disc pl-5">
-                            {invoiceItemsById[inv.invoice_id].map((it) => (
+                            {mergedInvoiceItems(inv, invoiceItemsById).map((it) => (
                         <li
-                        key={it.id}
+                        key={it.id || `${it.source}-${it.slot}`}
                         className={`flex justify-between items-center ${
                           it.reverted ? "line-through text-gray-400" : ""
                         }`}
                         >
                         <span>
-                          {it.description} — {fmtUSD(it.amount)}
+                          {it.description} — {formatCurrencyUSD(it.amount)}
                           {it.paid ? " ✅" : ""}
                         </span>
-
-                        {!it.reverted && (
-                          <button
-                            onClick={async () => {
-                              if (!confirm("Revert this invoice item?")) return;
-
-                              const { error } = await supabase.rpc(
-                                "revert_invoice_item",
-                                { p_item_id: it.id }
-                              );
-
-                              if (!error) {
-                                // refresh items
-                                const { data } = await supabase
-                                  .from("invoice_items")
-                                  .select("id, description, amount, paid, reverted, created_at")
-                                  .eq("invoice_id", inv.invoice_id)
-                                  .order("created_at");
-
-                                setInvoiceItemsById((prev) => ({
-                                  ...prev,
-                                  [inv.invoice_id]: data || [],
-                                }));
-
-                                  // refresh invoice row
-                                  await reloadInvoices();
-                                } else {
-                                  alert(error.message);
-                                }
-                              }}
-                              className="text-xs text-red-600 hover:underline"
-                            >
-                              Revert
-                            </button>
-                          )}
                         </li>
                       ))}
 
@@ -1033,7 +1181,7 @@ function FamilyBlock({
                             <ul className="text-sm text-gray-700 list-disc pl-5">
                               {invoiceItems(inv).map((it, idx) => (
                                 <li key={idx}>
-                                  {it.d} — {fmtUSD(it.a)}
+                                  {it.d} — {formatCurrencyUSD(it.a)}
                                 </li>
                               ))}
                             </ul>
@@ -1072,6 +1220,7 @@ function FamilyBlock({
           expandingInvoice={expandingInvoice}
           invoiceItemsById={invoiceItemsById}
           reloadInvoices={reloadInvoices}
+          role={role}
         />
       ))}
     </div>
