@@ -60,6 +60,20 @@ async function generateUniqueChildEmail(first: string, last: string) {
     i++;
   }
 }
+
+async function applyRegistrationGifts(invoiceId) {
+  if (!invoiceId) return;
+
+  const { error } = await supabaseAdmin.rpc("add_registration_gifts", {
+    p_invoice_id: invoiceId,
+  });
+
+  if (error) {
+    console.error("❌ add_registration_gifts failed:", error);
+    throw new Error(error.message);
+  }
+}
+
 async function createChild({
   parent_id,
   first_name,
@@ -225,6 +239,18 @@ console.log("♻️ Child invoice UPDATED (trigger invoice reused):", {
   invoiceNo,
   address: parentAddress,
 });
+
+const { data: childInvoice } = await supabaseAdmin
+  .from("invoices")
+  .select("id")
+  .eq("user_id", childId)
+  .eq("month", monthValue)
+  .maybeSingle();
+
+if (childInvoice?.id) {
+  await applyRegistrationGifts(childInvoice.id);
+}
+
 
 return childId;
 }
@@ -447,23 +473,32 @@ if (signup_type !== "children_only") {
     .maybeSingle();
 
   if (!existingRegistration) {
-    const { error: invErr } = await supabaseAdmin.from("invoices").insert([
-      {
-        user_id: userId,
-        full_name: fullName,
-        invoice_no: invoiceNoMain,
-        description1: "Frais d'inscription",
-        amount1: 60,
-        total: 60,
-        paid_total: 0,
-        status: "pending",
-        due_date: endOfThisMonth(),
-        issued_at: new Date().toISOString(),
-        signup_type,
-        household_sequence: 0,
-        address: address || null,
-      },
-    ]);
+    const { data: newInvoice, error: invErr } = await supabaseAdmin
+  .from("invoices")
+  .insert([
+    {
+      user_id: userId,
+      full_name: fullName,
+      invoice_no: invoiceNoMain,
+      description1: "Frais d'inscription",
+      amount1: 60,
+      total: 60,
+      paid_total: 0,
+      status: "pending",
+      due_date: endOfThisMonth(),
+      issued_at: new Date().toISOString(),
+      signup_type,
+      household_sequence: 0,
+      address: address || null,
+    },
+  ])
+  .select("id")
+  .single();
+
+  if (newInvoice?.id) {
+  await applyRegistrationGifts(newInvoice.id);
+}
+
 
     if (invErr) throw new Error(`Invoice creation error: ${invErr.message}`);
     console.log("✅ ONE-TIME registration invoice created");

@@ -51,6 +51,8 @@ import AdminClubOverview from "./AdminClubOverview";
 import AdminMembershipApproval from "./AdminMembershipApproval";
 import AdminMembershipUsers from "./AdminMembershipUsers";
 import HoverOverlay from "../../components/HoverOverlay";
+import AdminAuditBoutique from "./AdminAuditBoutique";
+
 
 
 
@@ -182,6 +184,8 @@ function isToday(birthDate) {
 
 
 export default function AdminDashboard() {
+  console.log("🔥🔥🔥 AdminDashboard MOUNTED");
+
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState(() => {
   return sessionStorage.getItem("adminActiveTab") || "overview";
@@ -235,11 +239,6 @@ const [consentHovered, setConsentHovered] = useState(false);
 // Hover – Nouveaux inscrits
 const newUsersCardRef = useRef(null);
 const [newUsersHovered, setNewUsersHovered] = useState(false);
-
-
-const didInitEcoleRef = useRef(false);
-const didInitClubRef = useRef(false);
-
 
 
 const [role, setRole] = useState(null);
@@ -765,6 +764,7 @@ const HIDDEN_SECTIONS = [
   "plans",
   "invoices-templates",
   "boutique-invoices-templates",
+  "audit-boutique",
   "emails",
   "notifications-templates",
   "commissions",
@@ -846,6 +846,7 @@ const totalUtilisateursPlateforme =
    {role !== "assistant" && (
     <>
   {/* Utilisateurs (total on platform) + centered hover breakdown */}
+  
   <motion.div
   ref={userCardRef}
   className="relative bg-white rounded-2xl p-6 border border-gray-100 shadow-sm cursor-pointer"
@@ -1348,6 +1349,8 @@ const totalUtilisateursPlateforme =
         return <AdminProducts />;
       case "boutique-invoices":
         return <AdminBoutiqueInvoices />;
+      case "audit-boutique":
+        return <AdminAuditBoutique />;
       case "reports-general":
         return <AdminReports />
       case "reports-bulletins":
@@ -1403,14 +1406,18 @@ const totalUtilisateursPlateforme =
   }
 
   const handleSignOut = async () => {
-  setShowSignOutConfirm(false)
+  setShowSignOutConfirm(false);
 
-  // 1️⃣ Kill Supabase session
-  await supabase.auth.signOut()
+  // 🧹 Clear persisted admin UI state
+  sessionStorage.removeItem("adminActiveTab");
 
-  // 2️⃣ HARD browser-level redirect (kills ALL history)
+  // 🔐 Kill Supabase session
+  await supabase.auth.signOut();
+
+  // 🔁 Hard redirect (no history)
   window.location.replace("/login");
-}
+};
+
 
 
   return (
@@ -1470,10 +1477,11 @@ const totalUtilisateursPlateforme =
       const next = !prev;
 
       // ✅ set default ONLY the first time it opens
-      if (next && !didInitEcoleRef.current) {
-        setActiveTab("overview");
-        didInitEcoleRef.current = true;
-      }
+      if (next && !activeTab.startsWith("overview")) {
+  setActiveTab("overview");
+}
+
+
 
       return next;
     });
@@ -1688,10 +1696,17 @@ const totalUtilisateursPlateforme =
       closeSidebar={() => setSidebarOpen(false)}
     />
 )}
+{role !== "assistant" && (
+    <SidebarSub
+      id="audit-boutique"
+      label="Audit"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    />
+)}
   </SubGroup>
 )}
-
-
     {/* Bulletins */}
     {!isHidden("bulletins") && (
   <SubGroup
@@ -1812,10 +1827,11 @@ const totalUtilisateursPlateforme =
       const next = !prev;
 
       // ✅ set default ONLY the first time it opens
-      if (next && !didInitClubRef.current) {
-        setActiveTab("club-overview");
-        didInitClubRef.current = true;
-      }
+      if (next && !activeTab.startsWith("club-")) {
+  setActiveTab("club-overview");
+}
+
+
 
       return next;
     });

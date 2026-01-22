@@ -31,13 +31,18 @@ if ("serviceWorker" in navigator && window.location.search.includes("sw-reset"))
 }
 
 // 🔄 Reload ONCE when a new Service Worker takes control
-if ("serviceWorker" in navigator) {
+const isProd =
+  window.location.hostname === "clubaquador.com" ||
+  window.location.hostname === "www.clubaquador.com";
+
+if (isProd && "serviceWorker" in navigator) {
   navigator.serviceWorker.addEventListener("controllerchange", () => {
     if (sessionStorage.getItem("sw-reloaded")) return;
     sessionStorage.setItem("sw-reloaded", "true");
     window.location.reload();
   });
 }
+
 
 async function bootstrap() {
   const allowedHosts = ["clubaquador.com", "www.clubaquador.com"];
@@ -55,7 +60,7 @@ async function bootstrap() {
   }
 
   ReactDOM.createRoot(document.getElementById("root")).render(
-    <React.StrictMode>
+    
       <BrowserRouter>
         <ErrorBoundary>
           <AuthProvider>
@@ -65,7 +70,7 @@ async function bootstrap() {
           </AuthProvider>
         </ErrorBoundary>
       </BrowserRouter>
-    </React.StrictMode>
+  
   );
 }
 
