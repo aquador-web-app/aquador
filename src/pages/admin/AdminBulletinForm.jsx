@@ -492,10 +492,6 @@ const label = rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1);
   readOnly
   className="border rounded px-3 py-2 w-full text-center bg-gray-100 cursor-pointer"
   value={row.date ? formatDateFrSafe(row.date) : ""}
-  onClick={() => {
-    const d = prompt("Entrer la date (YYYY-MM-DD)");
-    if (d) updateCell(idx, "date", d);
-  }}
 />
 
           <span className="text-xs italic text-gray-600 capitalize">
