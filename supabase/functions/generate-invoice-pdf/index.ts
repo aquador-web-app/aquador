@@ -172,11 +172,20 @@ function compileTemplate(templateHtml, invoice, payments = [], LOGO_URL, SIGN_UR
   // Items
   let itemsHTML = "";
   for (let i = 1; i <= 7; i++) {
-    const desc = invoice[`description${i}`];
-    const amt = invoice[`amount${i}`];
-    if (desc && Number(amt) > 0)
-      itemsHTML += `<tr><td>${desc}</td><td style="text-align:right;">${fmtUSD(amt)}</td></tr>`;
+  const desc = invoice[`description${i}`];
+  const amt = Number(invoice[`amount${i}`] || 0);
+
+  const isGiftSlot = i === 6 || i === 7;
+
+  if (desc && (amt > 0 || isGiftSlot)) {
+    itemsHTML += `
+      <tr>
+        <td>${desc}</td>
+        <td style="text-align:right;">${fmtUSD(amt)}</td>
+      </tr>
+    `;
   }
+}
   if (!itemsHTML) itemsHTML = `<tr><td colspan="2" style="text-align:center;">—</td></tr>`;
 
   // Payments

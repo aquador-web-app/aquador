@@ -74,6 +74,25 @@ async function applyRegistrationGifts(invoiceId) {
   }
 }
 
+async function findRegistrationInvoiceId(userId) {
+  const { data, error } = await supabaseAdmin
+    .from("invoices")
+    .select("id")
+    .eq("user_id", userId)
+    .ilike("description1", "%inscription%")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error("❌ findRegistrationInvoiceId failed:", error);
+    return null;
+  }
+
+  return data?.id || null;
+}
+
+
 async function createChild({
   parent_id,
   first_name,
