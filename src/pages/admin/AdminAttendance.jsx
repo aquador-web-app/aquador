@@ -156,6 +156,8 @@ const [selectedYear, setSelectedYear] = useState(
       const groupIds = [...new Set(sessData.map((s) => s.session_group).filter(Boolean))];
       if (!groupIds.length) return setSessions([]);
 
+      const dayISO = getHaitiDateISO(date);
+
       const { data: enrData } = await supabase
         .from("enrollments")
         .select(`
@@ -165,21 +167,25 @@ const [selectedYear, setSelectedYear] = useState(
           session_group,
           course_id,
           plan_id,
+          start_date,
+          end_date,
           profiles_with_unpaid!inner (
-    id,
-    full_name,
-    has_unpaid
-  ),
+            id,
+            full_name,
+            has_unpaid
+          ),
           courses:course_id ( name ),
           plans:plan_id ( duration_hours )
         `)
         .in("session_group", groupIds)
-        .eq("status", "active");
+        .eq("status", "active")
+        .lte("start_date", dayISO)
+        .or(`end_date.is.null,end_date.gte.${dayISO}`);
 
       const { data: presences } = await supabase
         .from("attendance")
         .select("enrollment_id, status, check_in_time, check_out_time, attended_on")
-        .eq("attended_on", getHaitiDateISO(date));
+        .eq("attended_on", dayISO);
 
       const mapPresences = {};
       (presences || []).forEach((p) => (mapPresences[p.enrollment_id] = p));
@@ -221,6 +227,7 @@ const [selectedYear, setSelectedYear] = useState(
   }, [date, coursSelectionne]);
 
   const saveAttendanceWithRules = async (enrollment_id, action, sessionStartISO) => {
+    const dayISO = getHaitiDateISO(date);
     const now = new Date();
     const start = sessionStartISO ? new Date(sessionStartISO) : null;
     const decideStatus = () => {
@@ -233,14 +240,14 @@ const [selectedYear, setSelectedYear] = useState(
       .from("attendance")
       .select("id, status, check_in_time, check_out_time")
       .eq("enrollment_id", enrollment_id)
-      .eq("attended_on", getHaitiDateISO(date))
+      .eq("attended_on", dayISO)
       .maybeSingle();
 
     if (action === "check-in") {
       const newStatus = decideStatus();
       if (!exist) {
         await supabase.from("attendance").insert([
-          { enrollment_id, attended_on: date, status: newStatus, check_in_time: now.toISOString() },
+          { enrollment_id, attended_on: dayISO, status: newStatus, check_in_time: now.toISOString() },
         ]);
       } else {
         const patch = {};
@@ -254,7 +261,7 @@ const [selectedYear, setSelectedYear] = useState(
         await supabase.from("attendance").insert([
           {
             enrollment_id,
-            attended_on: date,
+            attended_on: dayISO,
             status: impliedStatus,
             check_in_time: now.toISOString(),
             check_out_time: now.toISOString(),
@@ -274,14 +281,14 @@ const [selectedYear, setSelectedYear] = useState(
         .from("attendance")
         .select("id")
         .eq("enrollment_id", enrollment_id)
-        .eq("attended_on", getHaitiDateISO(date))
+        .eq("attended_on", dayISO)
         .maybeSingle();
 
       if (!existAbsent) {
         await supabase.from("attendance").insert([
           {
             enrollment_id,
-            attended_on: getHaitiDateISO(date),
+            attended_on: dayISO,
             status: "absent",
             check_in_time: null,
             check_out_time: null,
@@ -302,13 +309,13 @@ const [selectedYear, setSelectedYear] = useState(
         .from("attendance")
         .delete()
         .eq("enrollment_id", enrollment_id)
-        .eq("attended_on", date);
+        .eq("attended_on", dayISO);
     } else if (action === "undo-checkout") {
       await supabase
         .from("attendance")
         .update({ check_out_time: null })
         .eq("enrollment_id", enrollment_id)
-        .eq("attended_on", getHaitiDateISO(date));
+        .eq("attended_on", dayISO);
     }
 
     await fetchSessions();

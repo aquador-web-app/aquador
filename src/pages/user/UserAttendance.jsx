@@ -101,7 +101,7 @@ useEffect(() => {
       /** Load enrollments **/
       const { data: enrollments, error: enrollErr } = await supabase
         .from("enrollments")
-        .select("id, profile_id, course_id, session_group, start_date, status")
+        .select("id, profile_id, course_id, session_group, start_date, status, plan_id, plans:plan_id ( id, name, duration_unit, duration_value, course_type, plan_category )")
         .eq("profile_id", selectedProfile.id)
         .eq("status", "active");
 
@@ -138,22 +138,51 @@ if (sessErr) {
 }
 
 // ✅ Filter sessions by each enrollment’s start_date
-const sessionsData = allSessions.filter((s) => {
-  const enroll = enrollments.find((e) => e.session_group === s.session_group);
-  if (!enroll) return false;
-  return new Date(s.start_date) >= new Date(enroll.start_date);
+const isIntensif = (plan) => {
+  const ct = String(plan?.course_type || "").toLowerCase();
+  const pc = String(plan?.plan_category || "").toLowerCase();
+  const nm = String(plan?.name || "").toLowerCase();
+  return ct.includes("intensif") || pc.includes("intensif") || nm.includes("intensif");
+};
+
+const sessionsByGroup = {};
+(allSessions || []).forEach((s) => {
+  if (!sessionsByGroup[s.session_group]) sessionsByGroup[s.session_group] = [];
+  sessionsByGroup[s.session_group].push(s);
 });
 
+// We need course names to detect intensif (you already build courseMap later)
+// So build it earlier, before limiting:
+const { data: courses } = await supabase.from("courses").select("id, name");
+const courseMap = Object.fromEntries((courses || []).map((c) => [c.id, c.name]));
 
-      if (sessErr) {
-        console.error("❌ Session load error:", sessErr);
-        setLoading(false);
-        return;
-      }
+const sessionsData = [];
+(enrollments || []).forEach((enroll) => {
+  const rows = (sessionsByGroup[enroll.session_group] || []).filter(
+    (s) => new Date(s.start_date) >= new Date(enroll.start_date)
+  );
 
-      /** Load courses **/
-      const { data: courses } = await supabase.from("courses").select("id, name");
-      const courseMap = Object.fromEntries((courses || []).map((c) => [c.id, c.name]));
+  let maxSessions = null;
+  if (isIntensif(enroll?.plans)) {
+    const unit = String(enroll?.plans?.duration_unit || "").toLowerCase();
+    const val = Number(enroll?.plans?.duration_value || 0);
+    if (val > 0 && (unit === "week" || unit === "weeks" || unit === "semaine" || unit === "semaines")) {
+      maxSessions = val * 4;
+    }
+  }
+
+  const finalRows = Number(maxSessions || 0) > 0 ? rows.slice(0, maxSessions) : rows;
+
+  finalRows.forEach((r) => {
+    sessionsData.push({
+      ...r,
+      __enrollment_id: enroll.id,
+      __profile_id: enroll.profile_id,
+      __course_id: enroll.course_id,
+    });
+  });
+});
+
 
       /** Load attendance **/
       const { data: attendanceData, error: attErr } = await supabase
@@ -173,26 +202,26 @@ const sessionsData = allSessions.filter((s) => {
 
       /** Merge **/
       const combined = (sessionsData || []).map((s) => {
-        const enroll = enrollments.find((e) => e.session_group === s.session_group);
-        const a = attendanceMap[`${enroll?.id}_${s.start_date}`];
-        const normalizedStatus =
-          a?.status === "excused" ? "unmarked" : a?.status || "unmarked";
+  const a = attendanceMap[`${s.__enrollment_id}_${s.start_date}`];
+  const normalizedStatus =
+    a?.status === "excused" ? "unmarked" : a?.status || "unmarked";
 
-        return {
-          session_id: s.id,
-          enrollment_id: enroll?.id,
-          profile_id: enroll?.profile_id,
-          course_name: courseMap[enroll?.course_id] || "—",
-          start_date: s.start_date,
-          day_of_week: s.day_of_week,
-          start_time: s.start_time,
-          duration_hours: s.duration_hours,
-          attendance_status: normalizedStatus,
-          check_in_time: a?.check_in_time || null,
-          check_out_time: a?.check_out_time || null,
-          marked_by: a?.marked_by || "user",
-        };
-      });
+  return {
+    session_id: s.id,
+    enrollment_id: s.__enrollment_id,
+    profile_id: s.__profile_id,
+    course_name: courseMap[s.__course_id] || "—",
+    start_date: s.start_date,
+    day_of_week: s.day_of_week,
+    start_time: s.start_time,
+    duration_hours: s.duration_hours,
+    attendance_status: normalizedStatus,
+    check_in_time: a?.check_in_time || null,
+    check_out_time: a?.check_out_time || null,
+    marked_by: a?.marked_by || "user",
+  };
+});
+
 
       setSessions(combined);
       setLoading(false);

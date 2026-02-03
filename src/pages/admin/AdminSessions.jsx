@@ -372,6 +372,7 @@ async function restoreSession(sessionId, seriesId, e) {
     // Regenerate FUTURE sessions: delete future matching ones then insert new ones
     const today = new Date();
     const todayISO = toISODate(today);
+    const regenFrom = todayISO > start_date ? todayISO : start_date;
 
     // 1) delete future sessions for this signature
     const { error: delErr } = await supabase
@@ -380,6 +381,8 @@ async function restoreSession(sessionId, seriesId, e) {
       .eq("course_id", course_id)
       .eq("start_time", start_time)
       .gte("start_date", todayISO)
+      .gte("start_date", regenFrom)
+      .lte("start_date", end_date)          // ✅ critical
       .in("day_of_week", days);
     if (delErr) {
       console.error(delErr);

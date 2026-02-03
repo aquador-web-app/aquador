@@ -12,6 +12,8 @@ export default function UserCourses({ userId }) {
   const [expandedCourse, setExpandedCourse] = useState(null);
   const [loading, setLoading] = useState(true);
   const { showConfirm, showAlert, showInput } = useGlobalAlert();
+  const [daysByGroup, setDaysByGroup] = useState({}); // { [session_group]: "Lundi, Jeudi, Vendredi" }
+
 
 
   // 1️⃣ Fetch parent + children
@@ -65,7 +67,7 @@ useEffect(() => {
           type,
           profiles:profile_id ( full_name ),
           courses:course_id ( name ),
-          plans:plan_id ( id, name, price, duration_hours ),
+          plans:plan_id ( id, name, price, duration_hours, duration_unit, duration_value ),
           sessions:session_id ( id, day_of_week, start_time )
         `)
         .eq("profile_id", selectedProfile.id)
@@ -76,6 +78,54 @@ useEffect(() => {
     };
     fetchEnrollments();
   }, [selectedProfile]);
+
+  useEffect(() => {
+  const loadGroupDays = async () => {
+    if (!enrollments?.length) {
+      setDaysByGroup({});
+      return;
+    }
+
+    const groups = Array.from(
+      new Set(enrollments.map((e) => e.session_group).filter(Boolean))
+    );
+
+    if (!groups.length) {
+      setDaysByGroup({});
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("sessions")
+      .select("session_group, day_of_week, status")
+      .in("session_group", groups)
+      .neq("status", "deleted");
+
+    if (error) {
+      console.error("Error loading group days:", error);
+      setDaysByGroup({});
+      return;
+    }
+
+    const map = {};
+    for (const row of data || []) {
+      const g = row.session_group;
+      if (!map[g]) map[g] = [];
+      map[g].push(row.day_of_week);
+    }
+
+    // Convert arrays -> "Lundi, Jeudi, Vendredi"
+    const finalMap = {};
+    for (const g of Object.keys(map)) {
+      finalMap[g] = joinDays(map[g]);
+    }
+
+    setDaysByGroup(finalMap);
+  };
+
+  loadGroupDays();
+}, [enrollments]);
+
 
   const dayLabel = (d) => {
     const days = [
@@ -89,6 +139,13 @@ useEffect(() => {
     ];
     return days[(d - 1 + 7) % 7] || "—";
   };
+
+  const joinDays = (daysArr) => {
+  if (!Array.isArray(daysArr) || !daysArr.length) return "—";
+  const unique = Array.from(new Set(daysArr.map((d) => Number(d)))).sort((a, b) => a - b);
+  return unique.map(dayLabel).join(", ");
+};
+
 
   const addHoursToTimeStr = (timeStr, hoursToAdd) => {
     if (!timeStr) return "";
@@ -178,7 +235,9 @@ useEffect(() => {
           <td className="px-4 py-2 font-semibold text-blue-700">
             {e.courses?.name || "—"}
           </td>
-          <td className="px-4 py-2">{dayLabel(e.sessions?.day_of_week)}</td>
+          <td className="px-4 py-2">
+            {daysByGroup[e.session_group] || dayLabel(e.sessions?.day_of_week)}
+          </td>
           <td className="px-4 py-2">
             {e.sessions?.start_time?.slice(0, 5)}–
             {addHoursToTimeStr(e.sessions?.start_time, e.plans?.duration_hours)}
@@ -261,6 +320,10 @@ useEffect(() => {
                 enrollmentStart={e.start_date}
                 planDuration={e.plans?.duration_hours}
                 userStartTime={e.sessions?.start_time}
+                planDurationUnit={e.plans?.duration_unit}
+                planDurationValue={e.plans?.duration_value}
+                courseName={e.courses?.name}
+                planName={e.plans?.name}
               />
             </td>
           </tr>
@@ -299,13 +362,13 @@ useEffect(() => {
               {e.courses?.name}
             </p>
             <p className="text-xs text-gray-500">
-              {dayLabel(e.sessions?.day_of_week)} ·{" "}
-              {e.sessions?.start_time?.slice(0, 5)}–
-              {addHoursToTimeStr(
-                e.sessions?.start_time,
-                e.plans?.duration_hours
-              )}
-            </p>
+            {(daysByGroup[e.session_group] || dayLabel(e.sessions?.day_of_week))} ·{" "}
+            {e.sessions?.start_time?.slice(0, 5)}–
+            {addHoursToTimeStr(
+              e.sessions?.start_time,
+              e.plans?.duration_hours
+            )}
+          </p>
           </div>
 
           <span
@@ -382,6 +445,10 @@ useEffect(() => {
               enrollmentStart={e.start_date}
               planDuration={e.plans?.duration_hours}
               userStartTime={e.sessions?.start_time}
+              planDurationUnit={e.plans?.duration_unit}
+              planDurationValue={e.plans?.duration_value}
+              courseName={e.courses?.name}
+              planName={e.plans?.name}
             />
           </div>
         )}
@@ -401,26 +468,67 @@ useEffect(() => {
 }
 
 // 📋 Updated UI ONLY
-function SessionsList({ sessionGroup, enrollmentStart, planDuration, userStartTime }) {
+function SessionsList({
+  sessionGroup,
+  enrollmentStart,
+  planDuration,
+  userStartTime,
+  planDurationUnit,
+  planDurationValue,
+  courseName,
+  planName,
+}) {
   const [sessions, setSessions] = useState([]);
 
-  useEffect(() => {
-  const fetchSessions = async () => {
-    if (!sessionGroup) return;
-    const { data, error } = await supabase
-      .from("sessions")
-      .select("id, day_of_week, start_time, duration_hours, start_date, status")
-      .eq("session_group", sessionGroup)
-      .neq("status", "deleted")
-      .gte("start_date", enrollmentStart) // only show sessions after enrollment date
-      .order("start_date", { ascending: true });
+  const isIntensif =
+    (String(courseName || "").toLowerCase().includes("intensif") ||
+      String(planName || "").toLowerCase().includes("intensif"));
 
-    if (error) console.error("Error fetching sessions:", error);
-    setSessions(data || []);
+  const sessionsPerWeek = isIntensif ? 4 : null;
+
+  const computeMaxSessions = () => {
+    const unit = String(planDurationUnit || "").toLowerCase();
+    const val = Number(planDurationValue || 0);
+
+    if (!sessionsPerWeek) return null; // only cap intensif by weeks
+    if (!val || val <= 0) return null;
+
+    if (unit === "week" || unit === "weeks" || unit === "semaine" || unit === "semaines") {
+      return val * sessionsPerWeek;
+    }
+
+    return null;
   };
-  fetchSessions();
-}, [sessionGroup, enrollmentStart]);
 
+  useEffect(() => {
+    const fetchSessions = async () => {
+      if (!sessionGroup) return;
+
+      const { data, error } = await supabase
+        .from("sessions")
+        .select("id, day_of_week, start_time, duration_hours, start_date, status")
+        .eq("session_group", sessionGroup)
+        .neq("status", "deleted")
+        .gte("start_date", enrollmentStart)
+        .order("start_date", { ascending: true });
+
+      if (error) {
+        console.error("Error fetching sessions:", error);
+        setSessions([]);
+        return;
+      }
+
+      const rows = data || [];
+      const maxSessions = computeMaxSessions();
+
+      // ✅ cap to weeks*4 for intensif
+      const limited = Number(maxSessions || 0) > 0 ? rows.slice(0, maxSessions) : rows;
+
+      setSessions(limited);
+    };
+
+    fetchSessions();
+  }, [sessionGroup, enrollmentStart, planDurationUnit, planDurationValue, courseName, planName]);
 
   const dayLabel = (d) =>
     ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"][
@@ -432,58 +540,57 @@ function SessionsList({ sessionGroup, enrollmentStart, planDuration, userStartTi
     const [h, m] = timeStr.split(":").map(Number);
     const base = new Date(2000, 0, 1, h, m);
     base.setHours(base.getHours() + (hoursToAdd || 1));
-    return `${String(base.getHours()).padStart(2, "0")}:${String(
-      base.getMinutes()
-    ).padStart(2, "0")}`;
+    return `${String(base.getHours()).padStart(2, "0")}:${String(base.getMinutes()).padStart(2, "0")}`;
   };
 
   return (
     <div className="overflow-x-auto">
-    <table className="min-w-full text-sm bg-gray-50">
-      <thead>
-        <tr className="text-gray-600 border-b">
-          <th className="w-60 px-6 py-2 text-left"></th>
-          <th className="px-6 py-2 text-left">Jour</th>
-          <th className="px-6 py-2 text-left">Heure</th>
-          <th className="px-6 py-2 text-left">Date</th>
-          <th className="px-6 py-2 text-left">Statut</th>
-        </tr>
-      </thead>
-      <tbody>
-        {sessions.map((s, i) => (   // ✅ include index i
-          <tr key={s.id} className="border-b">
-            <td className="px-6 py-2"></td>
-            <td className="px-6 py-2">{dayLabel(s.day_of_week)}</td>
-            <td className="px-6 py-2">
-              {userStartTime?.slice(0, 5)}–
-              {addHoursToTimeStr(userStartTime, planDuration)}
-            </td>
-            <td className="px-6 py-2">
-              {formatDateFrSafe(i === 0 ? enrollmentStart : s.start_date)}
-            </td>
-            <td className="px-6 py-2">
-              <span
-                className={`px-3 py-1 rounded-full text-xs font-medium ${
-                  s.status === "cancelled"
-                    ? "bg-red-100 text-red-700"
-                    : "bg-green-100 text-green-700"
-                }`}
-              >
-                {s.status === "cancelled" ? "Session annulée" : "Active"}
-              </span>
-            </td>
+      <table className="min-w-full text-sm bg-gray-50">
+        <thead>
+          <tr className="text-gray-600 border-b">
+            <th className="w-60 px-6 py-2 text-left"></th>
+            <th className="px-6 py-2 text-left">Jour</th>
+            <th className="px-6 py-2 text-left">Heure</th>
+            <th className="px-6 py-2 text-left">Date</th>
+            <th className="px-6 py-2 text-left">Statut</th>
           </tr>
-        ))}
+        </thead>
+        <tbody>
+          {sessions.map((s, i) => (
+            <tr key={s.id} className="border-b">
+              <td className="px-6 py-2"></td>
+              <td className="px-6 py-2">{dayLabel(s.day_of_week)}</td>
+              <td className="px-6 py-2">
+                {userStartTime?.slice(0, 5)}–
+                {addHoursToTimeStr(userStartTime, planDuration)}
+              </td>
+              <td className="px-6 py-2">
+                {formatDateFrSafe(s.start_date)}
+              </td>
+              <td className="px-6 py-2">
+                <span
+                  className={`px-3 py-1 rounded-full text-xs font-medium ${
+                    s.status === "cancelled"
+                      ? "bg-red-100 text-red-700"
+                      : "bg-green-100 text-green-700"
+                  }`}
+                >
+                  {s.status === "cancelled" ? "Session annulée" : "Active"}
+                </span>
+              </td>
+            </tr>
+          ))}
 
-        {!sessions.length && (
-          <tr>
-            <td colSpan={5} className="text-center text-gray-500 italic py-2">
-              Aucune session disponible
-            </td>
-          </tr>
-        )}
-      </tbody>
-    </table>
+          {!sessions.length && (
+            <tr>
+              <td colSpan={5} className="text-center text-gray-500 italic py-2">
+                Aucune session disponible
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
     </div>
   );
 }
+

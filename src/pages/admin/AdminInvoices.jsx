@@ -26,7 +26,7 @@ const getPdfLink = (inv, supabase) => {
 function mergedInvoiceItems(inv, invoiceItemsById) {
   const slotItems = invoiceItems(inv).map((it, idx) => ({
     source: "slot",
-    slot: idx + 1,
+    slot: it.slot, 
     description: it.d,
     amount: it.a,
     reverted: false,
@@ -48,16 +48,18 @@ function mergedInvoiceItems(inv, invoiceItemsById) {
 
 function invoiceItems(inv) {
   const items = [
-    { d: inv.description1, a: inv.amount1 },
-    { d: inv.description2, a: inv.amount2 },
-    { d: inv.description3, a: inv.amount3 },
-    { d: inv.description4, a: inv.amount4 },
-    { d: inv.description5, a: inv.amount5 },
-    { d: inv.description6, a: inv.amount6 },
-    { d: inv.description7, a: inv.amount7 },
+    { slot: 1, d: inv.description1, a: inv.amount1 },
+    { slot: 2, d: inv.description2, a: inv.amount2 },
+    { slot: 3, d: inv.description3, a: inv.amount3 },
+    { slot: 4, d: inv.description4, a: inv.amount4 },
+    { slot: 5, d: inv.description5, a: inv.amount5 },
+    { slot: 6, d: inv.description6, a: inv.amount6 },
+    { slot: 7, d: inv.description7, a: inv.amount7 },
   ];
+
   return items.filter(({ d, a }) => (d ?? "").trim().length > 0 && Number(a) > 0);
 }
+
 
  const STATUSES = ["all", "pending", "partial", "paid"];
 

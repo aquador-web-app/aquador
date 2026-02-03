@@ -29,6 +29,22 @@ function ageInMonths(birthDate) {
 function stripAccents(s = "") {
   return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
+function normType(v) {
+  return String(v ?? "").trim().toLowerCase();
+}
+function sameType(a, b) {
+  return normType(a) === normType(b);
+}
+function isIntensifType(v) {
+  const t = normType(v);
+  return t.includes("intensif") || t.includes("intensive");
+}
+function isIntensifPlan(p) {
+  return isIntensifType(p?.course_type) || normType(p?.name).includes("intensif");
+}
+function isIntensifCourse(c) {
+  return isIntensifType(c?.course_type) || normType(c?.name).includes("intensif");
+}
 function detectCourseByAge(courses, months) {
   if (!Array.isArray(courses) || months == null) return null;
 
@@ -69,6 +85,7 @@ export default function UserEnrollments({ userId }) {
   const [selectedCourse, setSelectedCourse] = useState(null); // dropdown value (auto-prefilled)
   const [selectedHours, setSelectedHours] = useState([]); // ["<seriesKey>-first", "<seriesKey>-second"]
   const [startDate, setStartDate] = useState(""); // user must choose
+    const [intensifWeeks, setIntensifWeeks] = useState(4); // ✅ 1 | 2 | 4
   const [loading, setLoading] = useState(false);
   const [successInfo, setSuccessInfo] = useState(null);
   const [existingEnrollment, setExistingEnrollment] = useState(null);
@@ -148,27 +165,52 @@ if (parent?.signup_type === "children_only" && kids?.length > 0) {
     })();
   }, []);
 
-  // 3) Auto-detect & preselect course when profile or courses change
+    // 3) Auto-detect & preselect course when profile or courses change
   useEffect(() => {
-    if (!selectedProfile || !courses.length) {
-      setSelectedCourse(null);
-      return;
-    }
-    const months = ageInMonths(selectedProfile.birth_date);
-    const filtered = courses.filter(c => c.course_type === courseMode);
+  if (!selectedProfile || !courses.length) {
+    setSelectedCourse(null);
+    return;
+  }
 
-if (courseMode === "aquafitness") {
-  // Aquafitness doesn't depend on age → pick first automatically
-  setSelectedCourse(filtered[0] || null);
-} else {
-  const detected = detectCourseByAge(filtered, months);
-  setSelectedCourse(detected || filtered[0] || null);
-}
+  const mode = normType(courseMode);
+
+  // ✅ INTENSIF: NEVER fall back to all courses
+  if (mode === "intensif") {
+    const intensifCourses = courses.filter(isIntensifCourse);
+    setSelectedCourse(intensifCourses[0] || null);
+
+    setSelectedHours([]);
+    setStartDate("");
+    return;
+  }
+
+  // ✅ AQUAFITNESS: match by course_type (no age logic)
+  if (mode === "aquafitness") {
+    const aquaCourses = courses.filter((c) => sameType(c.course_type, "aquafitness"));
+    setSelectedCourse(aquaCourses[0] || null);
+
+    setSelectedHours([]);
+    setStartDate("");
+    return;
+  }
+
+  // ✅ NATATION: NULL/empty course_type counts as natation
+  const natationCourses = courses.filter((c) => {
+    const t = normType(c.course_type);
+    if (!t) return mode === "natation";
+    return t === mode;
+  });
+
+  const pool = natationCourses.length ? natationCourses : courses; // natation can still fallback safely
+  const months = ageInMonths(selectedProfile.birth_date);
+  const detected = detectCourseByAge(pool, months);
+  setSelectedCourse(detected || pool[0] || null);
+
+  setSelectedHours([]);
+  setStartDate("");
+}, [selectedProfile, courses, courseMode]);
 
 
-    setSelectedHours([]); // reset hours on profile switch
-    setStartDate("");     // user must pick date — never auto-fill
-  }, [selectedProfile, courses, courseMode]);
 
   // 4) Load the latest enrollment (for update path) — DO NOT prefill date
   useEffect(() => {
@@ -188,21 +230,47 @@ if (courseMode === "aquafitness") {
   }, [selectedProfile]);
 
   // 5) Auto-match plan from 1h/2h
-  const chosenPlan = useMemo(() => {
-  if (!selectedCourse) return null;
-  if (selectedHours.length === 0) return null;
+    const chosenPlan = useMemo(() => {
+    if (courseMode === "intensif") {
+  const w = Number(intensifWeeks || 4);
 
-  const isTwoHours = selectedHours.length >= 2;
-  const dur = isTwoHours ? 2 : 1;
+  const intensifPublic = plans.filter((p) => p.is_public && isIntensifPlan(p));
 
-  return plans
-  .filter(p => p.is_public)   // ← ONLY show public plans
-  .find(
-    (p) =>
-      Number(p.duration_hours) === dur &&
-      p.course_type === courseMode
-  ) || null;
-}, [plans, selectedHours, selectedCourse, courseMode]);
+  const matchByWeeks = (p) => {
+    const n = normType(p?.name);
+    return (
+      (w === 1 && (n.includes("1 semaine") || n.includes("1 week"))) ||
+      (w === 2 && (n.includes("2 semaines") || n.includes("2 weeks") || n.includes("2 semaine"))) ||
+      (w === 4 && (n.includes("4 semaines") || n.includes("4 weeks") || n.includes("4 semaine")))
+    );
+  };
+
+  // ✅ try strict weeks match first
+  const exact = intensifPublic.find(matchByWeeks);
+
+  // ✅ fallback: if you only have ONE intensif plan, still show something
+  return exact || intensifPublic[0] || null;
+}
+
+
+    // ✅ existing natation / aquafitness logic
+    if (!selectedCourse) return null;
+    if (selectedHours.length === 0) return null;
+
+    const isTwoHours = selectedHours.length >= 2;
+    const dur = isTwoHours ? 2 : 1;
+
+    return (
+      plans
+        .filter((p) => p.is_public)
+        .find(
+          (p) =>
+            Number(p.duration_hours) === dur &&
+            sameType(p.course_type, courseMode)
+        ) || null
+    );
+  }, [plans, selectedHours, selectedCourse, courseMode, intensifWeeks]);
+
 
 const price1h = useMemo(() => {
   return (
@@ -210,7 +278,7 @@ const price1h = useMemo(() => {
       (p) =>
         p.is_public &&
         Number(p.duration_hours) === 1 &&
-        p.course_type === courseMode
+        sameType(p.course_type, courseMode)
     )?.price || 0
   );
 }, [plans, courseMode]);
@@ -221,7 +289,7 @@ const price2h = useMemo(() => {
       (p) =>
         p.is_public &&
         Number(p.duration_hours) === 2 &&
-        p.course_type === courseMode
+        sameType(p.course_type, courseMode)
     )?.price || 0
   );
 }, [plans, courseMode]);
@@ -303,23 +371,42 @@ const price2h = useMemo(() => {
     e.preventDefault();
 
     if (!selectedProfile) return alert("Aucun profil sélectionné.");
-    if (!selectedCourse) return alert("Sélectionnez un cours.");
-    if (!startDate) return alert("Choisissez une date de début.");
-    if (selectedHours.length === 0) return alert("Choisissez au moins une heure.");
+        if (!startDate) return alert("Choisissez une date de début.");
+
+    if (courseMode !== "intensif") {
+      if (!selectedCourse) return alert("Sélectionnez un cours.");
+      if (selectedHours.length === 0) return alert("Choisissez au moins une heure.");
+    }
+
 
     // Resolve picked series to a session_id
-    const FIRST = "-first";
-    const SECOND = "-second";
-    const token = selectedHours[0];
-    const baseKey = token.endsWith(FIRST)
-      ? token.slice(0, -FIRST.length)
-      : token.endsWith(SECOND)
-      ? token.slice(0, -SECOND.length)
-      : token;
+        let pickedSeries = null;
 
-    const courseSeries = seriesByCourse[selectedCourse.id] || [];
-    const pickedSeries = courseSeries.find((x) => x.key === baseKey);
-    if (!pickedSeries) return alert("Créneau introuvable pour ce cours.");
+    if (courseMode === "intensif") {
+      // ✅ pick ANY active session of an intensif course (used as anchor)
+      // if you have multiple intensif courses, we pick the first one auto-selected by your effect
+      if (!selectedCourse || !isIntensifCourse(selectedCourse)) {
+  return alert("Cours intensif introuvable (vérifiez le course_type du cours).");
+}
+      const courseSeries = seriesByCourse[selectedCourse.id] || [];
+      pickedSeries = courseSeries[0] || null;
+      if (!pickedSeries) return alert("Aucune séance active pour ce cours intensif.");
+    } else {
+      // Resolve picked series to a session_id (existing behavior)
+      const FIRST = "-first";
+      const SECOND = "-second";
+      const token = selectedHours[0];
+      const baseKey = token.endsWith(FIRST)
+        ? token.slice(0, -FIRST.length)
+        : token.endsWith(SECOND)
+        ? token.slice(0, -SECOND.length)
+        : token;
+
+      const courseSeries = seriesByCourse[selectedCourse.id] || [];
+      pickedSeries = courseSeries.find((x) => x.key === baseKey) || null;
+      if (!pickedSeries) return alert("Créneau introuvable pour ce cours.");
+    }
+
 
     const plan = chosenPlan;
     if (!plan) return alert("Aucun plan valide trouvé pour la durée choisie.");
@@ -444,31 +531,66 @@ const price2h = useMemo(() => {
   <select
     value={courseMode}
     onChange={(e) => {
-      setCourseMode(e.target.value);
-setSelectedHours([]);
-setStartDate("");
-
-    }}
+  setCourseMode(e.target.value);
+  setSelectedCourse(null);   // ✅ ADD THIS
+  setSelectedHours([]);
+  setStartDate("");
+  if (normType(e.target.value) !== "intensif") setIntensifWeeks(4);
+}}
     className="border p-2 rounded w-full"
   >
     <option value="natation">Natation</option>
     <option value="aquafitness">AQUAFITNESS</option>
+    <option value="intensif">COURS INTENSIF</option>
   </select>
 </div>
 
           {/* Choisir un cours (dropdown, auto-prefilled) */}
+          {courseMode !== "intensif" && (
           <div>
-            <label className="block text-sm font-medium mb-1">Choisir un cours</label>
-            <input
-              type="text"
-              readOnly
-              value={selectedCourse?.name || "—"}
-              className="border p-2 rounded w-full bg-gray-50"
-            />
-          </div>
+  <label className="block text-sm font-medium mb-1">Choisir un cours</label>
+
+  <select
+    value={selectedCourse?.id || ""}
+    onChange={(e) => {
+      const c = courses.find((x) => x.id === e.target.value) || null;
+      setSelectedCourse(c);
+      setSelectedHours([]);
+      setStartDate("");
+    }}
+    className="border p-2 rounded w-full"
+  >
+    {(courses.filter((c) => {
+  const t = normType(c.course_type);
+  const mode = normType(courseMode);
+  if (!t) return mode === "natation";
+  return t === mode;
+}) || []).map((c) => (
+      <option key={c.id} value={c.id}>
+        {c.name}
+      </option>
+    ))}
+  </select>
+</div>
+          )}
+          {courseMode === "intensif" && (
+  <div>
+    <label className="block text-sm font-medium mb-1">Durée</label>
+    <select
+      value={intensifWeeks}
+      onChange={(e) => setIntensifWeeks(Number(e.target.value))}
+      className="border p-2 rounded w-full"
+    >
+      <option value={1}>1 semaine</option>
+      <option value={2}>2 semaines</option>
+      <option value={4}>4 semaines</option>
+    </select>
+  </div>
+)}
+
 
           {/* Heures (checkboxes like admin) */}
-          {selectedCourse && courseSeries.length > 0 && (
+          {courseMode !== "intensif" && selectedCourse && courseSeries.length > 0 && (
             <div>
               <label className="block text-sm font-medium mb-2">Sélectionnez vos horaires</label>
 

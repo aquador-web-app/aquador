@@ -20,19 +20,28 @@ function dayLabel(row) {
 // Build hour range like "08h-09h" or "08h-10h"
 // Uses session.start_time and the plan duration resolved from plan_id (or the joined plan)
 function heureRange(row, plansList) {
-  const t = row.sessions?.start_time ?? row.start_time;
-  if (!t) return "—";
-  const [hh] = String(t).split(":");
-  const startH = Number(hh);
+  const sessionStart = row.sessions?.start_time ?? row.start_time;
+  if (!sessionStart) return "—";
 
-  const dur =
+  const planDur =
     Number(plansList?.find(p => p.id === row.plan_id)?.duration_hours) ??
     Number(row.plans?.duration_hours ?? 1);
 
-  const endH = (startH + dur) % 24;
-  const fmt = (h) => `${String(h).padStart(2, "0")}h`;
+  const slot = row.selected_slot || "first"; // first | second | both
+
+  const effectiveStart =
+    slot === "second" ? addHoursToTimeStr(sessionStart, 1) : sessionStart;
+
+  const effectiveDur = slot === "both" ? 2 : planDur;
+  const effectiveEnd = addHoursToTimeStr(effectiveStart, effectiveDur);
+
+  const startH = String(effectiveStart).split(":")[0];
+  const endH = String(effectiveEnd).split(":")[0];
+  const fmt = (h) => `${String(Number(h)).padStart(2, "0")}h`;
+
   return `${fmt(startH)}-${fmt(endH)}`;
 }
+
 
 // Add hours (HH:MM:SS or HH:MM) by +N hours, returns "HH:MM"
 function addHoursToTimeStr(timeStr, hoursToAdd) {
@@ -65,9 +74,15 @@ const publicPlans = useMemo(
   () => plans.filter(p => p.is_public === true),
   [plans]
 );
+const intensiveCourse = useMemo(
+  () => courses.find(c => c.course_type === "intensive") || null,
+  [courses]
+);
 
   const [seriesByCourse, setSeriesByCourse] = useState({});
   const [overridePlan, setOverridePlan] = useState("");
+  const [intensiveDuration, setIntensiveDuration] = useState(null);
+
   
   // Form state
   const [searchTerm, setSearchTerm] = useState("");
@@ -133,16 +148,31 @@ useEffect(() => {
       const [{ data: profs }, { data: crs }, { data: pls }] = await Promise.all([
         supabase
           .from("profiles_with_unpaid")
-          .select("id, full_name, birth_date, role")
+          .select("id, full_name, birth_date, role, signup_type")
           .order("full_name"),
         supabase.from("courses").select("id, name, course_type").order("name"),
-        supabase.from("plans").select("id, name, price, duration_hours, is_public, course_type"),
+        supabase.from("plans")
+  .select(`
+    id,
+    name,
+    price,
+    duration_hours,
+    is_public,
+    course_type,
+    plan_category,
+    duration_unit,
+    duration_value
+  `)
+
       ]);
 
       // exclude admin/teacher/assistant
       const filteredProfiles = (profs || []).filter(
-        (p) => !["admin", "teacher", "assistant"].includes(p.role)
-      );
+  (p) =>
+    !["admin", "teacher", "assistant"].includes(p.role) &&
+    p.signup_type !== "children_only"
+);
+
       setProfiles(filteredProfiles);
       setCourses(crs || []);
       setPlans(pls || []);
@@ -206,10 +236,12 @@ setSeriesByCourse(seriesMap);
         plan_id,
         override_price,
         type,
+        selected_slot,
+        selected_hours,
         profiles:profile_id ( full_name ),
         courses:course_id ( name ),
         plans:plan_id ( id, name, price, duration_hours ),
-        sessions:session_id ( id, day_of_week, start_time )
+        sessions:session_id ( id, day_of_week, start_time, duration_hours )
       `
       )
       .order("enrolled_at", { ascending: false });
@@ -281,40 +313,44 @@ function toggleHour(which) {
   const base = which.replace(/-(first|second)$/, "");
 
   setSelectedHours(prev => {
+    const prevBase = prev[0]?.replace(/-(first|second)$/, "") || null;
+
     const hasFirst = prev.includes(`${base}${FIRST}`);
     const hasSecond = prev.includes(`${base}${SECOND}`);
 
-    // ✅ DESELECT
+    // 🔁 SWITCH DAY → clear previous selection
+    if (prevBase && prevBase !== base) {
+      prev = [];
+    }
+
+    // ❌ DESELECT (remove entire day)
     if (prev.includes(which)) {
       return prev.filter(h => !h.startsWith(base));
     }
 
-    // 🚫 NON-ADMIN RULE
-    if (isSecond && !hasFirst && isAdminUser === false) {
-      if (!hourWarningShown.current) {
-        hourWarningShown.current = true;
-        setTimeout(() => (hourWarningShown.current = false), 400);
-        alert(
-          "Il est impératif de choisir la première tranche d'heure si vous choisissez 1 heure par séance."
-        );
-      }
+    // 🚫 USER RULE: cannot select second without first
+    if (isSecond && !hasFirst && !isAdminUser) {
+      alert(
+        "Il est impératif de choisir la première tranche d'heure si vous choisissez 1 heure par séance."
+      );
       return prev;
     }
 
-    // 🛠 ADMIN: allow second alone (1h override)
+    // 🛠 ADMIN: allow second alone
     if (isSecond && isAdminUser && !hasFirst) {
-      return [...prev.filter(h => !h.startsWith(base)), which];
+      return [`${base}${SECOND}`];
     }
 
-    // 🛠 ADMIN OR USER: allow FIRST + SECOND = 2h
+    // ✅ FIRST + SECOND = 2h
     if ((isFirst && hasSecond) || (isSecond && hasFirst)) {
       return [...prev, which];
     }
 
-    // ✅ DEFAULT: single selection
-    return [...prev.filter(h => !h.startsWith(base)), which];
+    // ✅ DEFAULT: single selection for this day
+    return [`${base}${isSecond ? SECOND : FIRST}`];
   });
 }
+
 
   const filteredProfiles = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -358,11 +394,21 @@ const autoPlan = useMemo(() => {
 
 
 const chosenPlan = useMemo(() => {
-  if (overrideEnabled && overridePlanId) {
-    return plans.find((p) => p.id === overridePlanId) || null;
-  }
-  return autoPlan;
-}, [overrideEnabled, overridePlanId, autoPlan, publicPlans]);
+  if (courseMode !== "intensive") return autoPlan;
+
+  if (!intensiveDuration) return null;
+
+  return plans.find(p =>
+    p.plan_category === "intensive" &&
+    p.course_type === "intensive" &&
+    p.duration_unit === "week" &&
+    Number(p.duration_value) === Number(intensiveDuration)
+  ) || null;
+}, [courseMode, intensiveDuration, plans, autoPlan]);
+
+
+
+
 
 
 const handleDelete = async (row) => {
@@ -409,27 +455,37 @@ async function loadInvoices() {
   e.preventDefault();
 
   if (!selectedProfile) return alert("Sélectionnez un étudiant.");
-  const course = bypass
+  const course =
+  courseMode === "intensive"
+    ? intensiveCourse
+    : bypass
     ? courses.find((c) => c.id === overrideCourse)
     : autoCourse;
   if (!course) return alert("Cours introuvable.");
   if (!startDate) return alert("Choisissez une date.");
-  if (selectedHours.length === 0) return alert("Choisissez au moins une heure.");
+  if (courseMode !== "intensive" && selectedHours.length === 0) {
+  return alert("Choisissez au moins une heure.");
+}
+
 
   // Determine if it's 1h or 2h
   const durationNeeded = selectedHours.length === 2 ? 2 : 1;
   let plan;
 
-// Determine the correct plan by duration AND course_type
-if (overrideEnabled && overridePlanId) {
-  plan = publicPlans.find(p => p.id === overridePlanId);
+if (courseMode === "intensive") {
+  plan = chosenPlan; // 🔒 FORCED AUTOMATIC
+} else if (overrideEnabled && overridePlanId) {
+  plan = plans.find(p => p.id === overridePlanId);
 } else {
-  plan = publicPlans.find(
-    (p) =>
-      Number(p.duration_hours) === durationNeeded &&
-      p.course_type === course.course_type
-  );
+  plan = chosenPlan;
 }
+
+if (!plan) {
+  alert("Aucun plan valide trouvé.");
+  return;
+}
+
+
 
 
 // Safety check
@@ -439,22 +495,40 @@ if (!plan) {
 } 
 
   // Extract the picked series key from the checkbox
+  let pickedSeries;
+let selectedHoursCount = 0;
+let selectedSlot = "first";
+
+const seriesList = seriesByCourse[course.id] || [];
+
+if (courseMode === "intensive") {
+  // 🔥 Intensive = first active session in the group
+  pickedSeries = seriesList[0];
+  if (!pickedSeries) {
+    return alert("Aucune session trouvée pour ce cours intensif.");
+  }
+} else {
   const FIRST = "-first";
   const SECOND = "-second";
+
   const hasFirst = selectedHours.some((h) => h.endsWith("-first"));
   const hasSecond = selectedHours.some((h) => h.endsWith("-second"));
-  const selectedHoursCount = hasFirst && hasSecond ? 2 : 1;
+
+  selectedHoursCount = hasFirst && hasSecond ? 2 : 1;
+
+  if (hasFirst && hasSecond) selectedSlot = "both";
+  else if (hasSecond && isAdminUser) selectedSlot = "second";
+
   const token = selectedHours[0];
-  const baseKey = token.endsWith(FIRST)
-    ? token.slice(0, -FIRST.length)
-    : token.endsWith(SECOND)
-    ? token.slice(0, -SECOND.length)
-    : token;
+  const baseKey = token.replace(/-(first|second)$/, "");
 
-  const seriesList = seriesByCourse[course.id] || [];
-  const pickedSeries = seriesList.find((x) => x.key === baseKey);
+  pickedSeries = seriesList.find((x) => x.key === baseKey);
 
-  if (!pickedSeries) return alert("Série introuvable pour ce créneau.");
+  if (!pickedSeries) {
+    return alert("Série introuvable pour ce créneau.");
+  }
+}
+
 
   const chosenDate = new Date(startDate);
   const chosenDay = chosenDate.getDay();
@@ -495,10 +569,6 @@ console.log("chosenPlan:", chosenPlan);
 console.log("publicPlans:", publicPlans);
 console.log("================================");
 
-let selectedSlot = "first";
-
-if (hasFirst && hasSecond) selectedSlot = "both";
-else if (hasSecond && isAdminUser) selectedSlot = "second";
 
 
 const { data, error } = await supabase.rpc("create_enrollment_with_invoice", {
@@ -516,8 +586,9 @@ const { data, error } = await supabase.rpc("create_enrollment_with_invoice", {
 
   // 🔥 THESE TWO LINES FIX EVERYTHING
   p_admin_override: isAdminUser === true,
-  p_selected_hours: selectedHoursCount,
-  p_selected_slot: selectedSlot,
+  p_selected_hours: courseMode === "intensive" ? null : selectedHoursCount,
+  p_selected_slot: courseMode === "intensive" ? null : selectedSlot,
+  p_course_mode: courseMode,
 }
 );
 
@@ -675,6 +746,7 @@ const getCurrentDur = (row) =>
   >
     <option value="natation">Natation</option>
     <option value="aquafitness">AQUAFITNESS</option>
+    <option value="intensive">Cours Intensif</option>
   </select>
 </div>
 
@@ -709,13 +781,18 @@ const getCurrentDur = (row) =>
             <input
               type="text"
               readOnly
-              value={autoCourse?.name || "—"}
+              value={
+                courseMode === "intensive"
+                  ? intensiveCourse?.name || "—"
+                  : autoCourse?.name || "—"
+              }
               className="border p-2 rounded w-full bg-gray-50"
             />
           )}
         </div>
 
         {/* Hours */}
+{courseMode !== "intensive" && (
 <div className="mt-3">
   <label className="block text-sm font-medium mb-1">Heures disponibles</label>
 
@@ -782,6 +859,22 @@ const getCurrentDur = (row) =>
     });
   })()}
 </div>
+)}
+{courseMode === "intensive" && (
+  <div className="mt-3">
+    <label className="block text-sm font-medium mb-1">Durée</label>
+    <select
+      value={intensiveDuration ?? ""}
+      onChange={e => setIntensiveDuration(Number(e.target.value))}
+      className="border p-2 rounded w-full"
+    >
+      <option value="">— Choisir —</option>
+      <option value={1}>1 semaine</option>
+      <option value={2}>2 semaines</option>
+      <option value={4}>4 semaines</option>
+    </select>
+  </div>
+)}
 
 
 
