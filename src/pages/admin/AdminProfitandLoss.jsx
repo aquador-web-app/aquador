@@ -8,15 +8,17 @@ import {
   formatMonth,
 } from "../../lib/dateUtils";
 
-if (typeof window !== "undefined") {
-  window.addEventListener("submit", (e) => e.preventDefault());
-}
-
 export default function AdminProfitAndLoss() {
   const [activeTab, setActiveTab] = useState("income");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [editingExpense, setEditingExpense] = useState(null);
+    // ✅ Proof upload (for new manual expense)
+  const [newExpenseProof, setNewExpenseProof] = useState(null);
+
+  // ✅ Cache signed links: { [expenseId]: signedUrl }
+  const [proofLinks, setProofLinks] = useState({});
+
 
   useEffect(() => {
     const handler = (e) => { if (e.key === "Enter") e.preventDefault(); };
@@ -89,7 +91,6 @@ export default function AdminProfitAndLoss() {
     setError("");
 
     try {
-      const selectedMonth = period.start.slice(0, 7);
 
       // === INVOICES (BY MONTH) ===
       const { data: invoices } = await supabase
@@ -110,9 +111,10 @@ export default function AdminProfitAndLoss() {
       // === MANUAL EXPENSES ===
       const { data: manualExp } = await supabase
         .from("expenses")
-        .select("id, description, category, amount, currency, date")
+        .select("id, description, category, amount, currency, date, proof_path")
         .gte("date", period.start)
-        .lte("date", period.end);
+        .lte("date", period.end)
+        .order("date", { ascending: false });
 
       // === COMMISSIONS (BY processed_at) ===
       const { data: commissions } = await supabase
@@ -352,26 +354,115 @@ function generateReport() {
   URL.revokeObjectURL(url);
 }
 
+  // ==============================
+  // ✅ Proof helpers
+  // ==============================
+
+  function getFileExt(file) {
+    const name = file?.name || "";
+    const idx = name.lastIndexOf(".");
+    if (idx === -1) return "";
+    return name.slice(idx + 1).toLowerCase();
+  }
+
+  async function uploadExpenseProof(expenseId, file) {
+    if (!file) return null;
+
+    // Optional size guard (10MB)
+    const maxBytes = 10 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      throw new Error("Le fichier est trop volumineux (max 10MB).");
+    }
+
+    const ext = getFileExt(file) || "bin";
+    const safeExt = ext.replace(/[^a-z0-9]/g, "") || "bin";
+
+    const path = `${expenseId}/${Date.now()}.${safeExt}`;
+
+    const { error: upErr } = await supabase.storage
+      .from("expense_proofs")
+      .upload(path, file, {
+        cacheControl: "3600",
+        upsert: true,
+        contentType: file.type || "application/octet-stream",
+      });
+
+    if (upErr) throw upErr;
+
+    const { error: dbErr } = await supabase
+      .from("expenses")
+      .update({
+        proof_path: path,
+        proof_mime: file.type || null,
+        proof_size: file.size || null,
+        proof_uploaded_at: new Date().toISOString(),
+      })
+      .eq("id", expenseId);
+
+    if (dbErr) throw dbErr;
+
+    return path;
+  }
+
+  async function openProof(expense) {
+    try {
+      if (!expense?.proof_path) return;
+
+      // Use cached signed url if exists
+      const cached = proofLinks[expense.id];
+      if (cached) {
+        window.open(cached, "_blank", "noopener,noreferrer");
+        return;
+      }
+
+      const { data, error: signErr } = await supabase.storage
+        .from("expense_proofs")
+        .createSignedUrl(expense.proof_path, 60 * 10); // 10 min
+
+      if (signErr) throw signErr;
+
+      const signedUrl = data?.signedUrl;
+      if (!signedUrl) throw new Error("Impossible de générer le lien du fichier.");
+
+      setProofLinks((prev) => ({ ...prev, [expense.id]: signedUrl }));
+      window.open(signedUrl, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      alert("Erreur preuve : " + (err?.message || "Erreur inconnue"));
+    }
+  }
 
 
-  async function addExpense(e) {
+    async function addExpense(e) {
     e.preventDefault();
+
     if (!newExpense.description || !newExpense.amount) {
       alert("Veuillez remplir la description et le montant.");
       return;
     }
 
-    const { error } = await supabase.from("expenses").insert([{
-      description: newExpense.description,
-      category: newExpense.category,
-      amount: Number(newExpense.amount),
-      currency: newExpense.currency,
-      date: newExpense.date,
-    }]);
+    try {
+      // 1) Insert expense row first (to get its id)
+      const { data: inserted, error: insErr } = await supabase
+        .from("expenses")
+        .insert([
+          {
+            description: newExpense.description,
+            category: newExpense.category,
+            amount: Number(newExpense.amount),
+            currency: newExpense.currency,
+            date: newExpense.date,
+          },
+        ])
+        .select("id")
+        .single();
 
-    if (error) {
-      alert("Erreur : " + error.message);
-    } else {
+      if (insErr) throw insErr;
+
+      // 2) Upload proof if provided
+      if (newExpenseProof) {
+        await uploadExpenseProof(inserted.id, newExpenseProof);
+      }
+
       alert("✅ Dépense ajoutée !");
       setNewExpense({
         description: "",
@@ -380,9 +471,13 @@ function generateReport() {
         currency: "USD",
         date: new Date().toISOString().split("T")[0],
       });
+      setNewExpenseProof(null);
       fetchData();
+    } catch (err) {
+      alert("Erreur : " + (err?.message || "Erreur inconnue"));
     }
   }
+
 
   async function updateExpense(id, updates) {
     const { error } = await supabase
@@ -598,6 +693,20 @@ function generateReport() {
                 }
                 className="border rounded px-2 py-1"
               />
+                            {/* ✅ Proof upload */}
+              <input
+                type="file"
+                accept="image/*,application/pdf"
+                onChange={(e) => setNewExpenseProof(e.target.files?.[0] || null)}
+                className="border rounded px-2 py-1 md:col-span-6"
+              />
+
+              {newExpenseProof && (
+                <p className="text-xs text-gray-500 md:col-span-6">
+                  Fichier sélectionné :{" "}
+                  <span className="font-semibold">{newExpenseProof.name}</span>
+                </p>
+              )}
 
               <button
                 type="submit"
@@ -621,6 +730,7 @@ function generateReport() {
                   <th className="px-3 py-2 text-right">Montant</th>
                   <th className="px-3 py-2 text-center">Devise</th>
                   <th className="px-3 py-2 text-left">Mois</th>
+                  <th className="px-3 py-2 text-center">Preuve</th>
                   <th className="px-3 py-2 text-center">Actions</th>
                 </tr>
               </thead>
@@ -726,6 +836,21 @@ function generateReport() {
                         formatMonth(e.date)
                       )}
                     </td>
+                                        {/* ✅ Proof link */}
+                    <td className="px-3 py-2 text-center">
+                      {e.proof_path ? (
+                        <button
+                          type="button"
+                          onClick={() => openProof(e)}
+                          className="text-blue-700 hover:underline"
+                          title="Ouvrir la preuve"
+                        >
+                          📎 Preuve
+                        </button>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
+                    </td>
 
                     <td className="px-3 py-2 text-center">
                       {editingExpense?.id === e.id ? (
@@ -801,6 +926,7 @@ function generateReport() {
       )}
     </td>
 
+    <td></td>
     <td></td>
   </tr>
 </tfoot>
