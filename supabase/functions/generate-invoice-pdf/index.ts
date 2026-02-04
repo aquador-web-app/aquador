@@ -390,7 +390,6 @@ if (busyFamily && busyFamily.length > 0) {
 const { data: lockRows } = await supabase
   .from("invoices")
   .update({
-    pdf_url: null,
     pdf_generating: true,
   })
   .eq("id", invoice_id)
@@ -587,9 +586,15 @@ const pdfBuffer = await fetchPdfBufferWithRetry(compiledHtml);
     if (profile?.parent_id) {
       // 👶 CHILD FLOW: update only this child's invoice for this first PDF
       await supabase
-        .from("invoices")
-        .update({ pdf_url: pdfUrl })
-        .eq("id", mainInvoice.id);
+  .from("invoices")
+  .update({ pdf_url: null })
+  .eq("id", mainInvoice.id);
+
+await supabase
+  .from("invoices")
+  .update({ pdf_url: pdfUrl })
+  .eq("id", mainInvoice.id);
+
 
         console.log(
   "🔁 PDF regenerated — overwriting pdf_url for invoice:",
@@ -775,10 +780,20 @@ const parentPdfBuffer = await fetchPdfBufferWithRetry(compiledHtmlParent);
 
 
         // Update pdf_url for ALL parent family invoices
-        await supabase
-          .from("invoices")
-          .update({ pdf_url: parentPdfUrl })
-          .in("id", familyInvoicesParent.map((inv) => inv.id));
+        const parentIds = familyInvoicesParent.map((inv) => inv.id);
+
+// 1) clear existing link ONLY after we have a new parentPdfUrl
+await supabase
+  .from("invoices")
+  .update({ pdf_url: null })
+  .in("id", parentIds);
+
+// 2) set the new link
+await supabase
+  .from("invoices")
+  .update({ pdf_url: parentPdfUrl })
+  .in("id", parentIds);
+
 
           console.log(
   "🔁 PDF regenerated — overwriting pdf_url for parent family invoices:",
@@ -794,31 +809,40 @@ const parentPdfBuffer = await fetchPdfBufferWithRetry(compiledHtmlParent);
 // 🔁 FAN-OUT: trigger next sibling invoice if needed
 // ⚠️ CHILD FLOW ONLY — do NOT run during parent calls
 
-const { data: pendingSiblings } = await supabase
+// find ONE other child invoice in same family/month missing pdf_url
+const { data: siblingCandidate } = await supabase
   .from("invoices")
   .select("id")
-  .eq("user_id", profile.parent_id)
   .eq("month", mainInvoice.month)
   .is("pdf_url", null)
-  .is("pdf_generating", false) 
+  .is("pdf_generating", false)
   .neq("id", mainInvoice.id)
+  .in(
+    "user_id",
+    (
+      await supabase
+        .from("profiles_with_unpaid")
+        .select("id")
+        .eq("parent_id", profile.parent_id) // all children of same parent
+    ).data?.map((p) => p.id) || []
+  )
   .limit(1);
 
-if (pendingSiblings?.length) {
-  const nextInvoiceId = pendingSiblings[0].id;
+if (siblingCandidate?.length) {
+  const nextInvoiceId = siblingCandidate[0].id;
 
   console.log("🔁 Triggering next sibling PDF:", nextInvoiceId);
 
-  // fire-and-forget, lock will serialize
   fetch(req.url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       invoice_id: nextInvoiceId,
-      source: source,
+      source,
     }),
   }).catch(() => {});
 }
+
       
       return new Response(
         JSON.stringify({ success: true, pdf_url: pdfUrl }),
@@ -827,10 +851,20 @@ if (pendingSiblings?.length) {
     }
 
     // === PARENT FLOW (called directly with parent invoice_id)
-    await supabase
-      .from("invoices")
-      .update({ pdf_url: pdfUrl })
-      .in("id", familyInvoices.map((inv) => inv.id));
+    const ids = familyInvoices.map((inv) => inv.id);
+
+// 1) clear existing link ONLY after we have a new pdfUrl
+await supabase
+  .from("invoices")
+  .update({ pdf_url: null })
+  .in("id", ids);
+
+// 2) set the new link
+await supabase
+  .from("invoices")
+  .update({ pdf_url: pdfUrl })
+  .in("id", ids);
+
 
       console.log(
   "🔁 PDF regenerated — overwriting pdf_url for parent invoices:",
