@@ -13,11 +13,22 @@ export default function AdminProfitAndLoss() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [editingExpense, setEditingExpense] = useState(null);
-    // ✅ Proof upload (for new manual expense)
-  const [newExpenseProof, setNewExpenseProof] = useState(null);
 
   // ✅ Cache signed links: { [expenseId]: signedUrl }
   const [proofLinks, setProofLinks] = useState({});
+  const [draftId] = useState(() =>
+  typeof window !== "undefined" && crypto?.randomUUID
+    ? crypto.randomUUID()
+    : String(Date.now())
+);
+
+const [draftProofPath, setDraftProofPath] = useState(() =>
+  typeof window !== "undefined"
+    ? (sessionStorage.getItem("pnl_draft_proof") || "")
+    : ""
+);
+
+
 
 
   useEffect(() => {
@@ -459,9 +470,30 @@ function generateReport() {
       if (insErr) throw insErr;
 
       // 2) Upload proof if provided
-      if (newExpenseProof) {
-        await uploadExpenseProof(inserted.id, newExpenseProof);
-      }
+      if (draftProofPath) {
+  const ext = (draftProofPath.split(".").pop() || "bin");
+  const finalPath = `${inserted.id}/${Date.now()}.${ext}`;
+
+  const { error: mvErr } = await supabase.storage
+    .from("expense_proofs")
+    .move(draftProofPath, finalPath);
+
+  if (mvErr) throw mvErr;
+
+  const { error: dbErr } = await supabase
+    .from("expenses")
+    .update({
+      proof_path: finalPath,
+      proof_uploaded_at: new Date().toISOString(),
+    })
+    .eq("id", inserted.id);
+
+  if (dbErr) throw dbErr;
+
+  setDraftProofPath("");
+  sessionStorage.removeItem("pnl_draft_proof");
+}
+
 
       alert("✅ Dépense ajoutée !");
       setNewExpense({
@@ -471,7 +503,6 @@ function generateReport() {
         currency: "USD",
         date: new Date().toISOString().split("T")[0],
       });
-      setNewExpenseProof(null);
       fetchData();
     } catch (err) {
       alert("Erreur : " + (err?.message || "Erreur inconnue"));
@@ -693,20 +724,63 @@ function generateReport() {
                 }
                 className="border rounded px-2 py-1"
               />
-                            {/* ✅ Proof upload */}
-              <input
-                type="file"
-                accept="image/*,application/pdf"
-                onChange={(e) => setNewExpenseProof(e.target.files?.[0] || null)}
-                className="border rounded px-2 py-1 md:col-span-6"
-              />
+                            {/* ✅ Proof upload (draft) */}
+<input
+  type="file"
+  accept="image/*,application/pdf"
+  onChange={async (e) => {
+    const file = e.target.files?.[0] || null;
+    if (!file) return;
 
-              {newExpenseProof && (
-                <p className="text-xs text-gray-500 md:col-span-6">
-                  Fichier sélectionné :{" "}
-                  <span className="font-semibold">{newExpenseProof.name}</span>
-                </p>
-              )}
+    try {
+      const ext =
+        (file.name.split(".").pop() || "bin")
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, "") || "bin";
+
+      const tempPath = `drafts/${draftId}/${Date.now()}.${ext}`;
+
+      const { error: upErr } = await supabase.storage
+        .from("expense_proofs")
+        .upload(tempPath, file, {
+          upsert: true,
+          contentType: file.type || "application/octet-stream",
+        });
+
+      if (upErr) throw upErr;
+
+      setDraftProofPath(tempPath);
+
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("pnl_draft_proof", tempPath);
+      }
+
+      alert("✅ Preuve téléversée (brouillon).");
+    } catch (err) {
+      alert("Erreur upload preuve : " + (err?.message || "Erreur inconnue"));
+    } finally {
+      e.target.value = "";
+    }
+  }}
+  className="border rounded px-2 py-1 md:col-span-6"
+/>
+
+{draftProofPath && (
+  <p className="text-xs text-gray-500 md:col-span-6">
+    Preuve (brouillon) :{" "}
+    <span className="font-semibold">{draftProofPath.split("/").pop()}</span>
+  </p>
+)}
+
+
+
+              {draftProofPath && (
+  <p className="text-xs text-gray-500 md:col-span-6">
+    Preuve (brouillon) :{" "}
+    <span className="font-semibold">{draftProofPath.split("/").pop()}</span>
+  </p>
+)}
+
 
               <button
                 type="submit"
