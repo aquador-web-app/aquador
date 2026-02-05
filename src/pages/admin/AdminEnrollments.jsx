@@ -1187,25 +1187,43 @@ const getCurrentDur = (row) =>
       key={e.id}
       e={e}
       plans={plans}
+      publicPlans={publicPlans}
       courses={courses}
       onDelete={handleDelete}
+      loadEnrollments={loadEnrollments}
     />
   ))}
 </div>
 
   </div>
   );
-  function EnrollmentCard({ e, plans, courses, onDelete }) {
+  function EnrollmentCard({ e, plans, publicPlans, courses, onDelete, loadEnrollments }) {
+  const currentDur = Number(
+    (publicPlans?.find((p) => p.id === e.plan_id)?.duration_hours) ??
+      (e.plans?.duration_hours ?? 1)
+  );
+
+  const planName =
+    e.plans?.name || plans.find((p) => p.id === e.plan_id)?.name || "—";
+
+  const planPrice =
+    e.override_price ??
+    e.plans?.price ??
+    plans.find((p) => p.id === e.plan_id)?.price ??
+    0;
+
+  // (optional) show loading state per card
+  const [savingDur, setSavingDur] = useState(false);
+  const [savingPlan, setSavingPlan] = useState(false);
+
   return (
-    <div className="bg-white rounded-xl border shadow-sm p-4 space-y-2">
+    <div className="bg-white rounded-xl border shadow-sm p-4 space-y-3">
       <div className="flex justify-between items-start">
         <div>
           <p className="font-semibold text-blue-700">
             {e.profiles?.full_name || "—"}
           </p>
-          <p className="text-xs text-gray-500">
-            {e.courses?.name}
-          </p>
+          <p className="text-xs text-gray-500">{e.courses?.name}</p>
         </div>
 
         <span
@@ -1219,7 +1237,7 @@ const getCurrentDur = (row) =>
         </span>
       </div>
 
-      <div className="text-sm text-gray-700 space-y-1">
+      <div className="text-sm text-gray-700 space-y-2">
         <div className="flex justify-between">
           <span>Jour</span>
           <span>{dayLabel(e)}</span>
@@ -1230,6 +1248,111 @@ const getCurrentDur = (row) =>
           <span>{heureRange(e, plans)}</span>
         </div>
 
+        {/* ✅ Durée (editable like desktop) */}
+        <div className="flex justify-between items-center gap-3">
+          <span>Durée</span>
+
+          <select
+            value={currentDur}
+            disabled={savingDur}
+            onChange={async (ev) => {
+              const newDur = Number(ev.target.value);
+
+              // same logic as desktop
+              const courseType = courses.find((c) => c.id === e.course_id)?.course_type;
+
+              const candidate = publicPlans.find(
+                (p) =>
+                  Number(p.duration_hours) === newDur &&
+                  p.course_type === courseType
+              );
+
+              if (!candidate) {
+                alert("Aucun plan trouvé pour cette durée.");
+                return;
+              }
+
+              setSavingDur(true);
+              try {
+                const { error } = await supabase
+                  .from("enrollments")
+                  .update({ plan_id: candidate.id })
+                  .eq("id", e.id);
+
+                if (error) {
+                  alert("Erreur mise à jour de la durée: " + error.message);
+                  return;
+                }
+
+                await loadEnrollments();
+              } finally {
+                setSavingDur(false);
+              }
+            }}
+            className="border rounded px-2 py-1 text-sm bg-white"
+          >
+            <option value={1}>1h</option>
+            <option value={2}>2h</option>
+          </select>
+        </div>
+
+        {/* ✅ Plan (responsive) */}
+<div className="grid grid-cols-[auto,1fr] items-center gap-3">
+  <span className="shrink-0">Plan</span>
+
+  <div className="min-w-0">
+    <select
+      value={e.plan_id || ""}
+      disabled={savingPlan}
+      onChange={async (ev) => {
+        const newPlanId = ev.target.value;
+
+        const chosen = plans.find((p) => p.id === newPlanId);
+        const newPrice = chosen?.price || 0;
+
+        setSavingPlan(true);
+        try {
+          const { data: updated, error } = await supabase
+            .from("enrollments")
+            .update({
+              plan_id: newPlanId,
+              override_price: newPrice,
+            })
+            .eq("id", e.id)
+            .select("id, plan_id, override_price")
+            .single();
+
+          if (error) {
+            alert("Erreur mise à jour du plan: " + error.message);
+            return;
+          }
+
+          await loadEnrollments();
+          alert(`✅ Plan mis à jour: ${chosen?.name || "—"} — $${newPrice}`);
+        } finally {
+          setSavingPlan(false);
+        }
+      }}
+      className="w-full min-w-0 max-w-full border rounded px-2 py-1 text-sm bg-white truncate"
+    >
+      <option value="">—</option>
+      {plans.map((p) => (
+        <option key={p.id} value={p.id}>
+          {p.name} — {formatCurrencyUSD(
+            e.plan_id === p.id ? (e.override_price ?? p.price) : p.price
+          )}
+        </option>
+      ))}
+    </select>
+  </div>
+</div>
+
+
+        {/* Info line (still useful) */}
+        <div className="text-xs text-gray-500 flex justify-end">
+          {planName} — {formatCurrencyUSD(planPrice)}
+        </div>
+
         <div className="flex justify-between">
           <span>Début</span>
           <span>{formatDateFrSafe(e.start_date)}</span>
@@ -1237,6 +1360,7 @@ const getCurrentDur = (row) =>
       </div>
 
       <button
+        type="button"
         onClick={() => onDelete(e)}
         className="w-full mt-2 bg-red-600 text-white py-2 rounded-lg text-sm"
       >
@@ -1245,5 +1369,6 @@ const getCurrentDur = (row) =>
     </div>
   );
 }
+
 
 }
