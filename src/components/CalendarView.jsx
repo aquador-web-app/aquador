@@ -364,29 +364,98 @@ useEffect(() => {
 
 
   async function loadEvents(rangeStart, rangeEnd) {
-    setLoading(true);
-    try {
-      const startISO = toISODate(rangeStart);
-const endISO = toISODate(rangeEnd);
+  setLoading(true);
+  try {
+    const startISO = toISODate(rangeStart);
+    const endISO = toISODate(rangeEnd);
 
-    
-      const { data: sess } = await supabase
-  .from("sessions")
-  .select(
-    `id, course_id, start_date, start_time, duration_hours, status,
-     courses:course_id ( name )`
-  )
-  .gte("start_date", startISO)
-  .lte("start_date", endISO)
-  .neq("status", "deleted");
+    // 1) Load sessions
+    const { data: sess, error: sessErr } = await supabase
+      .from("sessions")
+      .select(
+        `id, course_id, session_group, start_date, start_time, duration_hours, status,
+         courses:course_id ( name )`
+      )
+      .gte("start_date", startISO)
+      .lte("start_date", endISO)
+      .neq("status", "deleted");
 
-      
+    if (sessErr) throw sessErr;
 
-      const legacyEvents =
-        sess?.map((s) => {
+    const sessions = sess || [];
+
+    // 2) Identify intensif sessions and collect course_ids (NOT session_groups)
+    const isIntensifName = (name) =>
+      String(name || "").toLowerCase().includes("intensif");
+
+    const intensifCourseIds = Array.from(
+      new Set(
+        sessions
+          .filter((s) => isIntensifName(s?.courses?.name))
+          .map((s) => s.course_id)
+          .filter(Boolean)
+      )
+    );
+
+    // 3) Load active enrollments for those intensif courses
+    //    (only columns you actually have)
+    let enrollments = [];
+    if (intensifCourseIds.length) {
+      const { data: enr, error: enrErr } = await supabase
+        .from("enrollments")
+        .select("id, course_id, status, start_date, end_date")
+        .in("course_id", intensifCourseIds)
+        .eq("status", "active");
+
+      if (enrErr) throw enrErr;
+      enrollments = enr || [];
+    }
+
+    // 4) Build course_id -> windows[]
+    const courseWindows = new Map();
+    for (const e of enrollments) {
+      if (!e.course_id) continue;
+      if (!e.start_date || !e.end_date) continue;
+
+      const winStart = new Date(`${e.start_date}T00:00:00`);
+      const winEnd = new Date(`${e.end_date}T23:59:59`);
+
+      const arr = courseWindows.get(e.course_id) || [];
+      arr.push({ winStart, winEnd });
+      courseWindows.set(e.course_id, arr);
+    }
+
+    // 5) Build events, filtering ONLY intensif by enrollment windows
+    const legacyEvents =
+      sessions
+        .map((s) => {
+          const courseName = String(s?.courses?.name || "");
+          const isIntensif = isIntensifName(courseName);
+
+          if (isIntensif) {
+            const windows = courseWindows.get(s.course_id);
+
+            // Rule A: no active enrollments => hide intensif completely
+            if (!windows || windows.length === 0) return null;
+
+            // Rule B: show session only if inside at least one enrollment window
+            const sessionDate = s.start_date
+              ? new Date(`${s.start_date}T12:00:00`)
+              : null;
+
+            if (!sessionDate) return null;
+
+            const inAnyWindow = windows.some(
+              (w) => sessionDate >= w.winStart && sessionDate <= w.winEnd
+            );
+
+            if (!inAnyWindow) return null;
+          }
+
           const start = toLocalDate(s.start_date, s.start_time);
           const end = new Date(start);
           end.setHours(end.getHours() + (Number(s.duration_hours) || 1));
+
           return {
             id: `legacy-${s.id}`,
             title: s.courses?.name || "Cours",
@@ -394,68 +463,71 @@ const endISO = toISODate(rangeEnd);
             end,
             classNames: ["aq-session"],
           };
-        }) || [];
+        })
+        .filter(Boolean) || [];
 
-      const { data: bookings } = await supabase
-  .from("venue_bookings")
-  .select("id, title, date, start_time, end_time, booking_type, status")
-  .gte("date", startISO)
-  .lte("date", endISO)
-  .eq("status", "approved");
+    // 6) Bookings (unchanged)
+    const { data: bookings, error: bkErr } = await supabase
+      .from("venue_bookings")
+      .select("id, title, date, start_time, end_time, booking_type, status")
+      .gte("date", startISO)
+      .lte("date", endISO)
+      .eq("status", "approved");
 
+    if (bkErr) throw bkErr;
 
-      const bookingEvents =
-        bookings?.map((b) => {
-          const isFull = b.booking_type === "full";
-          const isPublicView = mode !== "admin";
-          return {
-            id: `booking-${b.id}`,
-            title: isPublicView
-              ? isFull
-                ? "Exclusive"
-                : "Non Exclusive"
-              : b.title || (isFull ? "Réservation complète" : "Réservation club"),
-            start: toLocalDate(b.date, cleanTime(b.start_time)),
-            end: toLocalDate(b.date, cleanTime(b.end_time)),
-            classNames: [isFull ? "aq-booking-full" : "aq-booking-daypass"],
-          };
-        }) || [];
+    const bookingEvents =
+      (bookings || []).map((b) => {
+        const isFull = b.booking_type === "full";
+        const isPublicView = mode !== "admin";
+        return {
+          id: `booking-${b.id}`,
+          title: isPublicView
+            ? isFull
+              ? "Exclusive"
+              : "Non Exclusive"
+            : b.title || (isFull ? "Réservation complète" : "Réservation club"),
+          start: toLocalDate(b.date, cleanTime(b.start_time)),
+          end: toLocalDate(b.date, cleanTime(b.end_time)),
+          classNames: [isFull ? "aq-booking-full" : "aq-booking-daypass"],
+        };
+      }) || [];
 
-      // Sundays (fermé)
-      const sundays = [];
-      const cursor = new Date(rangeStart);
-while (cursor <= rangeEnd) {
-
-        if (cursor.getDay() === 0) {
-          sundays.push({
-            id: `closed-${cursor.toISOString()}`,
-            title: "Fermé",
-            start: new Date(cursor),
-            allDay: true,
-            classNames: ["aq-ferme"],
-          });
-        }
-        cursor.setDate(cursor.getDate() + 1);
+    // 7) Sundays (unchanged)
+    const sundays = [];
+    const cursor = new Date(rangeStart);
+    while (cursor <= rangeEnd) {
+      if (cursor.getDay() === 0) {
+        sundays.push({
+          id: `closed-${cursor.toISOString()}`,
+          title: "Fermé",
+          start: new Date(cursor),
+          allDay: true,
+          classNames: ["aq-ferme"],
+        });
       }
-
-      const allEvents = [...legacyEvents, ...bookingEvents, ...sundays];
-
-      const unique = Array.from(
-        new Map(
-          allEvents.map((e) => [
-            `${e.title}-${e.start.toISOString()}-${e.end?.toISOString()}`,
-            e,
-          ])
-        ).values()
-      );
-
-      setEvents(unique);
-    } catch (err) {
-      console.error("Error loading events:", err);
-    } finally {
-      setLoading(false);
+      cursor.setDate(cursor.getDate() + 1);
     }
+
+    const allEvents = [...legacyEvents, ...bookingEvents, ...sundays];
+
+    const unique = Array.from(
+      new Map(
+        allEvents.map((e) => [
+          `${e.title}-${e.start.toISOString()}-${e.end?.toISOString()}`,
+          e,
+        ])
+      ).values()
+    );
+
+    setEvents(unique);
+  } catch (err) {
+    console.error("Error loading events:", err);
+  } finally {
+    setLoading(false);
   }
+}
+
 
   // ---------- Enrollment names
   // ---------- Enrollment names
