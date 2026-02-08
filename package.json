@@ -53,6 +53,7 @@
   },
   "devDependencies": {
     "@types/react-signature-canvas": "^1.0.7",
+    "@vitejs/plugin-legacy": "^7.2.1",
     "@vitejs/plugin-react": "^4.2.0",
     "autoprefixer": "^10.4.17",
     "baseline-browser-mapping": "^2.9.11",
