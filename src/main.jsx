@@ -10,6 +10,15 @@ if (isBareRoot) {
   window.location.replace("/login");
 }
 
+// ✅ PREVENT React 18 error #299 (createRoot called twice)
+if (window.__AQUADOR_REACT_ROOT_MOUNTED__) {
+  console.warn("⚠️ React already mounted — skipping bootstrap");
+  // Stop this execution path completely
+  throw new Error("React already mounted");
+}
+window.__AQUADOR_REACT_ROOT_MOUNTED__ = true;
+
+import React from "react";
 
 import React from "react";
 import ReactDOM from "react-dom/client";
