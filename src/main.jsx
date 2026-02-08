@@ -1,11 +1,15 @@
-// 🛑 CRITICAL: Fix blank page when PWA resumes at "/"
-if (
+// ✅ SAFE ROOT REDIRECT (avoid iOS Safari blank/loop)
+// Only redirect when user truly opened the bare root,
+// NOT when there is a hash route (/#/signup), query params, or deep link intent.
+const isBareRoot =
   window.location.pathname === "/" &&
   !window.location.search &&
-  !window.location.hash
-) {
+  (!window.location.hash || window.location.hash === "#/" || window.location.hash === "#");
+
+if (isBareRoot) {
   window.location.replace("/login");
 }
+
 
 import React from "react";
 import ReactDOM from "react-dom/client";
@@ -19,23 +23,27 @@ import OneSignal from "react-onesignal";
 import ErrorBoundary from "./components/ErrorBoundary";
 
 
-// 🧨 Optional SW reset via ?sw-reset
+// 🧨 Optional SW reset via ?sw-reset (strong reset + force reload)
 if ("serviceWorker" in navigator && window.location.search.includes("sw-reset")) {
-  navigator.serviceWorker.getRegistrations().then((regs) => {
-    regs.forEach((reg) => reg.unregister());
-  });
-
-  caches.keys().then((keys) => {
-    keys.forEach((key) => caches.delete(key));
+  Promise.all([
+    navigator.serviceWorker.getRegistrations().then((regs) =>
+      Promise.all(regs.map((reg) => reg.unregister()))
+    ),
+    caches.keys().then((keys) => Promise.all(keys.map((key) => caches.delete(key)))),
+  ]).finally(() => {
+    // 🔥 hard reload to fetch fresh assets
+    window.location.replace(window.location.origin + "/login?v=" + Date.now());
   });
 }
+
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 
 // 🔄 Reload ONCE when a new Service Worker takes control
 const isProd =
   window.location.hostname === "clubaquador.com" ||
   window.location.hostname === "www.clubaquador.com";
 
-if (isProd && "serviceWorker" in navigator) {
+if (isProd && "serviceWorker" in navigator && !isIOS) {
   navigator.serviceWorker.addEventListener("controllerchange", () => {
     if (sessionStorage.getItem("sw-reloaded")) return;
     sessionStorage.setItem("sw-reloaded", "true");
