@@ -9,8 +9,8 @@ export default defineConfig({
 
     // ✅ Fix blank page on older iOS Safari / WebViews
     legacy({
-      targets: ["defaults", "Safari >= 13", "iOS >= 13"],
-      // helps when dependencies ship modern syntax
+      // Use Browserslist-style targets for best results
+      targets: ["defaults", "safari >= 12", "ios_saf >= 12"],
       modernPolyfills: true,
     }),
 
@@ -18,12 +18,12 @@ export default defineConfig({
       registerType: "autoUpdate",
       strategies: "generateSW",
 
-      // ✅ iOS Safari is sensitive; avoid aggressive SW behavior
+      // ✅ iOS Safari can be sensitive to SW updates
       workbox: {
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         cleanupOutdatedCaches: true,
-        skipWaiting: false,     // 👈 change
-        clientsClaim: false,    // 👈 change
+        skipWaiting: false,
+        clientsClaim: false,
       },
 
       includeAssets: [
@@ -34,4 +34,12 @@ export default defineConfig({
       ],
     }),
   ],
+
+  // ✅ Force safer JS output for Safari/iOS
+  build: {
+    target: "es2015",
+  },
+  esbuild: {
+    target: "es2015",
+  },
 });
