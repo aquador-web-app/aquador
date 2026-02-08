@@ -19,8 +19,25 @@ import "./styles/index.css";
 import "react-phone-number-input/style.css";
 import { AuthProvider } from "./context/AuthContext";
 import { GlobalAlertProvider } from "./components/GlobalAlert";
-import OneSignal from "react-onesignal";
 import ErrorBoundary from "./components/ErrorBoundary";
+
+// ✅ DEBUG: show JS crashes even when React never mounts (iOS blank page helper)
+window.addEventListener("error", (e) => {
+  const msg = String(e?.error?.stack || e?.message || e);
+  document.body.innerHTML =
+    "<pre style='white-space:pre-wrap;padding:12px;font:14px/1.4 -apple-system,system-ui;'>" +
+    msg.replaceAll("<", "&lt;") +
+    "</pre>";
+});
+
+window.addEventListener("unhandledrejection", (e) => {
+  const msg = String(e?.reason?.stack || e?.reason || e);
+  document.body.innerHTML =
+    "<pre style='white-space:pre-wrap;padding:12px;font:14px/1.4 -apple-system,system-ui;'>" +
+    msg.replaceAll("<", "&lt;") +
+    "</pre>";
+});
+
 
 
 // 🧨 Optional SW reset via ?sw-reset (strong reset + force reload)
@@ -58,12 +75,15 @@ async function bootstrap() {
 
   if (isProdDomain) {
     try {
+      const { default: OneSignal } = await import("react-onesignal");
+
       await OneSignal.init({
         appId: "52872a41-1f62-4ff9-b1e4-cbb660663e7e",
       });
+
       console.log("✅ OneSignal initialized");
     } catch (err) {
-      console.error("❌ OneSignal init failed", err);
+      console.error("❌ OneSignal import/init failed (non-blocking):", err);
     }
   }
 
