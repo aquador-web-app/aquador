@@ -315,6 +315,15 @@ const source = body?.source || "on_demand";
       throw new Error("Invoice not found");
     }
 
+    // ✅ Target month for THIS PDF batch (prevents cross-month pdf_url overwrites)
+const targetMonth = mainInvoice.month;
+
+if (!targetMonth) {
+  throw new Error("Invoice month is NULL — cannot safely generate month-scoped family PDF");
+}
+
+
+
     // === Fetch profile ONCE + determine family root (REQUIRED BEFORE LOCKS)
 const { data: profile } = await supabase
   .from("profiles_with_unpaid")
@@ -429,9 +438,10 @@ if (!lockRows || lockRows.length === 0) {
 
     // Fetch invoices fresh from DB, parent + all children (or child only)
     const { data: familyInvoicesRaw, error: famErr } = await supabase
-      .from("invoices")
-      .select("*")
-      .in("user_id", familyIds);
+  .from("invoices")
+  .select("*")
+  .in("user_id", familyIds)
+  .eq("month", targetMonth);
     if (famErr) throw famErr;
 
     // === Fetch template ===
@@ -611,7 +621,7 @@ await supabase
       // === INLINE PARENT REGENERATION (no HTTP self-call) ===
 
       // Determine the month of the child invoice
-      const childMonth = mainInvoice.month || mainInvoice.issued_at;
+      const childMonth = mainInvoice.month;
 
       // FIRST: try to find matching parent invoice (same month)
       let { data: parentInv } = await supabase
@@ -652,9 +662,11 @@ await supabase
 
 
         const { data: familyInvoicesRawParent, error: famErrParent } = await supabase
-          .from("invoices")
-          .select("*")
-          .in("user_id", parentFamilyIds);
+  .from("invoices")
+  .select("*")
+  .in("user_id", parentFamilyIds)
+  .eq("month", childMonth);
+
 
         if (famErrParent) throw famErrParent;
 
@@ -810,10 +822,14 @@ await supabase
 // ⚠️ CHILD FLOW ONLY — do NOT run during parent calls
 
 // find ONE other child invoice in same family/month missing pdf_url
+if (!childMonth) {
+  console.log("⚠️ childMonth is NULL — skipping sibling fan-out");
+} else {
+
 const { data: siblingCandidate } = await supabase
   .from("invoices")
   .select("id")
-  .eq("month", mainInvoice.month)
+  .eq("month", childMonth)
   .is("pdf_url", null)
   .is("pdf_generating", false)
   .neq("id", mainInvoice.id)
@@ -841,6 +857,7 @@ if (siblingCandidate?.length) {
       source,
     }),
   }).catch(() => {});
+}
 }
 
       
