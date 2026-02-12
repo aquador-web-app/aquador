@@ -698,10 +698,18 @@ const regUnpaidTotal = rows.reduce(
   <p className="text-sm text-gray-600">Current revenue (approved payments MTD)</p>
   <p className="text-xl font-bold">
   {formatCurrencyUSD(summary.currentTotal)}
-  <span className="text-sm font-medium text-gray-500">
+
+  {/* Desktop inline */}
+  <span className="hidden md:inline text-sm font-medium text-gray-500">
     {" "} / ({formatCurrencyUSD(summary.regCollectedTotal)}) Registration fees
   </span>
 </p>
+
+{/* Mobile separate line */}
+<p className="md:hidden text-sm font-medium text-gray-500 mt-1">
+  Registration fees ({formatCurrencyUSD(summary.regCollectedTotal)})
+</p>
+
 
     <p className="text-xs text-gray-500 mt-1">
     Approved payments MTD: <b>{summary.currentCount || 0}</b>
@@ -718,10 +726,18 @@ const regUnpaidTotal = rows.reduce(
   <p className="text-sm text-gray-600">Unpaid (current month)</p>
   <p className="text-xl font-bold">
   {formatCurrencyUSD(summary.unpaidTotal)}
-  <span className="text-sm font-medium text-gray-500">
+
+  {/* Desktop inline */}
+  <span className="hidden md:inline text-sm font-medium text-gray-500">
     {" "} / ({formatCurrencyUSD(summary.regUnpaidTotal)}) Registration fees
   </span>
 </p>
+
+{/* Mobile separate line */}
+<p className="md:hidden text-sm font-medium text-gray-500 mt-1">
+  Registration fees ({formatCurrencyUSD(summary.regUnpaidTotal)})
+</p>
+
 
   <p className="text-xs text-gray-500 mt-1">
     Unpaid invoices: <b>{summary.unpaidCount}</b>
