@@ -1,7 +1,8 @@
-  import React, { useEffect, useState } from "react";
+  import React, { useEffect, useRef, useState } from "react";
   import { supabase } from "../../lib/supabaseClient";
-  import { formatDateFrSafe, formatMonth } from "../../lib/dateUtils";
+  import { formatCurrencyUSD, formatDateFrSafe, formatMonth } from "../../lib/dateUtils";
   import { useGlobalAlert } from "../../components/GlobalAlert";
+  import HoverOverlay from "../../components/HoverOverlay";
 
   export default function AdminInvoicePayment() {
     const [invoices, setInvoices] = useState([]);
@@ -18,6 +19,69 @@
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const pageSize = 10;
+    // Hover overlays
+const expectedCardRef = useRef(null);
+const [expectedHovered, setExpectedHovered] = useState(false);
+
+const currentCardRef = useRef(null);
+const [currentHovered, setCurrentHovered] = useState(false);
+
+const unpaidCardRef = useRef(null);
+const [unpaidHovered, setUnpaidHovered] = useState(false);
+
+const regCardRef = useRef(null);
+const [regHovered, setRegHovered] = useState(false);
+
+const [regDetails, setRegDetails] = useState([]); // [{ id, name, amount }]
+
+
+    // ✅ LIVE month-to-date summary
+const [summary, setSummary] = useState({
+  monthKey: "",
+  expectedTotal: 0,
+  expectedCount: 0,
+  currentTotal: 0,
+  currentCount: 0, // ✅ add this
+  unpaidTotal: 0,
+  unpaidCount: 0,
+  regCollectedTotal: 0, // ✅ NEW: registration fees collected MTD
+  regUnpaidTotal: 0,    // ✅ NEW: registration fees unpaid (still due) for current month
+});
+
+// ✅ hover details (like AdminDashboard)
+const [expectedDetails, setExpectedDetails] = useState([]); // [{ id, name, plan, price }]
+const [currentDetails, setCurrentDetails] = useState([]);  // [{ id, name, amount }]
+const [unpaidDetails, setUnpaidDetails] = useState([]);    // [{ id, name, remaining }]
+
+
+
+const fmtUSD = (v) => `USD ${Number(v || 0).toFixed(2)}`;
+
+// local YYYY-MM
+const monthKeyNow = () => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}-01`; // ✅ matches invoices.month like 2026-02-01
+};
+
+
+const monthRangeUTC = () => {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  return { startISO: start.toISOString(), endISO: end.toISOString() };
+};
+
+const todayISODate = () => {
+  // "YYYY-MM-DD" in local time (matches typical date columns)
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
 
     // filters
     const [profiles, setProfiles] = useState([]);
@@ -30,6 +94,8 @@
     const filteredProfiles = profiles.filter((p) =>
       p.full_name.toLowerCase().includes(searchTerm.toLowerCase())
     );
+
+    
 
     // ----------------- INIT -----------------
     useEffect(() => {
@@ -50,6 +116,9 @@
         fetchProfiles();
         fetchPendingPayments();
         fetchPayments();
+        fetchExpectedRevenueLive();
+        fetchCurrentRevenueLive();
+        fetchUnpaidRevenueLive();
       })();
     }, []);
 
@@ -62,6 +131,7 @@
         .order("due_date", { ascending: true });
       if (!error) setInvoices(data);
     }
+  
 
     async function fetchProfiles() {
       const { data, error } = await supabase
@@ -188,6 +258,9 @@
     fetchInvoices();
     fetchPayments();
     fetchPendingPayments();
+    fetchExpectedRevenueLive();
+    fetchCurrentRevenueLive();
+    fetchUnpaidRevenueLive();
   }
 
 
@@ -240,7 +313,9 @@
       await fetchPendingPayments();
       await fetchPayments();
       await fetchInvoices();
-
+      fetchExpectedRevenueLive();
+      fetchCurrentRevenueLive();
+      fetchUnpaidRevenueLive();
     } catch (err) {
       await showAlert("❌ Erreur lors de l’approbation : " + err.message);
     }
@@ -323,11 +398,270 @@
     fetchPayments();
     fetchPendingPayments();
     fetchInvoices();
-
+    fetchExpectedRevenueLive();
+    fetchCurrentRevenueLive();
+    fetchUnpaidRevenueLive();
   } catch (err) {
     console.error(err);
     await showAlert("❌ Erreur : " + err.message);
   }
+}
+
+async function fetchExpectedRevenueLive() {
+  const monthKey = monthKeyNow();
+  const today = todayISODate(); // YYYY-MM-DD
+
+  // 1) active enrollments today (DATE comparisons)
+  const { data: enr, error: enrErr } = await supabase
+    .from("enrollments")
+    .select("id, plan_id, status, start_date, end_date, override_price, profiles:profile_id(full_name)")
+    .lte("start_date", today)
+    .or(`end_date.is.null,end_date.gte.${today}`);
+
+  if (enrErr) {
+    console.error("fetchExpectedRevenueLive enrollments error:", enrErr);
+    return;
+  }
+
+  // Keep permissive: only exclude clearly inactive statuses
+  const active = (enr || []).filter((e) => {
+    const st = String(e.status || "").toLowerCase();
+    return !["cancelled", "canceled", "stopped", "inactive", "abandoned"].includes(st);
+  });
+
+    const planIds = [...new Set(active.map((e) => e.plan_id).filter(Boolean))];
+
+
+
+  // If no active enrollments, still update counts
+  if (active.length === 0 || planIds.length === 0) {
+    setExpectedDetails([]);
+    setSummary((s) => ({
+      ...s,
+      monthKey,
+      expectedCount: active.length,
+      expectedTotal: 0,
+    }));
+    return;
+  }
+
+  // 2) load plan prices
+  const { data: plans, error: planErr } = await supabase
+    .from("plans")
+    .select("id, name, price")
+    .in("id", planIds);
+
+  if (planErr) {
+    console.error("fetchExpectedRevenueLive plans error:", planErr);
+    return;
+  }
+
+   // ✅ Build hover details AFTER plans are loaded
+  const planById = new Map((plans || []).map((p) => [p.id, p]));
+
+  const details = active
+    .map((e) => {
+      const plan = planById.get(e.plan_id);
+      const priceUsed =
+        e.override_price != null
+          ? Number(e.override_price)
+          : Number(plan?.price || 0);
+
+      return {
+        id: e.id,
+        name: e.profiles?.full_name || "—",
+        plan: plan?.name || "—",
+        price: priceUsed,
+      };
+    })
+    .sort((a, b) =>
+      (a.name || "").localeCompare(b.name || "", "fr", { sensitivity: "base" })
+    );
+
+  setExpectedDetails(details);
+
+  const priceByPlan = new Map((plans || []).map((p) => [p.id, Number(p.price || 0)]));
+
+  // 3) sum: use override_price if present, else plan price
+  const expectedTotal = active.reduce((sum, e) => {
+    const override = e.override_price;
+    const price = override != null ? Number(override) : (priceByPlan.get(e.plan_id) || 0);
+    return sum + price;
+  }, 0);
+
+  setSummary((s) => ({
+    ...s,
+    monthKey,
+    expectedCount: active.length,
+    expectedTotal,
+  }));
+}
+
+
+
+async function fetchCurrentRevenueLive() {
+  const monthKey = monthKeyNow();
+
+  // 1) Get all current-month invoices with paid_total and the 2 lines
+  const { data, error } = await supabase
+    .from("invoices")
+    .select("id, full_name, status, month, paid_total, description1, amount1, description2, amount2")
+    .eq("month", monthKey);
+
+  if (error) return;
+
+  const isReg = (desc) => {
+    const d = String(desc || "").toLowerCase();
+    return (
+      d.includes("frais d'inscription") ||
+      d.includes("frais d’inscription") ||
+      d.includes("inscription") ||
+      d.includes("registration")
+    );
+  };
+
+  const rows = (data || [])
+    .map((inv) => {
+      const a1 = Number(inv.amount1 || 0);
+      const a2 = Number(inv.amount2 || 0);
+
+      const d1Reg = isReg(inv.description1);
+      const d2Reg = isReg(inv.description2);
+
+      // ✅ registration amount = sum of lines that look like registration
+      const regFee = (d1Reg ? a1 : 0) + (d2Reg ? a2 : 0);
+
+      // ✅ course amount = sum of lines that DO NOT look like registration
+      const courseTotal = (!d1Reg ? a1 : 0) + (!d2Reg ? a2 : 0);
+
+      const paidTotal = Number(inv.paid_total || 0);
+
+      // ✅ payments cover registration first, then course
+      const paidTowardCourse = Math.max(0, paidTotal - regFee);
+
+      // ✅ "current revenue" for this invoice = course part paid so far (capped)
+      const coursePaid = Math.min(courseTotal, paidTowardCourse);
+
+      const regPaid = Math.min(regFee, paidTotal);
+
+
+      return {
+        id: inv.id,
+        name: inv.full_name || "—",
+        amount: coursePaid,
+        courseTotal, // debug
+        regPaid, // ✅ keep internal for total calc
+      };
+    })
+    // ✅ remove "Plan / 0" invoices (no course amount)
+    .filter((r) => r.courseTotal > 0)
+    // ✅ only show invoices with some course money paid
+    .filter((r) => r.amount > 0)
+    .sort((a, b) => (a.name || "").localeCompare(b.name || "", "fr", { sensitivity: "base" }));
+
+  const currentTotal = rows.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+  const regCollectedTotal = (data || []).reduce((sum, inv) => {
+  const a1 = Number(inv.amount1 || 0);
+  const a2 = Number(inv.amount2 || 0);
+
+  const d1Reg = isReg(inv.description1);
+  const d2Reg = isReg(inv.description2);
+
+  const regFee = (d1Reg ? a1 : 0) + (d2Reg ? a2 : 0);
+  const paidTotal = Number(inv.paid_total || 0);
+
+  return sum + Math.min(regFee, paidTotal);
+}, 0);
+
+  // hover list uses {id,name,amount}
+  setCurrentDetails(rows.map(({ courseTotal, ...rest }) => rest));
+
+  setSummary((s) => ({
+    ...s,
+    monthKey,
+    currentTotal,
+    currentCount: rows.length,
+    regCollectedTotal, // ✅
+  }));
+}
+
+
+async function fetchUnpaidRevenueLive() {
+  const monthKey = monthKeyNow();
+
+  const { data, error } = await supabase
+    .from("invoices")
+    .select("id, full_name, status, month, paid_total, description1, amount1, description2, amount2")
+    .eq("month", monthKey);
+
+  if (error) return;
+
+  const isReg = (desc) => {
+    const d = String(desc || "").toLowerCase();
+    return (
+      d.includes("frais d'inscription") ||
+      d.includes("frais d’inscription") ||
+      d.includes("inscription") ||
+      d.includes("registration")
+    );
+  };
+
+  const rows = (data || [])
+    .map((inv) => {
+      const a1 = Number(inv.amount1 || 0);
+      const a2 = Number(inv.amount2 || 0);
+
+      const d1Reg = isReg(inv.description1);
+      const d2Reg = isReg(inv.description2);
+
+      // ✅ registration amount = sum of lines that look like registration
+      const regFee = (d1Reg ? a1 : 0) + (d2Reg ? a2 : 0);
+
+      // ✅ course amount = sum of lines that DO NOT look like registration
+      const courseTotal = (!d1Reg ? a1 : 0) + (!d2Reg ? a2 : 0);
+
+      const paidTotal = Number(inv.paid_total || 0);
+
+      // ✅ payments cover registration first, then course
+      const paidTowardCourse = Math.max(0, paidTotal - regFee);
+
+      const remaining = courseTotal - paidTowardCourse;
+
+      const regRemaining = Math.max(0, regFee - paidTotal);
+
+
+      return {
+        id: inv.id,
+        name: inv.full_name || "—",
+        status: inv.status,
+        remaining,
+        regRemaining,    // ✅ NEW
+        courseTotal, // keep for debugging if needed
+        regFee,      // keep for debugging if needed
+      };
+    })
+    // ✅ remove "Plan / 0" invoices (no course amount)
+    .filter((r) => r.courseTotal > 0)
+    // ✅ only unpaid/partial with remaining course due
+    .filter((r) => (r.status === "pending" || r.status === "partial") && r.remaining > 0)
+    .sort((a, b) => (a.name || "").localeCompare(b.name || "", "fr", { sensitivity: "base" }));
+
+  const unpaidTotal = rows.reduce((sum, r) => sum + Number(r.remaining || 0), 0);
+
+  // ✅ registration still due — count only invoices that are pending/partial (same as unpaid logic)
+const regUnpaidTotal = rows.reduce(
+  (sum, r) => sum + Number(r.regRemaining || 0),
+  0
+);
+
+  setUnpaidDetails(rows.map(({ courseTotal, regFee, regRemaining, ...rest }) => rest)); // don't show debug fields in hover
+  setSummary((s) => ({
+    ...s,
+    monthKey,
+    unpaidCount: rows.length,
+    unpaidTotal,
+    regUnpaidTotal, // ✅
+  }));
 }
 
 
@@ -335,6 +669,161 @@
     return (
       <div className="p-4 bg-white border rounded shadow">
         <h2 className="text-lg font-bold mb-4">Enregistrer un Paiement</h2>
+
+        {/* ✅ LIVE Revenue Summary */}
+<div className="mb-4 border rounded-lg bg-gray-50 p-3">
+  <p className="text-xs text-gray-600">
+    Live view — {summary.monthKey ? formatMonth(summary.monthKey) : "—"} (as of today)
+  </p>
+  <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+  <div
+  ref={expectedCardRef}
+  className="relative bg-white border rounded-lg p-3 cursor-pointer"
+  onMouseEnter={() => setExpectedHovered(true)}
+  onMouseLeave={() => setExpectedHovered(false)}
+>
+  <p className="text-sm text-gray-600">Expected revenue (active enrollments)</p>
+  <p className="text-xl font-bold">{formatCurrencyUSD(summary.expectedTotal)}</p>
+  <p className="text-xs text-gray-500 mt-1">
+    Active enrollments today: <b>{summary.expectedCount}</b>
+  </p>
+</div>
+
+<div
+  ref={currentCardRef}
+  className="relative bg-white border rounded-lg p-3 cursor-pointer"
+  onMouseEnter={() => setCurrentHovered(true)}
+  onMouseLeave={() => setCurrentHovered(false)}
+>
+  <p className="text-sm text-gray-600">Current revenue (approved payments MTD)</p>
+  <p className="text-xl font-bold">
+  {formatCurrencyUSD(summary.currentTotal)}
+  <span className="text-sm font-medium text-gray-500">
+    {" "} / ({formatCurrencyUSD(summary.regCollectedTotal)}) Registration fees
+  </span>
+</p>
+
+    <p className="text-xs text-gray-500 mt-1">
+    Approved payments MTD: <b>{summary.currentCount || 0}</b>
+  </p>
+
+</div>
+
+<div
+  ref={unpaidCardRef}
+  className="relative bg-white border rounded-lg p-3 cursor-pointer"
+  onMouseEnter={() => setUnpaidHovered(true)}
+  onMouseLeave={() => setUnpaidHovered(false)}
+>
+  <p className="text-sm text-gray-600">Unpaid (current month)</p>
+  <p className="text-xl font-bold">
+  {formatCurrencyUSD(summary.unpaidTotal)}
+  <span className="text-sm font-medium text-gray-500">
+    {" "} / ({formatCurrencyUSD(summary.regUnpaidTotal)}) Registration fees
+  </span>
+</p>
+
+  <p className="text-xs text-gray-500 mt-1">
+    Unpaid invoices: <b>{summary.unpaidCount}</b>
+  </p>
+</div>
+</div>
+</div>
+<HoverOverlay
+  anchorRef={expectedCardRef}
+  visible={expectedHovered}
+  onMouseEnter={() => setExpectedHovered(true)}
+  onMouseLeave={() => setExpectedHovered(false)}
+  width={420}
+>
+  <div className="px-4 py-3 text-sm">
+    <p className="font-semibold text-gray-800 mb-2 text-center">
+      Active enrollments (today)
+    </p>
+
+    {expectedDetails.length === 0 ? (
+      <p className="text-gray-500 italic text-center">—</p>
+    ) : (
+      <ul className="space-y-1 max-h-60 overflow-auto">
+        {expectedDetails.map((r) => (
+          <li
+            key={r.id}
+            className="flex justify-between gap-3 bg-blue-50 px-2 py-1 rounded-md"
+          >
+            <span className="truncate">
+              {r.name} <span className="text-xs text-gray-500">({r.plan})</span>
+            </span>
+            <b className="whitespace-nowrap">{formatCurrencyUSD(r.price)}</b>
+          </li>
+        ))}
+      </ul>
+    )}
+  </div>
+</HoverOverlay>
+
+<HoverOverlay
+  anchorRef={currentCardRef}
+  visible={currentHovered}
+  onMouseEnter={() => setCurrentHovered(true)}
+  onMouseLeave={() => setCurrentHovered(false)}
+  width={420}
+>
+  <div className="px-4 py-3 text-sm">
+    <p className="font-semibold text-gray-800 mb-2 text-center">
+      Approved payments (MTD)
+    </p>
+
+    {currentDetails.length === 0 ? (
+      <p className="text-gray-500 italic text-center">—</p>
+    ) : (
+      <ul className="space-y-1 max-h-60 overflow-auto">
+        {currentDetails.map((r) => (
+          <li
+            key={r.id}
+            className="flex justify-between gap-3 bg-green-50 px-2 py-1 rounded-md"
+          >
+            <span className="truncate">{r.name}</span>
+            <b className="whitespace-nowrap">{formatCurrencyUSD(r.amount)}</b>
+          </li>
+        ))}
+      </ul>
+    )}
+  </div>
+</HoverOverlay>
+
+<HoverOverlay
+  anchorRef={unpaidCardRef}
+  visible={unpaidHovered}
+  onMouseEnter={() => setUnpaidHovered(true)}
+  onMouseLeave={() => setUnpaidHovered(false)}
+  width={420}
+>
+  <div className="px-4 py-3 text-sm">
+    <p className="font-semibold text-gray-800 mb-2 text-center">
+      Unpaid invoices (current month)
+    </p>
+
+    {unpaidDetails.length === 0 ? (
+      <p className="text-gray-500 italic text-center">Aucune facture impayée 🎉</p>
+    ) : (
+      <ul className="space-y-1 max-h-60 overflow-auto">
+        {unpaidDetails.map((r) => (
+          <li
+            key={r.id}
+            className="flex justify-between gap-3 bg-red-50 px-2 py-1 rounded-md"
+          >
+            <span className="truncate">{r.name}</span>
+            <b className="text-red-600 whitespace-nowrap">
+              {formatCurrencyUSD(r.remaining)}
+            </b>
+          </li>
+        ))}
+      </ul>
+    )}
+  </div>
+</HoverOverlay>
+
+
 
         {/* Select invoice */}
         <label className="block mb-2 font-medium">Choisir une facture</label>
