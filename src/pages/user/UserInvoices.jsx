@@ -72,11 +72,12 @@ function groupByMonth(rows) {
     setActiveTab,
     setShowCardModal,
   }) {
-    const [file, setFile] = useState(null);
     const [submitting, setSubmitting] = useState(false);
     const [notification, setNotification] = useState("");
     const [customAmount, setCustomAmount] = useState("");
     const { showAlert } = useGlobalAlert();
+    const [proofUrl, setProofUrl] = useState(null);
+    const [uploadingProof, setUploadingProof] = useState(false);
   
     const allProfiles = [profile, ...children];
     const allIds = allProfiles.map((p) => p.id);
@@ -102,6 +103,33 @@ function groupByMonth(rows) {
     const formatInvoiceLabel = (inv) =>
       `${ownerOf(inv.user_id)} — ${inv.invoice_no} (${formatCurrencyUSD(sumRemaining(inv))} restant)`;
 
+    async function handleProofPick(f) {
+  if (!f) return;
+
+  setUploadingProof(true);
+  setProofUrl(null);
+
+  try {
+    const ext = f.name.split(".").pop();
+    const cleanName = sanitizeName(profile?.full_name || "unknown");
+    const path = `proofs/${cleanName}_${Date.now()}.${ext}`;
+
+    const { error: uploadErr } = await supabase.storage
+      .from("documents")
+      .upload(path, f, { upsert: true });
+
+    if (uploadErr) throw uploadErr;
+
+    const { data: pub } = supabase.storage.from("documents").getPublicUrl(path);
+    setProofUrl(pub?.publicUrl || null);
+  } catch (err) {
+    console.error("Proof upload error:", err);
+    showAlert("Erreur lors du téléversement de la preuve.");
+  } finally {
+    setUploadingProof(false);
+  }
+}
+
     
     const handleSubmit = async () => {
   if (selectedMethod === "cash" || selectedMethod === "virement") {
@@ -110,7 +138,7 @@ function groupByMonth(rows) {
       return;
     }
 
-    if (selectedMethod === "virement" && !file) {
+    if (selectedMethod === "virement" && !proofUrl) {
   showAlert("Veuillez joindre une preuve de virement.");
   setSubmitting(false);
   return;
@@ -129,29 +157,8 @@ function groupByMonth(rows) {
     const user = sessionData.session.user;
 
     // Prepare total and proof (if any)
-    let proofUrl = null;
+const proofUrlToSave = proofUrl;
 
-    // Upload proof for virement
-    if (selectedMethod === "virement" && file) {
-      try {
-        const ext = file.name.split(".").pop();
-        const cleanName = sanitizeName(profile?.full_name || "unknown");
-        const path = `proofs/${cleanName}_${Date.now()}.${ext}`;
-
-        const { error: uploadErr } = await supabase.storage
-          .from("documents")
-          .upload(path, file, { upsert: true });
-        if (uploadErr) throw uploadErr;
-
-        const { data: pub } = supabase.storage.from("documents").getPublicUrl(path);
-        proofUrl = pub?.publicUrl || null;
-      } catch (err) {
-        console.error("Erreur téléversement:", err);
-        showAlert("Erreur lors du téléversement de la preuve.");
-        setSubmitting(false);
-        return;
-      }
-    }
 
         // ✅ Get all unpaid invoices selected
     const selectedUnpaidInvoices = invoices.filter((inv) =>
@@ -175,6 +182,7 @@ function groupByMonth(rows) {
       setSubmitting(false);
       return;
     }
+
 
     // 🔒 Prevent double pending payment for same invoice(s)
 const { data: existingPending, error: pendingErr } = await supabase
@@ -236,8 +244,8 @@ if (existingPending && existingPending.length > 0) {
       remainingToDistribute -= paymentAmount;
 
       // Optionally: attach proof URL to invoice
-      if (proofUrl && selectedMethod === "virement") {
-        await supabase.from("invoices").update({ proof_url: proofUrl }).eq("id", inv.id);
+      if (proofUrlToSave && selectedMethod === "virement") {
+        await supabase.from("invoices").update({ proof_url: proofUrlToSave }).eq("id", inv.id);
       }
     }
 
@@ -263,7 +271,6 @@ if (existingPending && existingPending.length > 0) {
 
     setActiveTab("factures");
     setSubmitting(false);
-    setFile(null);
     setSelectedInvoice([]);
     setSelectedMethod(null);
   }
@@ -369,7 +376,7 @@ if (existingPending && existingPending.length > 0) {
                 <input
                   type="file"
                   accept=".pdf,.jpg,.jpeg,.png"
-                  onChange={(e) => e?.target?.files?.[0] && setFile(e.target.files[0])}
+                  onChange={(e) => handleProofPick(e?.target?.files?.[0])}
                   className="text-sm text-gray-600"
                 />
               </div>
@@ -395,6 +402,7 @@ if (existingPending && existingPending.length > 0) {
 
 
             <button
+              type="button"
               onClick={handleSubmit}
               disabled={submitting}
               className={`px-6 py-3 rounded-lg font-semibold shadow text-white transition ${
