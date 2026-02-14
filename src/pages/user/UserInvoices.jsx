@@ -354,7 +354,7 @@ if (existingPending && existingPending.length > 0) {
             <option value="">— Choisissez un mode de paiement —</option>
             <option value="card">💳 Carte de crédit / débit</option>
             <option value="cash">💵 Espèces</option>
-            <option value="virement">🏦 Virement bancaire</option>
+            <option value="virement">🏦 Virement bancaire, Chèques, Dépôt à la banque</option>
           </select>
         </div>
 

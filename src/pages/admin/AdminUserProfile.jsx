@@ -22,6 +22,27 @@ function dayFromDateString(d) {
   return ["Dimanche","Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"][js.getDay()];
 }
 
+function calcAgeFromDOB(dob) {
+  if (!dob) return null;
+
+  // Expect "YYYY-MM-DD" (or anything Date can parse)
+  const s = String(dob).slice(0, 10);
+  const [y, m, d] = s.split("-").map((x) => parseInt(x, 10));
+  if (!y || !m || !d) return null;
+
+  // Use local date (no timezone drift)
+  const birth = new Date(y, m - 1, d);
+  const today = new Date();
+
+  let age = today.getFullYear() - birth.getFullYear();
+  const hasHadBirthdayThisYear =
+    today.getMonth() > birth.getMonth() ||
+    (today.getMonth() === birth.getMonth() && today.getDate() >= birth.getDate());
+
+  if (!hasHadBirthdayThisYear) age -= 1;
+  return age >= 0 ? age : null;
+}
+
 
 const Badge = ({ children, color }) => {
   const colors = {
@@ -84,16 +105,42 @@ function timeRangeWithFallback(start_time, end_time, duration_hours) {
 
 function invoiceItems(inv) {
   const items = [
-    { d: inv.description1, a: inv.amount1 },
-    { d: inv.description2, a: inv.amount2 },
-    { d: inv.description3, a: inv.amount3 },
-    { d: inv.description4, a: inv.amount4 },
-    { d: inv.description5, a: inv.amount5 },
-    { d: inv.description6, a: inv.amount6 },
-    { d: inv.description7, a: inv.amount7 },
+    { slot: 1, d: inv.description1, a: inv.amount1 },
+    { slot: 2, d: inv.description2, a: inv.amount2 },
+    { slot: 3, d: inv.description3, a: inv.amount3 },
+    { slot: 4, d: inv.description4, a: inv.amount4 },
+    { slot: 5, d: inv.description5, a: inv.amount5 },
+    { slot: 6, d: inv.description6, a: inv.amount6 },
+    { slot: 7, d: inv.description7, a: inv.amount7 },
   ];
+
   return items.filter(({ d, a }) => (String(d || "").trim().length > 0) && Number(a) > 0);
 }
+
+
+function mergedInvoiceItems(inv, invoiceItemsById) {
+  const slotItems = invoiceItems(inv).map((it) => ({
+    source: "slot",
+    slot: it.slot,          // ✅ real slot now
+    description: it.d,
+    amount: it.a,
+    reverted: false,
+    paid: false,
+  }));
+
+  const dbItems = (invoiceItemsById[inv.id] || []).map((it) => ({
+    source: "db",
+    id: it.id,
+    description: it.description,
+    amount: it.amount,
+    reverted: !!it.reverted,
+    paid: !!it.paid,
+  }));
+
+  return [...slotItems, ...dbItems];
+}
+
+
 
 function getPdfLink(inv) {
   if (!inv?.pdf_url) return null;
@@ -120,6 +167,8 @@ export default function AdminUserProfile({ profileId: propId, onBack, onAddChild
   const [children, setChildren] = useState([]);
   const [enrollments, setEnrollments] = useState([]);
   const [invoices, setInvoices] = useState([]);
+  const [invoiceItemsById, setInvoiceItemsById] = useState({});
+  const [expandingInvoice, setExpandingInvoice] = useState({});
   const [referrals, setReferrals] = useState([]);
   const [referrer, setReferrer] = useState(null);
   const [credit, setCredit] = useState(0);
@@ -318,6 +367,45 @@ console.log("Enrollments fetched", ens, ensErr);
     };
   }, [profileId]);
 
+  const reloadInvoices = async () => {
+  if (!profile?.id) return;
+
+  const { data: invs } = await supabase
+    .from("invoices")
+    .select(`
+      id, invoice_no, month, issued_at, due_date, total, paid_total, status, pdf_url, full_name,
+      description1, amount1,
+      description2, amount2,
+      description3, amount3,
+      description4, amount4,
+      description5, amount5,
+      description6, amount6,
+      description7, amount7
+    `)
+    .eq("user_id", profile.id)
+    .order("due_date", { ascending: false });
+
+  setInvoices(invs || []);
+};
+
+const toggleExpandInvoice = async (invoiceId) => {
+  setExpandingInvoice((prev) => ({ ...prev, [invoiceId]: !prev[invoiceId] }));
+
+  // already loaded
+  if (invoiceItemsById[invoiceId]) return;
+
+  const { data, error } = await supabase
+    .from("invoice_items")
+    .select("id, description, amount, paid, reverted, type, created_at")
+    .eq("invoice_id", invoiceId)
+    .order("created_at", { ascending: true });
+
+  if (!error) {
+    setInvoiceItemsById((prev) => ({ ...prev, [invoiceId]: data || [] }));
+  }
+};
+
+
   const balance = useMemo(() => {
   const t = invoices.reduce((a, inv) => a + Number(inv.total || 0), 0);
   const p = invoices.reduce((a, inv) => a + Number(inv.paid_total || 0), 0);
@@ -369,6 +457,15 @@ console.log("Enrollments fetched", ens, ensErr);
   if (err) return <div className="p-6 text-red-600">{err}</div>;
   if (!profile) return null;
 
+  const dob =
+  profile.date_of_birth ||
+  profile.dob ||
+  profile.birth_date ||
+  profile.birthday ||
+  null;
+
+const age = calcAgeFromDOB(dob);
+
   return (
       <div className="p-4 md:p-6 space-y-6 max-w-full overflow-x-hidden">
         {/* Back button */}
@@ -392,11 +489,12 @@ console.log("Enrollments fetched", ens, ensErr);
 
       <div>
         <h1 className="text-xl sm:text-3xl font-bold flex items-center gap-2">
-          {profile.full_name}
-          {profile.has_unpaid && (
-            <FaDollarSign className="text-yellow-300" />
-          )}
-        </h1>
+  <span>
+    {profile.full_name}
+    {age != null ? `, ${age}` : ""}
+  </span>
+  {profile.has_unpaid && <FaDollarSign className="text-yellow-300" />}
+</h1>
 
         <div className="flex gap-2 mt-2 flex-wrap">
           <Badge color="blue">{profile.role}</Badge>
@@ -411,6 +509,9 @@ console.log("Enrollments fetched", ens, ensErr);
         </div>
 
         <p className="mt-2 text-sm opacity-90">
+          Date de naissance : {dob ? formatDateOnly(dob) : "—"}
+        </p>
+        <p className="text-sm opacity-90">
           E-mail : {profile.email || "—"}
         </p>
         <p className="text-sm opacity-90">
@@ -670,20 +771,137 @@ console.log("Enrollments fetched", ens, ensErr);
                       <Td>
                         {formatMonth(inv.month)}
                       </Td>
-                      <Td className="min-w-[220px]">
-                        {items.length ? (
-                          <ul className="space-y-1">
-                            {items.map((it, i) => (
-                              <li key={i} className="flex justify-between gap-2">
-                                <span className="text-gray-700">{it.d}</span>
-                                <span className="font-medium">{formatCurrencyUSD(it.a)}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </Td>
+                      <Td className="min-w-[260px]">
+  {mergedInvoiceItems(inv, invoiceItemsById).filter((it) => !it.reverted).length ? (
+    <ul className="space-y-2">
+      {mergedInvoiceItems(inv, invoiceItemsById)
+        .filter((it) => !it.reverted)
+        .map((it, i) => (
+          <li
+            key={it.id || `${it.source}-${it.slot}-${i}`}
+            className="flex justify-between gap-2 items-start"
+          >
+            <div className="flex-1">
+              <div className="text-gray-700">
+                {it.description} {it.paid ? "✅" : ""}
+              </div>
+
+              {/* ACTIONS — ADMIN ONLY */}
+              {role !== "assistant" && it.source === "slot" && (
+                <div className="flex gap-3 text-xs mt-1">
+                  <button
+                    onClick={async () => {
+                      if (inv.status === "paid") {
+                        alert("Cannot edit/revert a paid invoice");
+                        return;
+                      }
+                      if (!confirm(`Revert "${it.description}" ?`)) return;
+
+                      const { error } = await supabase.rpc("revert_invoice_slot", {
+                        p_invoice_id: inv.id,
+                        p_slot: it.slot,
+                        p_description: it.description,
+                        p_amount: it.amount,
+                      });
+
+                      if (error) return alert(error.message);
+
+                      // refresh invoice list + close cache for this invoice items
+                      await reloadInvoices();
+                    }}
+                    className="text-red-600 underline"
+                  >
+                    Revert
+                  </button>
+
+                  <button
+                    onClick={async () => {
+                      if (inv.status === "paid") {
+                        alert("Cannot edit a paid invoice");
+                        return;
+                      }
+
+                      const v = prompt(`New amount for "${it.description}"`, String(it.amount));
+                      if (v === null) return;
+
+                      const newAmount = Number(v);
+                      if (Number.isNaN(newAmount) || newAmount < 0) {
+                        alert("Invalid amount");
+                        return;
+                      }
+
+                      const { error } = await supabase.rpc("edit_invoice_slot", {
+                        p_invoice_id: inv.id,
+                        p_slot: it.slot,
+                        p_new_amount: newAmount,
+                      });
+
+                      if (error) return alert(error.message);
+
+                      await reloadInvoices();
+                    }}
+                    className="text-blue-600 underline"
+                  >
+                    Edit
+                  </button>
+                </div>
+              )}
+
+              {role !== "assistant" && it.source === "db" && (
+                <div className="flex gap-3 text-xs mt-1">
+                  <button
+                    onClick={async () => {
+                      if (inv.status === "paid") {
+                        alert("Cannot edit/revert a paid invoice");
+                        return;
+                      }
+                      if (!confirm("Revert this invoice item?")) return;
+
+                      const { error } = await supabase.rpc("revert_invoice_item", {
+                        p_item_id: it.id,
+                      });
+
+                      if (error) return alert(error.message);
+
+                      // refresh invoice_items for this invoice + invoice totals
+                      const { data } = await supabase
+                        .from("invoice_items")
+                        .select("id, description, amount, paid, reverted, type, created_at")
+                        .eq("invoice_id", inv.id)
+                        .order("created_at", { ascending: true });
+
+                      setInvoiceItemsById((prev) => ({ ...prev, [inv.id]: data || [] }));
+                      await reloadInvoices();
+                    }}
+                    className="text-red-600 underline"
+                  >
+                    Revert
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="text-right">
+              <div className="font-medium">{formatCurrencyUSD(it.amount)}</div>
+            </div>
+          </li>
+        ))}
+    </ul>
+  ) : (
+    <span className="text-gray-400">—</span>
+  )}
+
+  {/* Show/Hide items button */}
+  <div className="mt-2">
+    <button
+      onClick={() => toggleExpandInvoice(inv.id)}
+      className="text-blue-600 underline text-xs"
+    >
+      {expandingInvoice[inv.id] ? "Hide items" : "Show items"}
+    </button>
+  </div>
+</Td>
+
                       <Td right>{formatCurrencyUSD(inv.total)}</Td>
                       <Td right className={`${inv.paid_total > 0 ? "text-green-600" : ""}`}>
                         {inv.paid_total > 0 ? `${formatCurrencyUSD(inv.paid_total)}` : "—"}
