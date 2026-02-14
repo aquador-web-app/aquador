@@ -32,7 +32,7 @@ function heureRange(row, plansList) {
   const effectiveStart =
     slot === "second" ? addHoursToTimeStr(sessionStart, 1) : sessionStart;
 
-  const effectiveDur = slot === "both" ? 2 : planDur;
+  const effectiveDur = slot === "both" ? 2 : 1;
   const effectiveEnd = addHoursToTimeStr(effectiveStart, effectiveDur);
 
   const startH = String(effectiveStart).split(":")[0];
@@ -107,6 +107,114 @@ const [courseMode, setCourseMode] = useState("natation");
   const [filterHours, setFilterHours] = useState("");
   const [page, setPage] = useState(1);
   const pageSize = 20;
+
+  const dbDayToJsIndex = (dbDow) => (Number(dbDow) - 1 + 7) % 7; // 1..7 -> 0..6
+
+const fmtHM = (t) => String(t || "").slice(0, 5);
+
+function buildHourOptionsForCourse(courseId) {
+  const list = seriesByCourse?.[courseId] || [];
+  const out = [];
+
+  for (const ser of list) {
+    const dayName = FRENCH_DAYS[dbDayToJsIndex(ser.day_of_week)];
+    const start = fmtHM(ser.start_time);
+    const firstEnd = addHoursToTimeStr(ser.start_time, 1);
+    const secondEnd = addHoursToTimeStr(ser.start_time, 2);
+    const dur = Number(ser.duration_hours ?? 1);
+
+    // Always allow "first"
+    out.push({
+      value: `${ser.id}|first`,
+      label: `${dayName} ${start} - ${firstEnd} (1h)`,
+      session_id: ser.id,
+      slot: "first",
+      hours: 1,
+      day_of_week: ser.day_of_week,
+      start_time: ser.start_time,
+    });
+
+    // Allow "both" only if session is 2h
+    if (dur === 2) {
+      out.push({
+        value: `${ser.id}|both`,
+        label: `${dayName} ${start} - ${secondEnd} (2h)`,
+        session_id: ser.id,
+        slot: "both",
+        hours: 2,
+        day_of_week: ser.day_of_week,
+        start_time: ser.start_time,
+      });
+    }
+
+    // Admin can choose second alone if you want to allow it
+    if (isAdminUser) {
+      out.push({
+        value: `${ser.id}|second`,
+        label: `${dayName} ${firstEnd} - ${secondEnd} (2e heure)`,
+        session_id: ser.id,
+        slot: "second",
+        hours: 1,
+        day_of_week: ser.day_of_week,
+        start_time: ser.start_time,
+      });
+    }
+  }
+
+  return out;
+}
+
+async function updateEnrollmentCourseAndHour(row, newCourseId, hourValue) {
+  if (!isAdminUser) return;
+
+  // Parse hourValue like "SESSION_UUID|first"
+  const [newSessionId, slot] = String(hourValue || "").split("|");
+
+  // ✅ SECURITY: make sure session_id belongs to course_id
+const list = seriesByCourse?.[newCourseId] || [];
+const ok = list.some((s) => String(s.id) === String(newSessionId));
+if (!ok) {
+  alert("Session invalide pour ce cours.");
+  return;
+}
+
+  if (!newCourseId || !newSessionId || !slot) {
+    alert("Choisissez un cours et une heure.");
+    return;
+  }
+
+  const hours = slot === "both" ? 2 : 1;
+
+  // Find new course type to choose matching plan (1h/2h)
+  const courseType = courses.find((c) => c.id === newCourseId)?.course_type;
+
+  // Pick plan that matches hours + courseType (natation/aquafitness)
+  const candidatePlan = publicPlans.find(
+    (p) => Number(p.duration_hours) === Number(hours) && p.course_type === courseType
+  );
+
+  // If you prefer NOT to auto-change plan, set plan_id: row.plan_id instead.
+  const nextPlanId = candidatePlan?.id || row.plan_id;
+
+  const { error } = await supabase
+    .from("enrollments")
+    .update({
+      course_id: newCourseId,
+      session_id: newSessionId,
+      selected_slot: slot,
+      selected_hours: hours,
+      plan_id: nextPlanId,
+    })
+    .eq("id", row.id);
+
+  if (error) {
+    alert("Erreur mise à jour cours/heure: " + error.message);
+    return;
+  }
+
+  await loadEnrollments();
+}
+
   
   const natationCourses = useMemo(() => 
   courses.filter(c => c.course_type === "natation"),
@@ -363,8 +471,8 @@ function toggleHour(which) {
       ? courses.find((c) => c.id === overrideCourse)
       : autoCourse;
     if (!course) return { first: "—", second: "—" };
-    const series = seriesByCourse[course.id];
-    const start = series?.start_time || "08:00:00";
+    const series = seriesByCourse[course.id] || [];
+    const start = series?.[0]?.start_time || "08:00:00";
     const firstStart = start.slice(0, 5);
     const firstEnd = addHoursToTimeStr(start, 1);
     const secondEnd = addHoursToTimeStr(start, 2);
@@ -1025,9 +1133,57 @@ const getCurrentDur = (row) =>
             {visibleRows.map((e) => (
               <tr key={e.id} className="border-t">
                 <td className="px-3 py-2">{e.full_name || e.profiles?.full_name || "—"}</td>
-                <td className="px-3 py-2">{e.courses?.name || "—"}</td>
+                <td className="px-3 py-2">
+  {isAdminUser ? (
+    <select
+      value={e.course_id || ""}
+      onChange={async (ev) => {
+        const newCourseId = ev.target.value;
+
+        // When changing course, force them to also re-pick hour (session)
+        // Default to first option if exists
+        const opts = buildHourOptionsForCourse(newCourseId);
+        if (!opts.length) {
+          alert("Aucune session active pour ce cours.");
+          return;
+        }
+
+        await updateEnrollmentCourseAndHour(e, newCourseId, opts[0].value);
+      }}
+      className="border rounded px-2 py-1 text-sm"
+    >
+      <option value="">—</option>
+      {courses
+        .filter(c => c.course_type !== "intensive") // optional
+        .map((c) => (
+          <option key={c.id} value={c.id}>{c.name}</option>
+        ))}
+    </select>
+  ) : (
+    <span>{e.courses?.name || "—"}</span>
+  )}
+</td>
+
                 <td className="px-3 py-2">{dayLabel(e)}</td>
-                <td className="px-3 py-2">{heureRange(e, plans)}</td>
+                <td className="px-3 py-2">
+  {isAdminUser ? (
+    <select
+      value={`${e.session_id}|${e.selected_slot || "first"}`}
+      onChange={async (ev) => {
+        const hourValue = ev.target.value;
+        await updateEnrollmentCourseAndHour(e, e.course_id, hourValue);
+      }}
+      className="border rounded px-2 py-1 text-sm"
+    >
+      {buildHourOptionsForCourse(e.course_id).map((opt) => (
+        <option key={opt.value} value={opt.value}>{opt.label}</option>
+      ))}
+    </select>
+  ) : (
+    <span>{heureRange(e, plans)}</span>
+  )}
+</td>
+
                 <td className="px-3 py-2">
                   {/* Allow switching duration by swapping to a plan with same course but 1h/2h */}
                   <select
@@ -1191,13 +1347,20 @@ const getCurrentDur = (row) =>
       courses={courses}
       onDelete={handleDelete}
       loadEnrollments={loadEnrollments}
+      isAdminUser={isAdminUser}
+      buildHourOptionsForCourse={buildHourOptionsForCourse}
+      updateEnrollmentCourseAndHour={updateEnrollmentCourseAndHour}
     />
   ))}
 </div>
 
   </div>
   );
-  function EnrollmentCard({ e, plans, publicPlans, courses, onDelete, loadEnrollments }) {
+}
+function EnrollmentCard({
+  e, plans, publicPlans, courses, onDelete, loadEnrollments,
+  isAdminUser, buildHourOptionsForCourse, updateEnrollmentCourseAndHour
+}) {
   const currentDur = Number(
     (publicPlans?.find((p) => p.id === e.plan_id)?.duration_hours) ??
       (e.plans?.duration_hours ?? 1)
@@ -1223,8 +1386,35 @@ const getCurrentDur = (row) =>
           <p className="font-semibold text-blue-700">
             {e.profiles?.full_name || "—"}
           </p>
-          <p className="text-xs text-gray-500">{e.courses?.name}</p>
-        </div>
+          <div className="grid grid-cols-[70px,1fr] items-center gap-3">
+  <span className="text-gray-600">Cours</span>
+
+  {isAdminUser ? (
+    <select
+      value={e.course_id || ""}
+      onChange={async (ev) => {
+        const newCourseId = ev.target.value;
+        const opts = buildHourOptionsForCourse(newCourseId);
+        if (!opts.length) {
+          alert("Aucune session active pour ce cours.");
+          return;
+        }
+        await updateEnrollmentCourseAndHour(e, newCourseId, opts[0].value);
+      }}
+      className="w-full min-w-0 border rounded px-2 py-1 text-sm bg-white truncate"
+    >
+      <option value="">—</option>
+      {courses
+        .filter(c => c.course_type !== "intensive")
+        .map((c) => (
+          <option key={c.id} value={c.id}>{c.name}</option>
+        ))}
+    </select>
+  ) : (
+    <span className="min-w-0 truncate">{e.courses?.name || "—"}</span>
+  )}
+</div>
+</div>
 
         <span
           className={`px-2 py-1 rounded text-xs ${
@@ -1243,58 +1433,71 @@ const getCurrentDur = (row) =>
           <span>{dayLabel(e)}</span>
         </div>
 
-        <div className="flex justify-between">
-          <span>Heure</span>
-          <span>{heureRange(e, plans)}</span>
-        </div>
+        <div className="grid grid-cols-[70px,1fr] items-center gap-3">
+  <span className="text-gray-600">Heure</span>
+
+  {isAdminUser ? (
+    <select
+      value={`${e.session_id}|${e.selected_slot || "first"}`}
+      onChange={async (ev) => {
+        await updateEnrollmentCourseAndHour(e, e.course_id, ev.target.value);
+      }}
+      className="w-full min-w-0 border rounded px-2 py-1 text-sm bg-white truncate"
+    >
+      {buildHourOptionsForCourse(e.course_id).map((opt) => (
+        <option key={opt.value} value={opt.value}>{opt.label}</option>
+      ))}
+    </select>
+  ) : (
+    <span className="min-w-0 truncate">{heureRange(e, plans)}</span>
+  )}
+</div>
+
 
         {/* ✅ Durée (editable like desktop) */}
-        <div className="flex justify-between items-center gap-3">
-          <span>Durée</span>
+        <div className="grid grid-cols-[70px,1fr] items-center gap-3">
+  <span className="text-gray-600">Durée</span>
 
-          <select
-            value={currentDur}
-            disabled={savingDur}
-            onChange={async (ev) => {
-              const newDur = Number(ev.target.value);
+  <select
+    value={currentDur}
+    disabled={savingDur}
+    onChange={async (ev) => {
+      const newDur = Number(ev.target.value);
+      const courseType = courses.find((c) => c.id === e.course_id)?.course_type;
 
-              // same logic as desktop
-              const courseType = courses.find((c) => c.id === e.course_id)?.course_type;
+      const candidate = publicPlans.find(
+        (p) => Number(p.duration_hours) === newDur && p.course_type === courseType
+      );
 
-              const candidate = publicPlans.find(
-                (p) =>
-                  Number(p.duration_hours) === newDur &&
-                  p.course_type === courseType
-              );
+      if (!candidate) {
+        alert("Aucun plan trouvé pour cette durée.");
+        return;
+      }
 
-              if (!candidate) {
-                alert("Aucun plan trouvé pour cette durée.");
-                return;
-              }
+      setSavingDur(true);
+      try {
+        const { error } = await supabase
+          .from("enrollments")
+          .update({ plan_id: candidate.id })
+          .eq("id", e.id);
 
-              setSavingDur(true);
-              try {
-                const { error } = await supabase
-                  .from("enrollments")
-                  .update({ plan_id: candidate.id })
-                  .eq("id", e.id);
+        if (error) {
+          alert("Erreur mise à jour de la durée: " + error.message);
+          return;
+        }
 
-                if (error) {
-                  alert("Erreur mise à jour de la durée: " + error.message);
-                  return;
-                }
+        await loadEnrollments();
+      } finally {
+        setSavingDur(false);
+      }
+    }}
+    className="w-full min-w-0 border rounded px-2 py-1 text-sm bg-white"
+  >
+    <option value={1}>1h</option>
+    <option value={2}>2h</option>
+  </select>
+</div>
 
-                await loadEnrollments();
-              } finally {
-                setSavingDur(false);
-              }
-            }}
-            className="border rounded px-2 py-1 text-sm bg-white"
-          >
-            <option value={1}>1h</option>
-            <option value={2}>2h</option>
-          </select>
-        </div>
 
         {/* ✅ Plan (responsive) */}
 <div className="grid grid-cols-[auto,1fr] items-center gap-3">
@@ -1368,7 +1571,4 @@ const getCurrentDur = (row) =>
       </button>
     </div>
   );
-}
-
-
 }
