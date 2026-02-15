@@ -78,6 +78,17 @@ function groupByMonth(rows) {
     const { showAlert } = useGlobalAlert();
     const [proofUrl, setProofUrl] = useState(null);
     const [uploadingProof, setUploadingProof] = useState(false);
+
+    useEffect(() => {
+  const saved = localStorage.getItem("payment_proof_url");
+  if (saved) setProofUrl(saved);
+}, []);
+
+useEffect(() => {
+  if (proofUrl) localStorage.setItem("payment_proof_url", proofUrl);
+  else localStorage.removeItem("payment_proof_url");
+}, [proofUrl]);
+
   
     const allProfiles = [profile, ...children];
     const allIds = allProfiles.map((p) => p.id);
@@ -273,6 +284,9 @@ if (existingPending && existingPending.length > 0) {
     setSubmitting(false);
     setSelectedInvoice([]);
     setSelectedMethod(null);
+
+    // ✅ clear saved proof after success
+localStorage.removeItem("payment_proof_url");
   }
 };
 
