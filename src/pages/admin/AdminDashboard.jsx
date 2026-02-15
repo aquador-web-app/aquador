@@ -188,7 +188,12 @@ function isToday(birthDate) {
 
 
 export default function AdminDashboard() {
-  console.log("🔥🔥🔥 AdminDashboard MOUNTED");
+  // put this inside AdminDashboard() function
+useEffect(() => {
+  console.log("✅ AdminDashboard REAL MOUNT");
+  return () => console.log("🧨 AdminDashboard UNMOUNT");
+}, []);
+
 
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState(() => {
