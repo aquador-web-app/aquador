@@ -49,6 +49,8 @@ export default function AdminAttendance() {
   const [staffList, setStaffList] = useState([]);
   const [staffMap, setStaffMap] = useState({}); // profile_id -> attendance row
   const [staffLoading, setStaffLoading] = useState(false);
+  const [staffMonthlyRows, setStaffMonthlyRows] = useState([]);
+  const [staffMonthlyLoading, setStaffMonthlyLoading] = useState(false);
 
 
 useEffect(() => {
@@ -74,10 +76,19 @@ useEffect(() => {
   const isAssistant = role === "assistant";
 const isStaff = role === "admin" || role === "teacher" || role === "assistant";
 const canSeeMonthlySummary = role === "admin" || role === "assistant";
+const canSeeStaffDaily = role === "admin" || role === "assistant"; // ✅ admin + assistant
+const canSeeStaffMonthly = role === "admin"; // ✅ ONLY admin
+
+
+
 
 
   const fmtHeure = (t) =>
     t ? new Date(t).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "—";
+
+  const fmtJour = (d) =>
+  d ? new Date(d + "T00:00:00").toLocaleDateString("fr-FR") : "—";
+
 
   const jourSemaine = useMemo(() => {
     const d = new Date(date + "T00:00:00");
@@ -183,6 +194,104 @@ setStaffMap(map);
   }
 };
 
+const fetchStaffMonthlySummary = async () => {
+  setStaffMonthlyLoading(true);
+
+  try {
+    // Haiti-safe month boundaries (YYYY-MM-DD)
+    const startISO = `${selectedYear}-${String(selectedMonth).padStart(2, "0")}-01`;
+    const endISO = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}-01`;
+    // If selectedMonth = 12, JS won't auto-roll here, so do it properly:
+    const endDate = new Date(selectedYear, selectedMonth, 1); // next month
+    const endISO2 = endDate.toLocaleDateString("en-CA", { timeZone: "America/Port-au-Prince" }); // YYYY-MM-DD
+
+    // 1) Get staff list (teachers + assistant)
+    const { data: staff, error: sErr } = await supabase
+      .from("profiles")
+      .select("id, full_name, role")
+      .in("role", ["teacher", "assistant"])
+      .order("full_name", { ascending: true });
+
+    if (sErr) throw sErr;
+
+    const nameMap = {};
+    const roleMap = {};
+    (staff || []).forEach((p) => {
+      nameMap[p.id] = p.full_name || "—";
+      roleMap[p.id] = p.role;
+    });
+
+    const staffIds = (staff || []).map((p) => p.id);
+    if (!staffIds.length) {
+      setStaffMonthlyRows([]);
+      return;
+    }
+
+    // 2) Fetch attendance rows for that month (teachers + assistant)
+    const { data: rows, error: aErr } = await supabase
+      .from("staff_attendance")
+      .select("profile_id, attended_on, check_in_time, monthly_first_count, is_monthly_top_first")
+      .in("profile_id", staffIds)
+      .gte("attended_on", startISO)
+      .lt("attended_on", endISO2)
+      .not("check_in_time", "is", null)
+      .order("attended_on", { ascending: true })
+      .order("check_in_time", { ascending: true });
+
+    if (aErr) {
+      console.error("staff_attendance monthly blocked/missing:", aErr.message);
+      setStaffMonthlyRows([]);
+      return;
+    }
+
+    // 3) Compute "arrived first" ONLY among teachers
+    const firstByDayTeacherOnly = {};
+    (rows || []).forEach((r) => {
+      const day = r.attended_on;
+      const role = roleMap[r.profile_id];
+      if (role !== "teacher") return; // ✅ ignore assistants for "first"
+
+      const t = r.check_in_time ? new Date(r.check_in_time).getTime() : null;
+      if (!day || !t) return;
+
+      if (!firstByDayTeacherOnly[day] || t < firstByDayTeacherOnly[day].t) {
+        firstByDayTeacherOnly[day] = { profile_id: r.profile_id, t };
+      }
+    });
+
+    // 4) Build display rows (include assistant too, but is_first only for teachers)
+    const out = (rows || []).map((r) => {
+      const day = r.attended_on;
+      const role = roleMap[r.profile_id];
+
+      const isFirstTeacher =
+        role === "teacher" &&
+        firstByDayTeacherOnly[day]?.profile_id === r.profile_id;
+
+      return {
+        profile_id: r.profile_id,
+        full_name: nameMap[r.profile_id] || "—",
+        role,
+        attended_on: day,
+        check_in_time: r.check_in_time,
+        is_first: isFirstTeacher,
+        // ✅ monthly leader info (from DB)
+        monthly_first_count: r.monthly_first_count ?? 0,
+        is_monthly_top_first: !!r.is_monthly_top_first,
+      };
+    });
+
+    setStaffMonthlyRows(out);
+  } catch (e) {
+    console.error("fetchStaffMonthlySummary error:", e.message);
+    setStaffMonthlyRows([]);
+  } finally {
+    setStaffMonthlyLoading(false);
+  }
+};
+
+
+
 
   const fetchSessions = async () => {
     setChargement(true);
@@ -279,8 +388,9 @@ setStaffMap(map);
   }, [date, coursSelectionne]);
 
   useEffect(() => {
+  if (!canSeeStaffDaily) return;
   fetchStaffAttendance();
-}, [date]);
+}, [date, canSeeStaffDaily]);
 
 
   const saveAttendanceWithRules = async (enrollment_id, action, sessionStartISO) => {
@@ -536,6 +646,28 @@ const filteredResumeMensuel = useMemo(() => {
   );
 }, [resumeMensuel, nameFilter]);
 
+const staffMonthlyTop = useMemo(() => {
+  // Unique teachers who are monthly top
+  const tops = (staffMonthlyRows || [])
+    .filter((r) => r.role === "teacher" && r.is_monthly_top_first)
+    .reduce((acc, r) => {
+      // dedupe by profile_id
+      if (!acc.some((x) => x.profile_id === r.profile_id)) acc.push(r);
+      return acc;
+    }, []);
+
+  // sort by count desc then name
+  tops.sort((a, b) => {
+    const ca = Number(a.monthly_first_count || 0);
+    const cb = Number(b.monthly_first_count || 0);
+    if (cb !== ca) return cb - ca;
+    return String(a.full_name || "").localeCompare(String(b.full_name || ""));
+  });
+
+  return tops;
+}, [staffMonthlyRows]);
+
+
 
   const openModal = (action, enrollment_id, sessionStartHHMM) => {
     setModalAction(action);
@@ -645,7 +777,9 @@ const scanned_profile_id = m[0];
 
   useEffect(() => {
   fetchResumeMensuel();
-}, [selectedMonth, selectedYear]);
+  if (canSeeStaffMonthly) fetchStaffMonthlySummary();
+}, [selectedMonth, selectedYear, canSeeStaffMonthly]);
+
 
 
   const StatusBadge = ({ status }) => {
@@ -768,6 +902,8 @@ const scanned_profile_id = m[0];
   </div>
 </div>
 
+{canSeeStaffDaily && (
+  <>
 {/* ✅ Staff Attendance Card (Teachers + Assistant) */}
 <div className="bg-white rounded-2xl shadow p-6">
   <div className="flex items-center justify-between mb-4">
@@ -821,6 +957,8 @@ const scanned_profile_id = m[0];
     <div className="text-gray-400 italic text-sm">Aucun staff trouvé.</div>
   )}
 </div>
+</>
+)}
 
 
 
@@ -1104,7 +1242,82 @@ const scanned_profile_id = m[0];
 </div>
 
       {/* Résumé mensuel */}
-      <div className="bg-white rounded-2xl shadow p-6 mt-8">
+      
+        {/* ✅ Résumé mensuel des présences / STAFF (Teachers only) */}
+{canSeeStaffMonthly && (
+  <div className="bg-white rounded-2xl border border-gray-100 shadow p-4 mb-4">
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-3">
+  <div className="flex items-center gap-3 flex-wrap">
+    <h4 className="font-semibold text-gray-800">
+      Résumé mensuel des présences / STAFF (Professeurs)
+    </h4>
+
+    {/* ✅ Top du mois badge(s) between title and button */}
+    {staffMonthlyTop.length > 0 && (
+      <div className="flex items-center gap-2 flex-wrap">
+        {staffMonthlyTop.map((t) => (
+          <span
+            key={t.profile_id}
+            className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-yellow-50 text-yellow-800 border border-yellow-200"
+            title="Top du mois (1er arrivé le plus souvent)"
+          >
+            <span aria-hidden>🏅</span>
+            <span className="whitespace-nowrap">{t.full_name}</span>
+            <span className="px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-900">
+              {Number(t.monthly_first_count || 0)}
+            </span>
+          </span>
+        ))}
+      </div>
+    )}
+  </div>
+
+  <button
+    onClick={fetchStaffMonthlySummary}
+    className="text-sm bg-aquaBlue text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition self-start sm:self-auto"
+  >
+    Rafraîchir
+  </button>
+</div>
+
+
+    {staffMonthlyLoading ? (
+      <div className="text-center py-3 text-aquaBlue font-medium">⏳ Chargement…</div>
+    ) : staffMonthlyRows.length ? (
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm border-collapse">
+          <thead className="bg-gray-100 text-gray-600">
+            <tr>
+              <th className="p-2 text-left">Nom</th>
+              <th className="p-2 text-left">Date</th>
+              <th className="p-2 text-left">Heure d’arrivée</th>
+              <th className="p-2 text-center">1er arrivé</th>
+            </tr>
+          </thead>
+          <tbody>
+            {staffMonthlyRows.map((r, idx) => (
+              <tr key={`${r.profile_id}-${r.attended_on}-${idx}`} className="border-t">
+                <td className="p-2">{r.full_name}</td>
+                <td className="p-2">{fmtJour(r.attended_on)}</td>
+                <td className="p-2">{fmtHeure(r.check_in_time)}</td>
+                <td className="p-2 text-center">
+                  {r.role === "teacher" ? (r.is_first ? "🏆" : "—") : "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    ) : (
+      <div className="text-gray-500 italic text-sm">
+        Aucun enregistrement staff pour ce mois.
+      </div>
+    )}
+  </div>
+)}
+
+{/* ✅ STUDENTS — Résumé mensuel (BLOCK 2) */}
+<div className="bg-white rounded-2xl shadow p-6 mt-6">
   <h3 className="font-semibold text-lg mb-3">
     Résumé mensuel des présences — {formatMonth(`${selectedYear}-${String(selectedMonth).padStart(2, "0")}-01`)}
   </h3>

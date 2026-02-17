@@ -52,6 +52,8 @@ import AdminMembershipApproval from "./AdminMembershipApproval";
 import AdminMembershipUsers from "./AdminMembershipUsers";
 import HoverOverlay from "../../components/HoverOverlay";
 import AdminAuditBoutique from "./AdminAuditBoutique";
+import { FaQrcode } from "react-icons/fa";
+
 
 
 
@@ -255,6 +257,10 @@ const [newUsersHovered, setNewUsersHovered] = useState(false);
 
 
 const [role, setRole] = useState(null);
+const [myQrUrl, setMyQrUrl] = useState(null);
+const [myId, setMyId] = useState(null);
+const [myName, setMyName] = useState(null);
+
 
 // =============================
 // 🔄 Realtime refresh (debounced)
@@ -557,11 +563,17 @@ useEffect(() => {
 
     const { data, error } = await supabase
       .from("profiles")
-      .select("role")
+      .select("role, qr_code_url, id, full_name")
       .eq("id", user.id)
       .single();
 
-    if (!error && data) setRole(data.role);
+    if (!error && data) {
+  setRole(data.role);
+  setMyQrUrl(data.qr_code_url || null);
+  setMyId(data.id || user.id);
+  setMyName(data.full_name || null);
+}
+
   }
 
   fetchRole();
@@ -881,6 +893,28 @@ const totalUtilisateursPlateforme =
     A'QUA D'OR – {role === "assistant" ? "Admin-Assist. Dashboard" : "Admin Dashboard"}
   </h2>
 </div>
+
+{/* ✅ Assistant QR — MOBILE ONLY */}
+{role === "assistant" && myQrUrl ? (
+  <div className="md:hidden mt-3 flex justify-center">
+    <div className="bg-white rounded-2xl border border-gray-100 shadow p-4 flex flex-col items-center">
+      <div className="flex items-center gap-2 text-gray-700 font-semibold mb-3">
+        <FaQrcode />
+        <span>Mon QR Code</span>
+      </div>
+
+      <img
+        src={myQrUrl}
+        alt="QR Code"
+        className="w-40 h-40 border border-gray-200 rounded-xl"
+      />
+
+      <div className="text-xs text-gray-500 mt-2 text-center break-all">
+      </div>
+    </div>
+  </div>
+) : null}
+
 
 
       {/* === Animated Overview Stats === */}

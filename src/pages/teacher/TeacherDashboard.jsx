@@ -30,6 +30,7 @@
   import AdminBulletinsetFiches from "../admin/AdminBulletinsetFiches";   // List + download/print  :contentReference[oaicite:5]{index=5}
   import AdminBulletinForm from "../admin/AdminBulletinForm";             // Create/edit a bulletin   :contentReference[oaicite:6]{index=6}
   import AdminFicheTechniques from "../admin/AdminFicheTechniques";       // Fiche technique manager :contentReference[oaicite:7]{index=7}
+  import { FaQrcode } from "react-icons/fa";
 
   export default function TeacherDashboard() {
     const navigate = useNavigate()
@@ -42,15 +43,16 @@
     useConfirmLogoutOnBack((unlock) => {
   setShowSignOutConfirm(true);
 
-  const original = handleLogout;
-
-  const wrappedLogout = async () => {
-    await original();
-    unlock();
+  window.__teacherLogoutConfirm = async () => {
+    try {
+      await handleLogout();
+    } finally {
+      unlock();
+      window.__teacherLogoutConfirm = null;
+    }
   };
-
-  window.__teacherLogoutConfirm = wrappedLogout;
 });
+
 
 
 
@@ -67,10 +69,65 @@
 
   const isMobile = () => window.innerWidth < 768;
 
+
   const goToTab = (tab) => {
     setActiveTab(tab);
     if (isMobile()) setSidebarOpen(false);
   };
+
+  useEffect(() => {
+  let alive = true;
+
+  (async () => {
+    setLoadingProfile(true);
+
+    try {
+      // 1) must have an authenticated user
+      const { data: authData, error: authErr } = await supabase.auth.getUser();
+      if (authErr) throw authErr;
+
+      const authUser = authData?.user;
+      if (!authUser) {
+        // not logged in → go login
+        if (alive) {
+          setProfile(null);
+          setRole(null);
+          setLoadingProfile(false);
+        }
+        navigate("/login", { replace: true });
+        return;
+      }
+
+      // 2) load profile + role
+      const { data: prof, error: profErr } = await supabase
+        .from("profiles")
+        .select("id, full_name, role, qr_code_url")
+        .eq("id", authUser.id)
+        .maybeSingle();
+
+      if (profErr) throw profErr;
+
+      if (alive) {
+        setProfile(prof || { id: authUser.id, full_name: authUser.email || "—" });
+        setRole(prof?.role || null);
+        setLoadingProfile(false);
+      }
+    } catch (e) {
+      console.error("TeacherDashboard profile load error:", e);
+
+      if (alive) {
+        setProfile(null);
+        setRole(null);
+        setLoadingProfile(false);
+      }
+    }
+  })();
+
+  return () => {
+    alive = false;
+  };
+}, [navigate]);
+
 
 
 
@@ -166,17 +223,39 @@
 
     const Overview = () => (
       <div className="p-4 md:p-6 space-y-6">
-        <div className="flex items-center justify-between">
+        <div>
           <h2 className="text-2xl font-bold text-gray-800">
             Bienvenue, {profile?.full_name || "Enseignant(e)"}
           </h2>
+          {/* ✅ Teacher QR — MOBILE ONLY (same as UserAttendance: uses qr_code_url image) */}
+{profile?.qr_code_url ? (
+  <div className="md:hidden mt-3 flex justify-center">
+    <div className="bg-white rounded-2xl border border-gray-100 shadow p-4 flex flex-col items-center">
+      <div className="flex items-center gap-2 text-gray-700 font-semibold mb-3">
+        <FaQrcode />
+        <span>Mon QR Code</span>
+      </div>
+
+      <img
+        src={profile.qr_code_url}
+        alt="QR Code"
+        className="w-40 h-40 border border-gray-200 rounded-xl"
+      />
+
+      <div className="text-xs text-gray-500 mt-2 text-center break-all">
+      </div>
+    </div>
+  </div>
+) : null}
+
         </div>
+        
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <motion.div
             className="p-6 bg-white rounded-2xl border border-gray-100 shadow hover:shadow-lg transition-all cursor-pointer"
             whileHover={{ scale: 1.03, y: -3 }}
-            onClick={() => setActiveTab("commissions")}
+            onClick={() => goToTab("commissions")}
           >
             <p className="text-sm text-gray-500">Total des commissions</p>
             <p className="text-3xl font-bold text-green-600 mt-2">
@@ -187,7 +266,7 @@
           <motion.div
             className="p-6 bg-white rounded-2xl border border-gray-100 shadow hover:shadow-lg transition-all cursor-pointer"
             whileHover={{ scale: 1.03, y: -3 }}
-            onClick={() => setActiveTab("commissions")}
+            onClick={() => goToTab("commissions")}
           >
             <p className="text-sm text-gray-500">En attente</p>
             <p className="text-3xl font-bold text-orange-500 mt-2">
@@ -198,7 +277,7 @@
           <motion.div
             className="p-6 bg-white rounded-2xl border border-gray-100 shadow hover:shadow-lg transition-all cursor-pointer"
             whileHover={{ scale: 1.03, y: -3 }}
-            onClick={() => setActiveTab("presence")}
+            onClick={() => goToTab("presence")}
           >
             <p className="text-sm text-gray-500">Gestion de présence</p>
             <p className="text-3xl font-bold text-blue-600 mt-2">🗓️</p>
@@ -487,11 +566,19 @@
 </button>
 
 <button
-  onClick={window.__teacherLogoutConfirm}
+  onClick={async () => {
+    try {
+      await handleLogout();
+    } finally {
+      setShowSignOutConfirm(false);
+      window.__teacherLogoutConfirm = null; // harmless cleanup
+    }
+  }}
   className="px-3 py-1 rounded bg-red-600 text-white"
 >
   Oui, déconnecter
 </button>
+
 
             </div>
           </div>

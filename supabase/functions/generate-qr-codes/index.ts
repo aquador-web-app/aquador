@@ -38,31 +38,52 @@ serve(async (req) => {
   try {
     console.log("🚀 generate-qr-codes started (folder-per-user)");
 
-    // 1️⃣ Get all active enrollments
-    const { data: enrolled, error: enrollErr } = await supabaseAdmin
-      .from("enrollments")
-      .select("profile_id")
-      .eq("status", "active");
+        // ✅ Optional: allow generating QR for specific profiles (staff, etc.)
+    const body = await req.json().catch(() => ({}));
+    const requestedIds = [
+      ...new Set(
+        []
+          .concat(body?.profile_id ? [String(body.profile_id)] : [])
+          .concat(Array.isArray(body?.profile_ids) ? body.profile_ids.map(String) : [])
+          .filter(Boolean)
+      ),
+    ];
 
-    if (enrollErr) throw enrollErr;
-    if (!enrolled?.length)
-      return new Response("No enrolled users found.", {
-        status: 200,
-        headers: corsHeaders,
-      });
 
-    const enrolledIds = [...new Set(enrolled.map((e) => e.profile_id))];
+        // 1️⃣ Decide which profile ids to process:
+    // - If request sends profile_id / profile_ids → use those (staff)
+    // - Else fallback to active enrollments (students)
+    let targetIds = requestedIds;
+
+    if (!targetIds.length) {
+      const { data: enrolled, error: enrollErr } = await supabaseAdmin
+        .from("enrollments")
+        .select("profile_id")
+        .eq("status", "active");
+
+      if (enrollErr) throw enrollErr;
+
+      targetIds = [...new Set((enrolled || []).map((e) => e.profile_id).filter(Boolean))];
+
+      if (!targetIds.length) {
+        return new Response("No enrolled users found.", {
+          status: 200,
+          headers: corsHeaders,
+        });
+      }
+    }
+
 
     // 2️⃣ Get profiles without QR
     const { data: profiles, error } = await supabaseAdmin
       .from("profiles")
       .select("id, full_name, qr_code_url")
-      .in("id", enrolledIds)
+      .in("id", targetIds)
       .is("qr_code_url", null);
 
     if (error) throw error;
     if (!profiles.length)
-      return new Response("✅ All enrolled users already have QR codes.", {
+      return new Response("✅ All target users already have QR codes.", {
         status: 200,
         headers: corsHeaders,
       });
