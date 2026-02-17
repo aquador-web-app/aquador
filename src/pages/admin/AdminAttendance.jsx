@@ -45,6 +45,11 @@ export default function AdminAttendance() {
   const [nameFilter, setNameFilter] = useState("");
   const { user, profile } = useAuth();
   const [role, setRole] = useState(null);
+  // ✅ Staff attendance (teachers + assistant)
+  const [staffList, setStaffList] = useState([]);
+  const [staffMap, setStaffMap] = useState({}); // profile_id -> attendance row
+  const [staffLoading, setStaffLoading] = useState(false);
+
 
 useEffect(() => {
   async function fetchRole() {
@@ -130,6 +135,53 @@ const canSeeMonthlySummary = role === "admin" || role === "assistant";
 const [selectedYear, setSelectedYear] = useState(
   new Date().getFullYear()
 );
+
+const fetchStaffAttendance = async () => {
+  const dayISO = getHaitiDateISO(date);
+
+  setStaffLoading(true);
+  try {
+    // 1) Get staff profiles
+    const { data: staff, error: staffErr } = await supabase
+      .from("profiles")
+      .select("id, full_name, role")
+      .in("role", ["teacher", "assistant"])
+      .order("full_name", { ascending: true });
+
+      console.log("STAFF RESULT:", staff, staffErr);
+
+
+    if (staffErr) throw staffErr;
+
+// ✅ ALWAYS show staff list even if attendance table/view is missing
+setStaffList(staff || []);
+
+// 2) Get staff attendance for the selected day
+const { data: pres, error: presErr } = await supabase
+  .from("staff_attendance")
+  .select("profile_id, attended_on, status, check_in_time, check_out_time")
+  .eq("attended_on", dayISO);
+
+// ✅ If the table doesn't exist yet, don't hide staff list
+if (presErr) {
+  console.error("staff_attendance missing or blocked:", presErr.message);
+  setStaffMap({});
+  return;
+}
+
+const map = {};
+(pres || []).forEach((p) => {
+  map[p.profile_id] = p;
+});
+
+setStaffMap(map);
+
+  } catch (e) {
+    console.error("fetchStaffAttendance error:", e.message);
+  } finally {
+    setStaffLoading(false);
+  }
+};
 
 
   const fetchSessions = async () => {
@@ -226,6 +278,11 @@ const [selectedYear, setSelectedYear] = useState(
     fetchSessions();
   }, [date, coursSelectionne]);
 
+  useEffect(() => {
+  fetchStaffAttendance();
+}, [date]);
+
+
   const saveAttendanceWithRules = async (enrollment_id, action, sessionStartISO) => {
     const dayISO = getHaitiDateISO(date);
     const now = new Date();
@@ -321,6 +378,67 @@ const [selectedYear, setSelectedYear] = useState(
     await fetchSessions();
     await fetchResumeMensuel();
   };
+
+  const handleStaffScan = async (text) => {
+  if (typeof text !== "string" || !text.trim()) return;
+
+  const nowMs = Date.now();
+  if (nowMs - lastScanTime.current < 3000) return;
+  lastScanTime.current = nowMs;
+
+  setModalErreur("");
+  setModalResult("");
+
+  // 🔹 Extract UUID from ANY QR content
+  const match = String(text).match(
+    /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/
+  );
+
+  if (!match) {
+    setModalErreur("⚠️ QR code invalide.");
+    return;
+  }
+
+  const profile_id = match[0];
+
+  // ✅ Prevent teacher/assistant from scanning their own QR
+  if (!isAdmin && user?.id && profile_id === user.id) {
+    setModalErreur("⚠️ Vous ne pouvez pas scanner votre propre QR code.");
+    return;
+  }
+
+  try {
+    const session = (await supabase.auth.getSession()).data.session;
+    if (!session) {
+      setModalErreur("⚠️ Session expirée. Veuillez vous reconnecter.");
+      return;
+    }
+
+    // ✅ This assumes you have an edge function for staff attendance
+    const { data, error } = await supabase.functions.invoke("record-staff-attendance", {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+      body: { profile_id, selected_date: getHaitiDateISO(date) },
+    });
+
+    if (error) {
+      setModalErreur(error.message || "Erreur lors du scan.");
+      return;
+    }
+    if (data?.error) {
+      setModalErreur(data.error);
+      return;
+    }
+
+    setModalResult(data?.message || "✅ Présence staff enregistrée !");
+    await fetchStaffAttendance();
+
+    // Close only if not global scan
+    if (modalAction !== "scan-global") closeModal();
+  } catch (err) {
+    setModalErreur("Erreur lors du scan : " + err.message);
+  }
+};
+
 
   // ✅ lightweight scan handler (no infinite reloads, no double check-in)
 // ✅ QR SCAN → EDGE FUNCTION ONLY
@@ -438,7 +556,17 @@ const filteredResumeMensuel = useMemo(() => {
 
   const handleModalScan = async (text) => {
   if (typeof text !== "string" || !text.trim()) return;
-  const scanned_profile_id = String(text).trim();
+  const m = String(text).match(
+  /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/
+);
+
+if (!m) {
+  setModalErreur("⚠️ QR code invalide.");
+  return;
+}
+
+const scanned_profile_id = m[0];
+
     setModalErreur("");
     setModalResult("");
 
@@ -639,6 +767,61 @@ const filteredResumeMensuel = useMemo(() => {
     )}
   </div>
 </div>
+
+{/* ✅ Staff Attendance Card (Teachers + Assistant) */}
+<div className="bg-white rounded-2xl shadow p-6">
+  <div className="flex items-center justify-between mb-4">
+    <h3 className="font-semibold text-lg">
+      Présence du {formatDateFrSafe(date)} / Professeurs et Assistante
+    </h3>
+
+    <button
+      onClick={() => {
+        setModalAction("scan-staff");
+        setModalEnrollment(null);
+        setModalSessionStartISO(null);
+        setModalOpen(true);
+      }}
+      className="bg-aquaBlue text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition"
+    >
+      Démarrer le scan
+    </button>
+  </div>
+
+  {staffLoading ? (
+    <div className="text-center py-3 text-aquaBlue font-medium">⏳ Chargement…</div>
+  ) : staffList.length ? (
+    <div className="space-y-2">
+      {staffList.map((p) => {
+        const pres = staffMap[p.id];
+        return (
+          <div
+            key={p.id}
+            className="flex items-center justify-between border rounded-xl px-4 py-3"
+          >
+            <div className="flex flex-col">
+              <div className="font-medium text-gray-800">{p.full_name}</div>
+              <div className="text-xs text-gray-500">
+                {p.role === "assistant" ? "Assistante" : "Professeur"}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <StatusBadge status={pres?.status} />
+              <div className="text-xs text-gray-600">
+                {pres?.check_in_time ? `Arrivée: ${fmtHeure(pres.check_in_time)}` : "Arrivée: —"}
+                {pres?.check_out_time ? ` • Départ: ${fmtHeure(pres.check_out_time)}` : ""}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  ) : (
+    <div className="text-gray-400 italic text-sm">Aucun staff trouvé.</div>
+  )}
+</div>
+
 
 
       {/* Tableau de présences */}
@@ -1023,12 +1206,14 @@ const filteredResumeMensuel = useMemo(() => {
 
             <h4 className="text-xl font-semibold text-gray-800 text-center mb-2">
   {modalAction === "scan-global"
-    ? "Scan global des présences"
-    : modalAction === "check-in"
-    ? "Check-in"
-    : modalAction === "check-out"
-    ? "Check-out"
-    : ""}
+  ? "Scan global des présences"
+  : modalAction === "scan-staff"
+  ? "Scan présence — Professeurs & Assistante"
+  : modalAction === "check-in"
+  ? "Check-in"
+  : modalAction === "check-out"
+  ? "Check-out"
+  : ""}
 </h4>
 
 
@@ -1057,10 +1242,13 @@ const filteredResumeMensuel = useMemo(() => {
       if (!value) return;
 
       if (modalAction === "scan-global") {
-        handleScan(value);
-      } else {
-        handleModalScan(value);
-      }
+  handleScan(value);
+} else if (modalAction === "scan-staff") {
+  handleStaffScan(value);
+} else {
+  handleModalScan(value);
+}
+
     }}
     onError={(err) => console.error("SCANNER ERROR:", err)}
     constraints={{ facingMode: "environment" }}
@@ -1068,7 +1256,7 @@ const filteredResumeMensuel = useMemo(() => {
     style={{ width: "100%", height: "100%" }}
   />
 </div>
-{modalAction === "scan-global" && (
+{(modalAction === "scan-global" || modalAction === "scan-staff") && (
   <button
     onClick={closeModal}
     className="bg-red-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-red-700 transition"
