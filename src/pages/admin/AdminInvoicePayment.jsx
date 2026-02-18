@@ -29,10 +29,14 @@ const [currentHovered, setCurrentHovered] = useState(false);
 const unpaidCardRef = useRef(null);
 const [unpaidHovered, setUnpaidHovered] = useState(false);
 
-const regCardRef = useRef(null);
-const [regHovered, setRegHovered] = useState(false);
+const revertedCardRef = useRef(null);
+const [revertedHovered, setRevertedHovered] = useState(false);
 
-const [regDetails, setRegDetails] = useState([]); // [{ id, name, amount }]
+const [revertedDetails, setRevertedDetails] = useState([]); // [{ id, name, invoiceNo, amount }]
+
+const [regCollectedDetails, setRegCollectedDetails] = useState([]); // [{ id, name, amount }]
+const [regUnpaidDetails, setRegUnpaidDetails] = useState([]);       // [{ id, name, amount }]
+
 
 
     // ✅ LIVE month-to-date summary
@@ -46,6 +50,8 @@ const [summary, setSummary] = useState({
   unpaidCount: 0,
   regCollectedTotal: 0, // ✅ NEW: registration fees collected MTD
   regUnpaidTotal: 0,    // ✅ NEW: registration fees unpaid (still due) for current month
+  revertedTotal: 0,
+  revertedCount: 0,
 });
 
 // ✅ hover details (like AdminDashboard)
@@ -119,6 +125,7 @@ const todayISODate = () => {
         fetchExpectedRevenueLive();
         fetchCurrentRevenueLive();
         fetchUnpaidRevenueLive();
+        fetchRevertedPaymentsLive();
       })();
     }, []);
 
@@ -261,6 +268,7 @@ const todayISODate = () => {
     fetchExpectedRevenueLive();
     fetchCurrentRevenueLive();
     fetchUnpaidRevenueLive();
+    fetchRevertedPaymentsLive();
   }
 
 
@@ -316,6 +324,7 @@ const todayISODate = () => {
       fetchExpectedRevenueLive();
       fetchCurrentRevenueLive();
       fetchUnpaidRevenueLive();
+      fetchRevertedPaymentsLive();
     } catch (err) {
       await showAlert("❌ Erreur lors de l’approbation : " + err.message);
     }
@@ -340,7 +349,7 @@ const todayISODate = () => {
 
 
       // ----------------- REVERT PAYMENT -----------------
-    async function handleRevertPayment(paymentId, invoiceId) {
+    async function handleRevertPayment(paymentId, invoiceId, paymentAmount) {
   const confirmed = await showConfirm(
     "Annuler ce paiement et le remettre en attente d’approbation ?"
   );
@@ -348,12 +357,37 @@ const todayISODate = () => {
 
   try {
     // 1️⃣ Set payment back to pending
-    const { error: revertErr } = await supabase
-      .from("payments")
-      .update({ approved: false })
-      .eq("id", paymentId);
+const { error: revertErr } = await supabase
+  .from("payments")
+  .update({ approved: false })
+  .eq("id", paymentId);
 
-    if (revertErr) throw revertErr;
+if (revertErr) throw revertErr;
+
+// 1️⃣b Mark the corresponding invoice_item as reverted (latest matching amount)
+const { data: item, error: itemErr } = await supabase
+  .from("invoice_items")
+  .select("id")
+  .eq("invoice_id", invoiceId)
+  .eq("reverted", false)
+  .eq("paid", true)
+  .eq("amount", Number(paymentAmount || 0))
+  .order("created_at", { ascending: false })
+  .limit(1)
+  .maybeSingle();
+
+if (itemErr) throw itemErr;
+
+if (item?.id) {
+  const { error: updErr } = await supabase
+    .from("invoice_items")
+    .update({ reverted: true })
+    .eq("id", item.id);
+
+  if (updErr) throw updErr;
+}
+
+
 
     // 2️⃣ Recalculate approved total
     const { data: approvedPayments, error: payErr } = await supabase
@@ -401,6 +435,7 @@ const todayISODate = () => {
     fetchExpectedRevenueLive();
     fetchCurrentRevenueLive();
     fetchUnpaidRevenueLive();
+    fetchRevertedPaymentsLive();
   } catch (err) {
     console.error(err);
     await showAlert("❌ Erreur : " + err.message);
@@ -573,6 +608,33 @@ async function fetchCurrentRevenueLive() {
   return sum + Math.min(regFee, paidTotal);
 }, 0);
 
+  // ✅ Registration fees collected (names)
+const regRows = (data || [])
+  .map((inv) => {
+    const a1 = Number(inv.amount1 || 0);
+    const a2 = Number(inv.amount2 || 0);
+
+    const d1Reg = isReg(inv.description1);
+    const d2Reg = isReg(inv.description2);
+
+    const regFee = (d1Reg ? a1 : 0) + (d2Reg ? a2 : 0);
+    const paidTotal = Number(inv.paid_total || 0);
+
+    const regPaid = Math.min(regFee, paidTotal);
+
+    return {
+      id: inv.id,
+      name: inv.full_name || "—",
+      amount: regPaid,
+    };
+  })
+  .filter((r) => r.amount > 0)
+  .sort((a, b) =>
+    (a.name || "").localeCompare(b.name || "", "fr", { sensitivity: "base" })
+  );
+
+setRegCollectedDetails(regRows);
+
   // hover list uses {id,name,amount}
   setCurrentDetails(rows.map(({ courseTotal, ...rest }) => rest));
 
@@ -654,6 +716,35 @@ const regUnpaidTotal = rows.reduce(
   0
 );
 
+// ✅ Registration fees unpaid (names)
+const regUnpaidRows = (data || [])
+  .map((inv) => {
+    const a1 = Number(inv.amount1 || 0);
+    const a2 = Number(inv.amount2 || 0);
+
+    const d1Reg = isReg(inv.description1);
+    const d2Reg = isReg(inv.description2);
+
+    const regFee = (d1Reg ? a1 : 0) + (d2Reg ? a2 : 0);
+    const paidTotal = Number(inv.paid_total || 0);
+
+    const regRemaining = Math.max(0, regFee - paidTotal);
+
+    return {
+      id: inv.id,
+      name: inv.full_name || "—",
+      amount: regRemaining,
+      status: inv.status,
+    };
+  })
+  .filter((r) => (r.status === "pending" || r.status === "partial") && r.amount > 0)
+  .sort((a, b) =>
+    (a.name || "").localeCompare(b.name || "", "fr", { sensitivity: "base" })
+  );
+
+setRegUnpaidDetails(regUnpaidRows);
+
+
   setUnpaidDetails(rows.map(({ courseTotal, regFee, regRemaining, ...rest }) => rest)); // don't show debug fields in hover
   setSummary((s) => ({
     ...s,
@@ -663,6 +754,59 @@ const regUnpaidTotal = rows.reduce(
     regUnpaidTotal, // ✅
   }));
 }
+
+async function fetchRevertedPaymentsLive() {
+  const monthKey = monthKeyNow(); // "YYYY-MM-01" (matches invoices.month)
+
+  const { data, error } = await supabase
+    .from("invoice_items")
+    .select(
+      "id, amount, invoice_id, created_at, reverted, invoices!inner(id, full_name, invoice_no, status, month)"
+    )
+    .eq("reverted", true)
+    .eq("invoices.month", monthKey) // ✅ CURRENT MONTH ONLY
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("fetchRevertedPaymentsLive error:", error);
+    return;
+  }
+
+  // ✅ aggregate per invoice (so hover list is clean)
+  const byInvoice = new Map();
+
+  for (const row of data || []) {
+    const inv = row.invoices;
+    const key = row.invoice_id;
+
+    const prev = byInvoice.get(key) || {
+      id: key,
+      name: inv?.full_name || "—",
+      invoiceNo: inv?.invoice_no || "—",
+      amount: 0,
+    };
+
+    prev.amount += Number(row.amount || 0);
+    byInvoice.set(key, prev);
+  }
+
+  const rows = Array.from(byInvoice.values()).sort((a, b) =>
+    (a.name || "").localeCompare(b.name || "", "fr", { sensitivity: "base" })
+  );
+
+  const revertedTotal = rows.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+
+  setRevertedDetails(rows);
+
+  setSummary((s) => ({
+    ...s,
+    revertedTotal,
+    revertedCount: rows.length,
+  }));
+}
+
+
+
 
 
     // ----------------- RENDER -----------------
@@ -675,7 +819,7 @@ const regUnpaidTotal = rows.reduce(
   <p className="text-xs text-gray-600">
     Live view — {summary.monthKey ? formatMonth(summary.monthKey) : "—"} (as of today)
   </p>
-  <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+  <div className="mt-3 grid grid-cols-1 md:grid-cols-4 gap-3">
   <div
   ref={expectedCardRef}
   className="relative bg-white border rounded-lg p-3 cursor-pointer"
@@ -716,6 +860,21 @@ const regUnpaidTotal = rows.reduce(
   </p>
 
 </div>
+
+<div
+  ref={revertedCardRef}
+  className="relative bg-white border rounded-lg p-3 cursor-pointer"
+  onMouseEnter={() => setRevertedHovered(true)}
+  onMouseLeave={() => setRevertedHovered(false)}
+>
+  <p className="text-sm text-gray-600">Reverted payments (MTD)</p>
+  <p className="text-xl font-bold">{formatCurrencyUSD(summary.revertedTotal)}</p>
+
+  <p className="text-xs text-gray-500 mt-1">
+    Reverted payments: <b>{summary.revertedCount || 0}</b>
+  </p>
+</div>
+
 
 <div
   ref={unpaidCardRef}
@@ -804,8 +963,62 @@ const regUnpaidTotal = rows.reduce(
         ))}
       </ul>
     )}
+ 
+  {regCollectedDetails.length > 0 && (
+  <>
+    <div className="my-3 border-t pt-3" />
+    <p className="font-semibold text-gray-800 mb-2 text-center">
+      Registration fees collected (MTD)
+    </p>
+
+    <ul className="space-y-1 max-h-48 overflow-auto">
+      {regCollectedDetails.map((r) => (
+        <li
+          key={r.id}
+          className="flex justify-between gap-3 bg-emerald-50 px-2 py-1 rounded-md"
+        >
+          <span className="truncate">{r.name}</span>
+          <b className="whitespace-nowrap">{formatCurrencyUSD(r.amount)}</b>
+        </li>
+      ))}
+    </ul>
+  </>
+)}
+ </div>
+</HoverOverlay>
+
+<HoverOverlay
+  anchorRef={revertedCardRef}
+  visible={revertedHovered}
+  onMouseEnter={() => setRevertedHovered(true)}
+  onMouseLeave={() => setRevertedHovered(false)}
+  width={420}
+>
+  <div className="px-4 py-3 text-sm">
+    <p className="font-semibold text-gray-800 mb-2 text-center">
+      Reverted payments (MTD)
+    </p>
+
+    {revertedDetails.length === 0 ? (
+      <p className="text-gray-500 italic text-center">—</p>
+    ) : (
+      <ul className="space-y-1 max-h-60 overflow-auto">
+        {revertedDetails.map((r) => (
+          <li
+            key={r.id}
+            className="flex justify-between gap-3 bg-orange-50 px-2 py-1 rounded-md"
+          >
+            <span className="truncate">
+              {r.name} <span className="text-xs text-gray-500">({r.invoiceNo})</span>
+            </span>
+            <b className="whitespace-nowrap">{formatCurrencyUSD(r.amount)}</b>
+          </li>
+        ))}
+      </ul>
+    )}
   </div>
 </HoverOverlay>
+
 
 <HoverOverlay
   anchorRef={unpaidCardRef}
@@ -836,7 +1049,28 @@ const regUnpaidTotal = rows.reduce(
         ))}
       </ul>
     )}
-  </div>
+  
+  {regUnpaidDetails.length > 0 && (
+  <>
+    <div className="my-3 border-t pt-3" />
+    <p className="font-semibold text-gray-800 mb-2 text-center">
+      Registration fees unpaid (current month)
+    </p>
+
+    <ul className="space-y-1 max-h-48 overflow-auto">
+      {regUnpaidDetails.map((r) => (
+        <li
+          key={r.id}
+          className="flex justify-between gap-3 bg-rose-50 px-2 py-1 rounded-md"
+        >
+          <span className="truncate">{r.name}</span>
+          <b className="whitespace-nowrap">{formatCurrencyUSD(r.amount)}</b>
+        </li>
+      ))}
+    </ul>
+  </>
+)}
+</div>
 </HoverOverlay>
 
 
@@ -1172,7 +1406,7 @@ const regUnpaidTotal = rows.reduce(
 
         {role === "admin" && (
           <button
-            onClick={() => handleRevertPayment(p.id, p.invoice_id)}
+            onClick={() => handleRevertPayment(p.id, p.invoice_id, p.amount)}
             className="mt-3 w-full bg-red-100 text-red-700 border px-3 py-2 rounded text-sm"
           >
             Annuler
