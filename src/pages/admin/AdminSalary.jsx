@@ -2,6 +2,24 @@ import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { formatCurrencyHTG, formatDateFrSafe } from "../../lib/dateUtils";
 
+function salaryMultiplier(countedStudents, refStudents) {
+  const ref = Math.max(1, Number(refStudents || 1));
+  const n = Number(countedStudents || 0);
+
+  if (n >= ref && n < ref + 20) return 1.0;
+  if (n >= ref + 20 && n < ref + 40) return 1.25;
+  if (n >= ref + 40 && n < ref + 60) return 1.5;
+  if (n >= ref + 60 && n < ref + 80) return 1.75;
+
+  if (n < ref && n >= ref - 10) return 0.8;
+  if (n < ref - 10 && n >= ref - 20) return 0.6;
+  if (n < ref - 20 && n >= ref - 30) return 0.4;
+  if (n < ref - 30) return 0.2;
+
+  return 1.0;
+}
+
+
 export default function AdminSalary() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -11,6 +29,12 @@ export default function AdminSalary() {
   const [assignments, setAssignments] = useState([]);
   const [teachers, setTeachers] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [liveCounts, setLiveCounts] = useState({
+  monthKey: "",
+  expectedCount: 0,
+  currentCount: 0,
+});
+
 
   /** ---------------------------
    * LOAD DATA
@@ -78,8 +102,130 @@ setAssignments(
     category_name: a.teacher_salary_categories?.name || ""
   }))
 );
+   await fetchGlobalLiveCounts();
    setLoading(false);
   };
+
+
+
+    const monthKeyNow = () => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    return `${y}-${m}-01`; // matches invoices.month
+  };
+
+  const todayISODate = () => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`; // YYYY-MM-DD (local)
+  };
+
+  const isRegLine = (desc) => {
+    const d = String(desc || "").toLowerCase();
+    return (
+      d.includes("frais d'inscription") ||
+      d.includes("frais d’inscription") ||
+      d.includes("inscription") ||
+      d.includes("registration")
+    );
+  };
+
+  async function fetchGlobalLiveCounts() {
+  const today = todayISODate();
+  const monthKey = monthKeyNow();
+
+  // ✅ expectedCount = active enrollments today (same filter as AdminInvoicePayment)
+  const { data: enr, error: enrErr } = await supabase
+    .from("enrollments")
+    .select("id, status, start_date, end_date")
+    .lte("start_date", today)
+    .or(`end_date.is.null,end_date.gte.${today}`);
+
+  if (enrErr) {
+    console.error("fetchGlobalLiveCounts enrollments error:", enrErr);
+    return;
+  }
+
+  const active = (enr || []).filter((e) => {
+    const st = String(e.status || "").toLowerCase();
+    return !["cancelled", "canceled", "stopped", "inactive", "abandoned"].includes(st);
+  });
+
+  const expectedCount = active.length;
+
+  // ✅ currentCount = count of invoices where coursePaid > 0 (same as AdminInvoicePayment rows.length)
+  const { data: inv, error: invErr } = await supabase
+    .from("invoices")
+    .select("id, month, paid_total, description1, amount1, description2, amount2")
+    .eq("month", monthKey);
+
+  if (invErr) {
+    console.error("fetchGlobalLiveCounts invoices error:", invErr);
+    return;
+  }
+
+  let currentCount = 0;
+
+  for (const row of inv || []) {
+    const a1 = Number(row.amount1 || 0);
+    const a2 = Number(row.amount2 || 0);
+
+    const d1Reg = isRegLine(row.description1);
+    const d2Reg = isRegLine(row.description2);
+
+    const regFee = (d1Reg ? a1 : 0) + (d2Reg ? a2 : 0);
+    const courseTotal = (!d1Reg ? a1 : 0) + (!d2Reg ? a2 : 0);
+
+    const paidTotal = Number(row.paid_total || 0);
+    const paidTowardCourse = Math.max(0, paidTotal - regFee);
+    const coursePaid = Math.min(courseTotal, paidTowardCourse);
+
+    // same filters as your AdminInvoicePayment:
+    // .filter(courseTotal > 0).filter(amount > 0)
+    if (courseTotal > 0 && coursePaid > 0) currentCount += 1;
+  }
+
+  setLiveCounts({
+    monthKey,
+    expectedCount,
+    currentCount,
+  });
+}
+
+
+    const categoryTotals = (categoryId) => {
+    const cat = categories.find((c) => String(c.id) === String(categoryId));
+    const base = Number(cat?.base_salary || 0);
+    const ref = Math.max(1, Number(referenceStudents || 1));
+
+    // teachers assigned to this category
+    const teacherIds = assignments
+      .filter((a) => String(a.category_id) === String(categoryId))
+      .map((a) => a.profile_id);
+
+    let expectedSum = 0;
+    let paidSum = 0;
+
+    for (const teacherId of teacherIds) {
+      const expectedCount = liveByTeacher[teacherId]?.expectedCount || 0;
+      const paidCount = liveByTeacher[teacherId]?.paidCount || 0;
+
+      expectedSum += base * (expectedCount / ref);
+      paidSum += base * (paidCount / ref);
+    }
+
+    return {
+      base,
+      teachersCount: teacherIds.length,
+      expectedSum,
+      paidSum,
+    };
+  };
+
+
 
   useEffect(() => {
     load();
@@ -211,6 +357,39 @@ else {
    * -------------------------- */
 
   const total = rows.reduce((s, r) => s + Number(r.net_salary || 0), 0);
+    // ✅ LIVE TOTALS (all teachers) based on assignments + category base salary
+  const liveTotalsAllTeachers = (() => {
+    const ref = Number(referenceStudents || 1);
+
+    const expectedMult = salaryMultiplier(liveCounts.expectedCount, ref);
+    const paidMult = salaryMultiplier(liveCounts.currentCount, ref);
+
+    // Map: categoryId -> number of teachers assigned
+    const countByCategory = new Map();
+    for (const a of assignments || []) {
+      if (!a.category_id) continue;
+      const key = String(a.category_id);
+      countByCategory.set(key, (countByCategory.get(key) || 0) + 1);
+    }
+
+    let expectedTotal = 0;
+    let paidTotal = 0;
+
+    for (const c of categories || []) {
+      const teachersInCat = countByCategory.get(String(c.id)) || 0;
+      const base = Number(c.base_salary || 0);
+
+      expectedTotal += teachersInCat * base * expectedMult;
+      paidTotal += teachersInCat * base * paidMult;
+    }
+
+    // round to 2 decimals
+    expectedTotal = Math.round(expectedTotal * 100) / 100;
+    paidTotal = Math.round(paidTotal * 100) / 100;
+
+    return { expectedTotal, paidTotal, expectedMult, paidMult };
+  })();
+
 
   return (
     <div className="p-6 space-y-10">
@@ -285,6 +464,7 @@ else {
     <tr>
       <th className="p-2 border">Nom</th>
       <th className="p-2 border">Salaire de base (HTG)</th>
+      <th className="p-2 border">Expectation / Paid (live)</th>
     </tr>
   </thead>
   <tbody>
@@ -315,11 +495,73 @@ else {
             className="border p-1 rounded w-32 text-right"
           />
         </td>
+        <td className="p-2 border text-center">
+  {(() => {
+    const ref = Number(referenceStudents || 1);
+    const base = Number(c.base_salary || 0);
+
+    // ✅ PUT THIS RIGHT HERE (inside the 3rd column calc)
+    const expectedMult = salaryMultiplier(liveCounts.expectedCount, ref);
+    const paidMult = salaryMultiplier(liveCounts.currentCount, ref);
+
+    const expectedSalary = Math.round(base * expectedMult * 100) / 100;
+    const paidSalary = Math.round(base * paidMult * 100) / 100;
+
+    return (
+      <div className="text-xs leading-5">
+        <div className="text-gray-500">
+          Counts: <b>{liveCounts.expectedCount || 0}</b> expected /{" "}
+          <b>{liveCounts.currentCount || 0}</b> paid
+        </div>
+        <div className="text-gray-500">
+          Mult: <b>{expectedMult}</b> / <b>{paidMult}</b>
+        </div>
+        <div>
+          <b>Expected:</b> {formatCurrencyHTG(expectedSalary)}
+        </div>
+        <div>
+          <b>Paid:</b> {formatCurrencyHTG(paidSalary)}
+        </div>
+      </div>
+    );
+  })()}
+</td>
+
+
       </tr>
     ))}
+        {/* ✅ TOTAL (all teachers) */}
+    {categories.length > 0 && (
+      <tr className="bg-gray-50 font-semibold">
+        <td className="p-2 border text-right" colSpan={2}>
+          TOTAL (tous les enseignants)
+        </td>
+        <td className="p-2 border text-center">
+          <div className="text-xs leading-5">
+            <div className="text-gray-500">
+              Counts: <b>{liveCounts.expectedCount || 0}</b> expected /{" "}
+              <b>{liveCounts.currentCount || 0}</b> paid
+            </div>
+            <div className="text-gray-500">
+              Mult: <b>{liveTotalsAllTeachers.expectedMult}</b> /{" "}
+              <b>{liveTotalsAllTeachers.paidMult}</b>
+            </div>
+            <div>
+              <b>Expected Total:</b>{" "}
+              {formatCurrencyHTG(liveTotalsAllTeachers.expectedTotal)}
+            </div>
+            <div>
+              <b>Paid Total:</b>{" "}
+              {formatCurrencyHTG(liveTotalsAllTeachers.paidTotal)}
+            </div>
+          </div>
+        </td>
+      </tr>
+    )}
+
     {!categories.length && (
       <tr>
-        <td colSpan={2} className="text-center py-4 text-gray-500 italic">
+        <td colSpan={3} className="text-center py-4 text-gray-500 italic">
           Aucune catégorie ajoutée
         </td>
       </tr>
