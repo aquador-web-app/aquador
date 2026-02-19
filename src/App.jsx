@@ -31,11 +31,14 @@ import AdminUserProfile from "./pages/admin/AdminUserProfile";
 import AdminReferralOverview from "./pages/admin/AdminReferralOverview";
 import AdminReferralDetails from "./pages/admin/AdminReferralDetails";
 import AdminMembershipApproval from "./pages/admin/AdminMembershipApproval";
+import AdminTeacherContract from "./pages/admin/AdminTeacherContract";
 
 
 
 // Teacher
 import TeacherDashboard from "./pages/teacher/TeacherDashboard"
+import TeacherContractPage from "./pages/teacher/TeacherContractPage";
+
 
 // User
 import UserDashboard from "./pages/user/UserDashboard"
@@ -222,6 +225,7 @@ useEffect(() => {
           </ProtectedRoute>
         }
       />
+      <Route path="/admin/teacher-contracts" element={<AdminTeacherContract />} />
 
   
       {/* TEACHER */}
@@ -235,6 +239,8 @@ useEffect(() => {
       >
         <Route index element={<TeacherDashboard />} />
       </Route>
+      <Route path="/teacher/contract" element={<TeacherContractPage />} />
+
 
       {/* USER */}
       <Route

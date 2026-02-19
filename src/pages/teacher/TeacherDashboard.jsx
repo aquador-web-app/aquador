@@ -11,11 +11,13 @@
     FaSignOutAlt,
     FaBell,
     FaShoppingBag,
+    FaFileContract,
   } from "react-icons/fa";
 
   import { formatCurrencyUSD, formatCurrencyHTG, formatDateFrSafe } from "../../lib/dateUtils";
   import CalendarView from "../../components/CalendarView";
   import useConfirmLogoutOnBack from "../../hooks/useConfirmLogoutOnBack";
+  import TeacherContractPage from "./TeacherContractPage";
 
 
 
@@ -34,7 +36,7 @@
 
   export default function TeacherDashboard() {
     const navigate = useNavigate()
-    const [activeTab, setActiveTab] = useState("overview"); // overview | commissions | presence | bulletins
+    const [activeTab, setActiveTab] = useState("overview"); // overview | commissions | presence | bulletins | contract
     const [bulletinSubTab, setBulletinSubTab] = useState("list"); // list | form | fiches
     const [profile, setProfile] = useState(null);
     const [role, setRole] = useState(null);
@@ -525,6 +527,16 @@
             >
               <FaClipboardList /> Bulletins
             </button>
+            <button
+              onClick={() => goToTab("contract")}
+              className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-left ${
+                activeTab === "contract"
+                  ? "bg-aquaBlue text-white"
+                  : "text-gray-100 hover:bg-orange-700"
+              }`}
+            >
+              <FaFileContract /> Contrat
+            </button>
           </nav>
 
           <div className="p-4 border-t border-gray-700">
@@ -591,6 +603,7 @@
 
           {activeTab === "presence" && <Presence />}
           {activeTab === "bulletins" && <Bulletins />}
+          {activeTab === "contract" && <TeacherContractPage />}
         </main>
       </div>
     );

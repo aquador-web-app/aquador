@@ -53,6 +53,8 @@ import AdminMembershipUsers from "./AdminMembershipUsers";
 import HoverOverlay from "../../components/HoverOverlay";
 import AdminAuditBoutique from "./AdminAuditBoutique";
 import { FaQrcode } from "react-icons/fa";
+import AdminTeacherContract from "./AdminTeacherContract";
+
 
 
 
@@ -824,7 +826,8 @@ const HIDDEN_SECTIONS = [
   "bulletins-template",
   "fiches-template",
   "salary",
-  "reports"
+  "reports",
+  "teacher-contracts"
 ];
 
 function isHidden(tabId) {
@@ -866,7 +869,8 @@ const HIDDEN_ECOLE_TABS = [
   "boutique",
   "bulletins",
   "reports",
-  "salary"
+  "salary",
+  "teacher-contracts",
 ];
 
 function isEcoleTabVisibleToAssistant(tabId) {
@@ -1499,6 +1503,8 @@ const totalUtilisateursPlateforme =
         return <AdminReferrals />
       case "manage-attendance":
         return <AdminAttendance />
+      case "teacher-contracts":
+        return <AdminTeacherContract />;
       default:
         return <h2 className="text-xl">Sélectionnez une section</h2>
     }
@@ -1911,6 +1917,17 @@ const totalUtilisateursPlateforme =
         closeSidebar={() => setSidebarOpen(false)}
       />
     )}
+    {!isHidden("teacher-contracts") && (
+  <SidebarBtn
+    id="teacher-contracts"
+    icon={<FaFileAlt />}
+    label="Contrats Professeurs"
+    activeTab={activeTab}
+    setActiveTab={setActiveTab}
+    closeSidebar={() => setSidebarOpen(false)}
+  />
+)}
+
 
   </div>
 )}
