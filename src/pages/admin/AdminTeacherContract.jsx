@@ -182,15 +182,23 @@ ${inner || `<div class="muted"><i>(Aucun HTML)</i></div>`}
 </html>`;
   }
 
-  async function fetchTemplates() {
+    async function fetchTemplates(categoryId = null) {
     setUiError("");
     setUiOk("");
     setLoading(true);
 
-    const { data, error } = await supabase
+        let q = supabase
       .from("teacher_contract_templates")
-      .select("id, created_at, is_active, version, title, html_template")
+      .select("id, created_at, is_active, version, title, html_template, category_id")
       .order("created_at", { ascending: false });
+
+    // If we have a category, load templates scoped to it (plus optional global NULL fallback)
+    if (categoryId) {
+      q = q.or(`category_id.eq.${categoryId},category_id.is.null`);
+    }
+
+    const { data, error } = await q;
+
 
     if (error) {
       setUiError(error.message || String(error));
@@ -203,7 +211,11 @@ ${inner || `<div class="muted"><i>(Aucun HTML)</i></div>`}
       setTemplates(data || []);
 
     // Auto-select active template, else first
-    const active = (data || []).find((t) => t.is_active);
+        const active =
+      (data || []).find((t) => t.is_active && String(t.category_id || "") === String(categoryId || "")) ||
+      (data || []).find((t) => t.is_active && t.category_id == null) ||
+      (data || []).find((t) => t.is_active);
+
     const pick = active?.id || (data?.[0]?.id ?? null);
     setSelectedId(pick);
 
@@ -250,16 +262,34 @@ for (const c of contracts || []) {
 
   // 2) Fetch teacher identity from profiles (source of truth for dropdown label)
   let profilesById = {};
+  let assignmentByTeacherId = {}; // ✅ move here (so it exists for rows.push later)
+
   if (teacherIds.length) {
     const { data: profs, error: pErr } = await supabase
       .from("profiles")
       .select("id, full_name, email, phone, address")
       .in("id", teacherIds);
 
+
     if (!pErr && profs?.length) {
       profilesById = Object.fromEntries(profs.map((p) => [p.id, p]));
     }
+
+    // 2b) Fetch salary assignment (category_id + category name) from DB (source of truth)
+  let assignmentByTeacherId = {};
+  if (teacherIds.length) {
+    const { data: assigns, error: aErr } = await supabase
+      .from("teacher_salary_assignments")
+      .select("profile_id, category_id, category_name")
+      .in("profile_id", teacherIds);
+
+    if (!aErr && assigns?.length) {
+      assignmentByTeacherId = Object.fromEntries(
+        assigns.map((a) => [a.profile_id, a])
+      );
+    }
   }
+}
 
   // 3) Build rows, but keep ONLY the latest contract per teacher_id
   const seen = new Set();
@@ -291,8 +321,14 @@ for (const c of contracts || []) {
 salary_base_htg:
   p.salary_base_htg ?? lastNonNullBaseByTeacher[r.teacher_id] ?? null,
 
-salary_category_name:
-  p.salary_category_name || lastNonEmptyCategoryByTeacher[r.teacher_id] || "",
+      salary_category_id: assignmentByTeacherId[r.teacher_id]?.category_id || null,
+
+      salary_category_name:
+        assignmentByTeacherId[r.teacher_id]?.category_name ||
+        p.salary_category_name ||
+        lastNonEmptyCategoryByTeacher[r.teacher_id] ||
+        "",
+
 
     });
   }
@@ -331,6 +367,12 @@ salary_category_name:
       reference_students: data?.reference_students ?? null,
     });
   }
+
+    useEffect(() => {
+    const catId = selectedTeacher?.salary_category_id || null;
+    fetchTemplates(catId);
+  }, [selectedTeacherId]); // eslint-disable-line
+
 
 
     useEffect(() => {
@@ -418,25 +460,36 @@ salary_category_name:
     try {
       setSaving(true);
 
-      // 1) Deactivate all
-      const { error: deactErr } = await supabase
+            const catId = selectedTeacher?.salary_category_id || null;
+
+      // 1) Deactivate ONLY active template for this category scope
+      let deact = supabase
         .from("teacher_contract_templates")
         .update({ is_active: false })
         .eq("is_active", true);
 
+      if (catId) deact = deact.eq("category_id", catId);
+      else deact = deact.is("category_id", null);
+
+      const { error: deactErr } = await deact;
+
+
       if (deactErr) throw deactErr;
 
-      // 2) Insert new row active=true
+
+
       const { data: inserted, error: insErr } = await supabase
         .from("teacher_contract_templates")
         .insert([
           {
             is_active: true,
+            category_id: catId, // ✅ scope template to Teacher's category (or NULL for global)
             version: version.trim(),
             title: title.trim(),
             html_template: html,
           },
         ])
+
         .select("id")
         .single();
 
