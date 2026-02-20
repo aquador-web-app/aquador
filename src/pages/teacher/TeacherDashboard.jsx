@@ -12,12 +12,14 @@
     FaBell,
     FaShoppingBag,
     FaFileContract,
+    FaWallet,
   } from "react-icons/fa";
 
   import { formatCurrencyUSD, formatCurrencyHTG, formatDateFrSafe } from "../../lib/dateUtils";
   import CalendarView from "../../components/CalendarView";
   import useConfirmLogoutOnBack from "../../hooks/useConfirmLogoutOnBack";
   import TeacherContractPage from "./TeacherContractPage";
+  import TeacherSalary from "./TeacherSalary";
 
 
 
@@ -36,7 +38,7 @@
 
   export default function TeacherDashboard() {
     const navigate = useNavigate()
-    const [activeTab, setActiveTab] = useState("overview"); // overview | commissions | presence | bulletins | contract
+    const [activeTab, setActiveTab] = useState("overview"); // overview | commissions | presence | bulletins | salary | contract
     const [bulletinSubTab, setBulletinSubTab] = useState("list"); // list | form | fiches
     const [profile, setProfile] = useState(null);
     const [role, setRole] = useState(null);
@@ -528,6 +530,17 @@
               <FaClipboardList /> Bulletins
             </button>
             <button
+  onClick={() => goToTab("salary")}
+  className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-left ${
+    activeTab === "salary"
+      ? "bg-aquaBlue text-white"
+      : "text-gray-100 hover:bg-orange-700"
+  }`}
+>
+  <FaWallet /> Salaire
+</button>
+
+            <button
               onClick={() => goToTab("contract")}
               className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-left ${
                 activeTab === "contract"
@@ -603,6 +616,7 @@
 
           {activeTab === "presence" && <Presence />}
           {activeTab === "bulletins" && <Bulletins />}
+          {activeTab === "salary" && <TeacherSalary />}
           {activeTab === "contract" && <TeacherContractPage />}
         </main>
       </div>

@@ -34,6 +34,12 @@ export default function AdminSalary() {
   expectedCount: 0,
   currentCount: 0,
 });
+const [deductions, setDeductions] = useState({
+  monthKey: "",
+  doc: { pct: 0, missingCount: 0, expectedCount: 0, missingStudents: [] },
+  lateByTeacher: {}, // { [teacherId]: { lateDays, lateDaysCapped, pct } }
+});
+
 
 
   /** ---------------------------
@@ -103,7 +109,8 @@ setAssignments(
   }))
 );
    await fetchGlobalLiveCounts();
-   setLoading(false);
+await fetchDeductionsLive(profs || []);
+setLoading(false);
   };
 
 
@@ -182,6 +189,8 @@ setAssignments(
     const paidTotal = Number(row.paid_total || 0);
     const paidTowardCourse = Math.max(0, paidTotal - regFee);
     const coursePaid = Math.min(courseTotal, paidTowardCourse);
+    
+
 
     // same filters as your AdminInvoicePayment:
     // .filter(courseTotal > 0).filter(amount > 0)
@@ -195,35 +204,63 @@ setAssignments(
   });
 }
 
+async function fetchDocDeduction(monthKey) {
+  const { data, error } = await supabase.rpc("global_docs_deduction_mtd", {
+    p_month: monthKey, // 'YYYY-MM-01'
+  });
 
-    const categoryTotals = (categoryId) => {
-    const cat = categories.find((c) => String(c.id) === String(categoryId));
-    const base = Number(cat?.base_salary || 0);
-    const ref = Math.max(1, Number(referenceStudents || 1));
+  if (error) {
+    console.error("global_docs_deduction_mtd error:", error);
+    return { pct: 0, missingCount: 0, expectedCount: 0, missingStudents: [] };
+  }
 
-    // teachers assigned to this category
-    const teacherIds = assignments
-      .filter((a) => String(a.category_id) === String(categoryId))
-      .map((a) => a.profile_id);
+  const row = Array.isArray(data) ? data[0] : data;
+  return {
+    pct: Number(row?.doc_deduction_pct || 0),
+    missingCount: Number(row?.missing_students_count || 0),
+    expectedCount: Number(row?.expected_count || 0),
+    missingStudents: row?.missing_students || [],
+  };
+}
 
-    let expectedSum = 0;
-    let paidSum = 0;
+async function fetchLateByTeacher(monthKey, teacherList) {
+  const list = teacherList || [];
+  if (!list.length) return {};
 
-    for (const teacherId of teacherIds) {
-      const expectedCount = liveByTeacher[teacherId]?.expectedCount || 0;
-      const paidCount = liveByTeacher[teacherId]?.paidCount || 0;
+  const out = {};
+  for (const t of list) {
+    const { data, error } = await supabase.rpc("teacher_late_deduction_mtd", {
+      p_teacher_id: t.id,
+      p_month: monthKey,
+    });
 
-      expectedSum += base * (expectedCount / ref);
-      paidSum += base * (paidCount / ref);
+    if (error) {
+      console.error("teacher_late_deduction_mtd error:", t.id, error);
+      out[t.id] = { lateDays: 0, lateDaysCapped: 0 };
+      continue;
     }
 
-    return {
-      base,
-      teachersCount: teacherIds.length,
-      expectedSum,
-      paidSum,
+    const row = Array.isArray(data) ? data[0] : data;
+    out[t.id] = {
+      lateDays: Number(row?.late_days || 0),
+      lateDaysCapped: Number(row?.late_days_capped || 0),
     };
-  };
+  }
+
+  return out;
+}
+
+
+async function fetchDeductionsLive(teacherList) {
+  const monthKey = monthKeyNow();
+
+  const [doc, lateByTeacher] = await Promise.all([
+    fetchDocDeduction(monthKey),
+    fetchLateByTeacher(monthKey, teacherList),
+  ]);
+
+  setDeductions({ monthKey, doc, lateByTeacher });
+}
 
 
 
@@ -282,30 +319,8 @@ setAssignments(
   } finally {
     setSaving(false);
   }
-
-  if (error) alert("Erreur: " + error.message);
-  else alert("Référence étudiants mise à jour !");
 };
 
-
-
-  const updateCategorySalary = async (id, newSalary) => {
-    const { error } = await supabase
-  .from("teacher_salary_categories")
-  .update({ base_salary: newSalary })
-  .eq("id", id);
-
-if (error) console.error(error);
-else {
-  const { data: cats } = await supabase
-    .from("teacher_salary_categories")
-    .select("*")
-    .order("name", { ascending: true });
-  setCategories(cats || []);
-}
-
-
-  };
 
   const assignCategory = async (profileId, categoryId) => {
   if (!profileId) return;
@@ -465,103 +480,247 @@ else {
       <th className="p-2 border">Nom</th>
       <th className="p-2 border">Salaire de base (HTG)</th>
       <th className="p-2 border">Expectation / Paid (live)</th>
+      <th className="p-2 border">Late deduction</th>
+      <th className="p-2 border">Missing docs deduction</th>
+      <th className="p-2 border">Total (Paid - deductions)</th>
     </tr>
   </thead>
   <tbody>
-    {categories.map((c) => (
-      <tr key={c.id} className="hover:bg-gray-50">
-        <td className="p-2 border">{c.name}</td>
-        <td className="p-2 border text-center">
-          <input
-            type="number"
-            defaultValue={c.base_salary}
-            onBlur={async (e) => {
-              const newSalary = Number(e.target.value);
-              if (newSalary !== c.base_salary) {
-                const { error } = await supabase
-                  .from("teacher_salary_categories")
-                  .update({ base_salary: newSalary })
-                  .eq("id", c.id);
-                if (error) alert("Erreur: " + error.message);
-                else {
-                  setCategories((prev) =>
-                    prev.map((cat) =>
-                      cat.id === c.id ? { ...cat, base_salary: newSalary } : cat
-                    )
-                  );
-                }
-              }
-            }}
-            className="border p-1 rounded w-32 text-right"
-          />
-        </td>
-        <td className="p-2 border text-center">
-  {(() => {
-    const ref = Number(referenceStudents || 1);
-    const base = Number(c.base_salary || 0);
+    {categories.map((c) => {
+  const ref = Number(referenceStudents || 1);
+  const base = Number(c.base_salary || 0);
 
-    // ✅ PUT THIS RIGHT HERE (inside the 3rd column calc)
-    const expectedMult = salaryMultiplier(liveCounts.expectedCount, ref);
-    const paidMult = salaryMultiplier(liveCounts.currentCount, ref);
+  const expectedMult = salaryMultiplier(liveCounts.expectedCount, ref);
+  const paidMult = salaryMultiplier(liveCounts.currentCount, ref);
 
-    const expectedSalary = Math.round(base * expectedMult * 100) / 100;
-    const paidSalary = Math.round(base * paidMult * 100) / 100;
+  const expectedSalary = Math.round(base * expectedMult * 100) / 100;
+  const paidSalary = Math.round(base * paidMult * 100) / 100;
 
-    return (
-      <div className="text-xs leading-5">
-        <div className="text-gray-500">
-          Counts: <b>{liveCounts.expectedCount || 0}</b> expected /{" "}
-          <b>{liveCounts.currentCount || 0}</b> paid
-        </div>
-        <div className="text-gray-500">
-          Mult: <b>{expectedMult}</b> / <b>{paidMult}</b>
-        </div>
-        <div>
-          <b>Expected:</b> {formatCurrencyHTG(expectedSalary)}
-        </div>
-        <div>
-          <b>Paid:</b> {formatCurrencyHTG(paidSalary)}
-        </div>
-      </div>
-    );
-  })()}
+  const LATE_PCT_PER_DAY = 0.05;
+const DOC_PCT_PER_MISSING_STUDENT = 0.05;
+const missingCount = Number(deductions.doc.missingCount || 0);
+const docPct = Math.min(1, DOC_PCT_PER_MISSING_STUDENT * missingCount);
+
+
+
+  // teachers in this category
+  const teacherIds = assignments
+    .filter((a) => String(a.category_id) === String(c.id))
+    .map((a) => a.profile_id);
+
+  // Late deduction sum for this category
+  let lateDedHTG = 0;
+  let lateInfo = [];
+
+  for (const tid of teacherIds) {
+    const lt = deductions.lateByTeacher?.[tid] || { lateDaysCapped: 0 };
+if (Number(lt.lateDaysCapped || 0) > 0) {
+  lateDedHTG += base * paidMult * LATE_PCT_PER_DAY * Number(lt.lateDaysCapped || 0);
+      const tName = teachers.find((x) => x.id === tid)?.full_name || tid;
+      lateInfo.push(`${tName}: ${Number(lt.lateDaysCapped || 0)} day(s)`);
+    }
+  }
+
+  lateDedHTG = Math.round(lateDedHTG * 100) / 100;
+
+const teachersInCat = teacherIds.length;
+const paidSalaryTotal = Math.round(paidSalary * teachersInCat * 100) / 100;
+const expectedSalaryTotal = Math.round(expectedSalary * teachersInCat * 100) / 100;
+
+// Paid-side docs deduction (category total)
+const docDedPaidHTG = Math.round(
+  paidSalaryTotal * DOC_PCT_PER_MISSING_STUDENT * missingCount * 100
+) / 100;
+
+
+
+const totalAfterPaid = Math.max(
+  0,
+  Math.round((paidSalaryTotal - lateDedHTG - docDedPaidHTG) * 100) / 100
+);
+
+
+// Expected-side deductions (same late logic, but scaled with expectedMult)
+// lateExpected = base * expectedMult * teacherLatePct
+let lateDedExpectedHTG = 0;
+for (const tid of teacherIds) {
+  const lt = deductions.lateByTeacher?.[tid] || { lateDaysCapped: 0 };
+  if (Number(lt.lateDaysCapped || 0) > 0) {
+    lateDedExpectedHTG +=
+      base * expectedMult * LATE_PCT_PER_DAY * Number(lt.lateDaysCapped || 0);
+  }
+}
+
+lateDedExpectedHTG = Math.round(lateDedExpectedHTG * 100) / 100;
+
+const docDedExpectedHTG = Math.round(
+  expectedSalaryTotal * DOC_PCT_PER_MISSING_STUDENT * missingCount * 100
+) / 100;
+
+
+const totalAfterExpected = Math.max(
+  0,
+  Math.round((expectedSalaryTotal - lateDedExpectedHTG - docDedExpectedHTG) * 100) / 100
+);
+
+
+
+
+  return (
+    <tr key={c.id} className="hover:bg-gray-50">
+      <td className="p-2 border">{c.name}</td>
+
+      <td className="p-2 border text-center">
+  <input
+    type="number"
+    defaultValue={c.base_salary}
+    onBlur={async (e) => {
+      const newSalary = Number(e.target.value);
+      if (newSalary !== c.base_salary) {
+        const { error } = await supabase
+          .from("teacher_salary_categories")
+          .update({ base_salary: newSalary })
+          .eq("id", c.id);
+
+        if (error) alert("Erreur: " + error.message);
+        else {
+          setCategories((prev) =>
+            prev.map((cat) =>
+              cat.id === c.id ? { ...cat, base_salary: newSalary } : cat
+            )
+          );
+        }
+      }
+    }}
+    className="border p-1 rounded w-32 text-right"
+  />
 </td>
 
 
-      </tr>
-    ))}
-        {/* ✅ TOTAL (all teachers) */}
-    {categories.length > 0 && (
-      <tr className="bg-gray-50 font-semibold">
-        <td className="p-2 border text-right" colSpan={2}>
-          TOTAL (tous les enseignants)
-        </td>
-        <td className="p-2 border text-center">
-          <div className="text-xs leading-5">
-            <div className="text-gray-500">
-              Counts: <b>{liveCounts.expectedCount || 0}</b> expected /{" "}
-              <b>{liveCounts.currentCount || 0}</b> paid
-            </div>
-            <div className="text-gray-500">
-              Mult: <b>{liveTotalsAllTeachers.expectedMult}</b> /{" "}
-              <b>{liveTotalsAllTeachers.paidMult}</b>
-            </div>
-            <div>
-              <b>Expected Total:</b>{" "}
-              {formatCurrencyHTG(liveTotalsAllTeachers.expectedTotal)}
-            </div>
-            <div>
-              <b>Paid Total:</b>{" "}
-              {formatCurrencyHTG(liveTotalsAllTeachers.paidTotal)}
-            </div>
+      <td className="p-2 border text-center">
+        <div className="text-xs leading-5">
+          <div className="text-gray-500">
+            Counts: <b>{liveCounts.expectedCount || 0}</b> expected /{" "}
+            <b>{liveCounts.currentCount || 0}</b> paid
           </div>
-        </td>
-      </tr>
-    )}
+          <div className="text-gray-500">
+            Mult: <b>{expectedMult}</b> / <b>{paidMult}</b>
+          </div>
+          <div><b>Expected:</b> {formatCurrencyHTG(expectedSalaryTotal)}</div>
+          <div><b>Paid:</b> {formatCurrencyHTG(paidSalaryTotal)}</div>
+        </div>
+      </td>
+
+      <td className="p-2 border text-center">
+        <div className="text-xs leading-5">
+          <div><b>{formatCurrencyHTG(lateDedHTG)}</b></div>
+          <div className="text-gray-500">{lateInfo.length ? lateInfo.join(" • ") : "—"}</div>
+        </div>
+      </td>
+
+      <td className="p-2 border text-center">
+  <div className="text-xs leading-5">
+    <div><b>Expected:</b> {formatCurrencyHTG(docDedExpectedHTG)}</div>
+    <div><b>Paid:</b> {formatCurrencyHTG(docDedPaidHTG)}</div>
+    <div className="text-gray-500">
+      {deductions.doc.missingCount || 0} missing / {deductions.doc.expectedCount || 0} expected
+      {" "}({Math.round(docPct * 100)}%)
+    </div>
+  </div>
+</td>
+
+
+      <td className="p-2 border text-center">
+  <div className="text-xs leading-5">
+    <div><b>Expected:</b> {formatCurrencyHTG(totalAfterExpected)}</div>
+    <div><b>Paid:</b> {formatCurrencyHTG(totalAfterPaid)}</div>
+  </div>
+</td>
+
+    </tr>
+  );
+})}
+
+        {/* ✅ TOTAL (all teachers) */}
+    {categories.length > 0 && (() => {
+  const LATE_PCT_PER_DAY = 0.05;
+const DOC_PCT_PER_MISSING_STUDENT = 0.05;
+const missingCountAll = Number(deductions.doc.missingCount || 0);
+
+const totalDocDed = Math.round(
+  liveTotalsAllTeachers.paidTotal *
+    DOC_PCT_PER_MISSING_STUDENT *
+    missingCountAll *
+    100
+) / 100;
+
+let totalLateDed = 0;
+for (const a of assignments || []) {
+  const cat = categories.find((c) => String(c.id) === String(a.category_id));
+  if (!cat) continue;
+  const base = Number(cat.base_salary || 0);
+
+  const lt = deductions.lateByTeacher?.[a.profile_id] || { lateDaysCapped: 0 };
+  totalLateDed +=
+    base *
+    liveTotalsAllTeachers.paidMult *
+    LATE_PCT_PER_DAY *
+    Number(lt.lateDaysCapped || 0);
+}
+totalLateDed = Math.round(totalLateDed * 100) / 100;
+
+
+  const totalAfterAll = Math.max(
+    0,
+    Math.round((liveTotalsAllTeachers.paidTotal - totalLateDed - totalDocDed) * 100) / 100
+  );
+
+  return (
+    <tr className="bg-gray-50 font-semibold">
+      <td className="p-2 border text-right" colSpan={2}>
+        TOTAL (tous les enseignants)
+      </td>
+
+      <td className="p-2 border text-center">
+        <div className="text-xs leading-5">
+          <div className="text-gray-500">
+            Counts: <b>{liveCounts.expectedCount || 0}</b> expected /{" "}
+            <b>{liveCounts.currentCount || 0}</b> paid
+          </div>
+          <div className="text-gray-500">
+            Mult: <b>{liveTotalsAllTeachers.expectedMult}</b> /{" "}
+            <b>{liveTotalsAllTeachers.paidMult}</b>
+          </div>
+          <div>
+            <b>Expected Total:</b>{" "}
+            {formatCurrencyHTG(liveTotalsAllTeachers.expectedTotal)}
+          </div>
+          <div>
+            <b>Paid Total:</b>{" "}
+            {formatCurrencyHTG(liveTotalsAllTeachers.paidTotal)}
+          </div>
+        </div>
+      </td>
+
+      <td className="p-2 border text-center">
+        {formatCurrencyHTG(totalLateDed)}
+      </td>
+
+      <td className="p-2 border text-center">
+        {formatCurrencyHTG(totalDocDed)}
+      </td>
+
+      <td className="p-2 border text-center">
+        {formatCurrencyHTG(totalAfterAll)}
+      </td>
+    </tr>
+  );
+})()}
+
 
     {!categories.length && (
       <tr>
-        <td colSpan={3} className="text-center py-4 text-gray-500 italic">
+        <td colSpan={6} className="text-center py-4 text-gray-500 italic">
           Aucune catégorie ajoutée
         </td>
       </tr>

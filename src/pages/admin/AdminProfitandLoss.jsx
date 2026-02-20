@@ -136,21 +136,46 @@ const [draftProofPath, setDraftProofPath] = useState(() =>
 
       // === ADMIN SALARIES (BY month_paid OR date_paid) ===
       const { data: adminSalaries } = await supabase
-        .from("admin_salaries")
-        .select("id, full_name, net_salary, period_month")
-        .gte("period_month", period.start)
-        .lte("period_month", period.end);
+  .from("admin_salaries")
+  .select("id, profile_id, full_name, net_salary, period_month")
+  .gte("period_month", period.start)
+  .lte("period_month", period.end);
+
+  const salaryProfileIds = Array.from(
+  new Set((adminSalaries || []).map((s) => s.profile_id).filter(Boolean))
+);
+
+let assignmentByProfile = new Map();
+
+if (salaryProfileIds.length) {
+  const { data: salaryAssign } = await supabase
+    .from("teacher_salary_assignments")
+    .select("profile_id, category_name")
+    .in("profile_id", salaryProfileIds);
+
+  assignmentByProfile = new Map(
+    (salaryAssign || [])
+      .filter((a) => a.profile_id)
+      .map((a) => [a.profile_id, a.category_name])
+  );
+}
+
 
       // === FORMAT ADMIN SALARIES AS EXPENSES ===
-      const formattedSalaries = (adminSalaries || []).map((s) => ({
-        id: s.id,
-        description: `Salaire - ${s.full_name}`,
-        category: "Salaires",
-        amount: Number(s.net_salary || 0),
-        currency: "HTG",
-        date: s.period_month,
-        isSalary: true, // special flag
-      }));
+      const formattedSalaries = (adminSalaries || []).map((s) => {
+  const catName = s.profile_id ? assignmentByProfile.get(s.profile_id) : null;
+
+  return {
+    id: s.id,
+    description: `Salaire - ${catName || s.full_name || "—"}`,
+    category: "Salaires",
+    amount: Number(s.net_salary || 0),
+    currency: "HTG",
+    date: s.period_month,
+    isSalary: true,
+  };
+});
+
 
 
 
@@ -254,8 +279,8 @@ const [draftProofPath, setDraftProofPath] = useState(() =>
 
   const totalExpensesHTG =
   expenses.fonctionnement.reduce((t, e) => t + expenseToHTG(e, rate), 0) +
-  expenses.commissions.reduce((t, e) => t + expenseToHTG(e, rate), 0) +
-  expenses.salaires.reduce((t, e) => t + expenseToHTG(e, rate), 0);
+  expenses.commissions.reduce((t, e) => t + expenseToHTG(e, rate), 0);
+  
 
 
   const net = totalIncomes - (totalExpensesHTG / rate);

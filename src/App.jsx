@@ -38,6 +38,8 @@ import AdminTeacherContract from "./pages/admin/AdminTeacherContract";
 // Teacher
 import TeacherDashboard from "./pages/teacher/TeacherDashboard"
 import TeacherContractPage from "./pages/teacher/TeacherContractPage";
+import TeacherSalary from "./pages/teacher/TeacherSalary";
+
 
 
 // User
@@ -240,6 +242,8 @@ useEffect(() => {
         <Route index element={<TeacherDashboard />} />
       </Route>
       <Route path="/teacher/contract" element={<TeacherContractPage />} />
+      <Route path="/teacher/salary" element={<TeacherSalary />} />
+
 
 
       {/* USER */}
