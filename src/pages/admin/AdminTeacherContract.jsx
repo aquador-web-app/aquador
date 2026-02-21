@@ -183,44 +183,71 @@ ${inner || `<div class="muted"><i>(Aucun HTML)</i></div>`}
   }
 
     async function fetchTemplates(categoryId = null) {
-    setUiError("");
-    setUiOk("");
-    setLoading(true);
+  setUiError("");
+  setUiOk("");
+  setLoading(true);
 
-        let q = supabase
+  try {
+    let q = supabase
       .from("teacher_contract_templates")
-      .select("id, created_at, is_active, version, title, html_template, category_id")
+      .select("id, created_at, is_active, version, title, html_template, category_id, teacher_id")
       .order("created_at", { ascending: false });
 
-    // If we have a category, load templates scoped to it (plus optional global NULL fallback)
-    if (categoryId) {
+    const hasTeacher = !!selectedTeacherId;
+    const hasCategory = !!categoryId;
+
+    // IMPORTANT:
+    // - DO NOT wrap with "or(...)"
+    // - Supabase .or() expects comma-separated conditions
+    // - For nested: use and(or(...),or(...)) but ONLY ONCE, and no outer "or(...)"
+    if (hasTeacher && hasCategory) {
+      q = q.or(
+        `and(or(teacher_id.eq.${selectedTeacherId},teacher_id.is.null),or(category_id.eq.${categoryId},category_id.is.null))`
+      );
+    } else if (hasTeacher && !hasCategory) {
+      q = q.or(`teacher_id.eq.${selectedTeacherId},teacher_id.is.null`);
+    } else if (!hasTeacher && hasCategory) {
       q = q.or(`category_id.eq.${categoryId},category_id.is.null`);
-    }
+    } // else: no filter => show everything
 
     const { data, error } = await q;
+    if (error) throw error;
+
+    console.log("fetchTemplates scope", {
+  selectedTeacherId,
+  categoryId,
+  returned: (data || []).map((x) => ({
+    version: x.version,
+    teacher_id: x.teacher_id,
+    category_id: x.category_id,
+    is_active: x.is_active,
+  })),
+});
 
 
-    if (error) {
-      setUiError(error.message || String(error));
-      setTemplates([]);
-      setSelectedId(null);
-      setLoading(false);
-      return;
-    }
+    setTemplates(data || []);
 
-      setTemplates(data || []);
-
-    // Auto-select active template, else first
-        const active =
-      (data || []).find((t) => t.is_active && String(t.category_id || "") === String(categoryId || "")) ||
-      (data || []).find((t) => t.is_active && t.category_id == null) ||
+    // Pick active with teacher priority
+    const active =
+      (data || []).find(
+        (t) =>
+          t.is_active &&
+          selectedTeacherId &&
+          String(t.teacher_id || "") === String(selectedTeacherId)
+      ) ||
+      (data || []).find((t) => t.is_active && t.teacher_id == null) ||
       (data || []).find((t) => t.is_active);
 
-    const pick = active?.id || (data?.[0]?.id ?? null);
-    setSelectedId(pick);
-
+    setSelectedId(active?.id || (data?.[0]?.id ?? null));
+  } catch (e) {
+    setUiError(e?.message || String(e));
+    setTemplates([]);
+    setSelectedId(null);
+  } finally {
     setLoading(false);
   }
+}
+
 
     async function fetchTeachersForContracts() {
   setUiError("");
@@ -276,7 +303,7 @@ for (const c of contracts || []) {
     }
 
     // 2b) Fetch salary assignment (category_id + category name) from DB (source of truth)
-  let assignmentByTeacherId = {};
+ 
   if (teacherIds.length) {
     const { data: assigns, error: aErr } = await supabase
       .from("teacher_salary_assignments")
@@ -376,16 +403,24 @@ salary_base_htg:
 
 
     useEffect(() => {
-    (async () => {
-      try {
-        await fetchTemplates();
-        await fetchTeachersForContracts();
-        await fetchSalarySettings();
-      } catch (e) {
-        setUiError(e.message || String(e));
-      }
-    })();
-  }, []); // eslint-disable-line
+  (async () => {
+    try {
+      await fetchTeachersForContracts();
+      await fetchSalarySettings();
+      // DO NOT call fetchTemplates() here.
+      // The selectedTeacherId effect will call it once selectedTeacherId is set.
+    } catch (e) {
+      setUiError(e.message || String(e));
+    }
+  })();
+}, []); // eslint-disable-line
+
+useEffect(() => {
+  if (!selectedTeacherId) return;
+  const catId = selectedTeacher?.salary_category_id || null;
+  fetchTemplates(catId);
+}, [selectedTeacherId]); // eslint-disable-line
+
 
 
   // whenever selected changes, load into editor
@@ -443,8 +478,17 @@ salary_base_htg:
       // keep selection
       setSelectedId(selectedId);
     } catch (e) {
-      setUiError(e.message || String(e));
-    } finally {
+  const msg = e?.message || String(e);
+
+  // nicer error if DB constraint still blocks multi-active
+  if (msg.toLowerCase().includes("duplicate key") || msg.toLowerCase().includes("unique")) {
+    setUiError(
+      "Contrainte DB: un seul template peut être actif. Vérifie que l’index global 'single_active' a bien été supprimé."
+    );
+  } else {
+    setUiError(msg);
+  }
+} finally {
       setSaving(false);
     }
   }
@@ -508,37 +552,69 @@ salary_base_htg:
   }
 
   async function handleSetActive(id) {
-    setUiError("");
-    setUiOk("");
+  setUiError("");
+  setUiOk("");
 
-    if (!id) return;
+  if (!id) return;
 
-    try {
-      setSaving(true);
+  try {
+    setSaving(true);
 
-      // deactivate all
-      const { error: deactErr } = await supabase
-        .from("teacher_contract_templates")
-        .update({ is_active: false })
-        .eq("is_active", true);
-      if (deactErr) throw deactErr;
+    // 1) Get the template we are activating (need teacher_id + category_id for scope)
+    const { data: tpl, error: getErr } = await supabase
+      .from("teacher_contract_templates")
+      .select("id, teacher_id, category_id")
+      .eq("id", id)
+      .maybeSingle();
 
-      // activate selected
-      const { error: actErr } = await supabase
-        .from("teacher_contract_templates")
-        .update({ is_active: true })
-        .eq("id", id);
-      if (actErr) throw actErr;
+    if (getErr) throw getErr;
 
-      setUiOk("✅ Template activé.");
-      await fetchTemplates();
-      setSelectedId(id);
-    } catch (e) {
-      setUiError(e.message || String(e));
-    } finally {
-      setSaving(false);
+    const tplTeacherId = tpl?.teacher_id ?? null;
+    const tplCategoryId = tpl?.category_id ?? null;
+
+    // 2) Deactivate ONLY within the SAME scope:
+    // - if teacher_id exists => deactivate only that teacher's active template
+    // - else if category_id exists => deactivate only that category's active template (teacher_id must be null)
+    // - else => deactivate only global active template (teacher_id null + category_id null)
+    let deact = supabase
+      .from("teacher_contract_templates")
+      .update({ is_active: false })
+      .eq("is_active", true);
+
+    if (tplTeacherId) {
+      deact = deact.eq("teacher_id", tplTeacherId);
+    } else if (tplCategoryId) {
+      deact = deact.is("teacher_id", null).eq("category_id", tplCategoryId);
+    } else {
+      deact = deact.is("teacher_id", null).is("category_id", null);
     }
+
+    const { error: deactErr } = await deact;
+    if (deactErr) throw deactErr;
+
+    // 3) Activate selected
+    const { error: actErr } = await supabase
+      .from("teacher_contract_templates")
+      .update({ is_active: true })
+      .eq("id", id);
+
+    if (actErr) throw actErr;
+
+    setUiOk("✅ Template activé (scope OK).");
+
+    // reload list for current view
+    const currentCat = selectedTeacher?.salary_category_id || null;
+    await fetchTemplates(currentCat);
+
+    setSelectedId(id);
+  } catch (e) {
+    setUiError(e?.message || String(e));
+  } finally {
+    setSaving(false);
   }
+}
+
+
 
   return (
     <div className="space-y-6">
@@ -552,7 +628,7 @@ salary_base_htg:
 
         <div className="flex items-center gap-2">
           <button
-            onClick={fetchTemplates}
+            onClick={() => fetchTemplates(selectedTeacher?.salary_category_id || null)}
             className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200"
             disabled={loading || saving}
           >

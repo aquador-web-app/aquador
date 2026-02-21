@@ -28,7 +28,7 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { profile_id, mode, selected_date } = body;
+    const { profile_id, mode, selected_date, scanner_role, scanner_id } = body;
 
     if (!profile_id) {
       return new Response(JSON.stringify({ error: "Missing profile_id" }), {
@@ -52,7 +52,7 @@ serve(async (req) => {
       .maybeSingle();
 
     if (profErr) throw profErr;
-    if (!prof) {
+    if (!prof) {  
       return new Response(JSON.stringify({ error: "Profile not found" }), {
         status: 404,
         headers: corsHeaders,
@@ -65,6 +65,30 @@ serve(async (req) => {
         headers: corsHeaders,
       });
     }
+
+    // ✅ Optional: prevent self scan (only if you send scanner_id from client)
+if (scanner_id && scanner_id === profile_id) {
+  return new Response(JSON.stringify({ error: "Vous ne pouvez pas scanner votre propre QR code." }), {
+    status: 403,
+    headers: corsHeaders,
+  });
+}
+
+// ✅ Rule: teacher cannot scan teacher, but can scan assistant
+if (scanner_role === "teacher" && prof.role === "teacher") {
+  return new Response(JSON.stringify({ error: "Un professeur ne peut pas scanner un autre professeur." }), {
+    status: 403,
+    headers: corsHeaders,
+  });
+}
+
+// ✅ (Optional) if you want teachers to ONLY scan assistant (not admin)
+// if (scanner_role === "teacher" && prof.role !== "assistant") {
+//   return new Response(JSON.stringify({ error: "Un professeur ne peut scanner que l’assistante." }), {
+//     status: 403,
+//     headers: corsHeaders,
+//   });
+// }
 
     // Read existing staff attendance (unique per profile_id + attended_on)
     const { data: existing, error: existErr } = await supabase

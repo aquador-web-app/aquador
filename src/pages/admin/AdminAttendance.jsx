@@ -73,11 +73,20 @@ useEffect(() => {
 }, []);
 
   const isAdmin = role === "admin";
-  const isAssistant = role === "assistant";
+const isAssistant = role === "assistant";
+const isTeacher = role === "teacher";
 const isStaff = role === "admin" || role === "teacher" || role === "assistant";
+
 const canSeeMonthlySummary = role === "admin" || role === "assistant";
-const canSeeStaffDaily = role === "admin" || role === "assistant"; // ✅ admin + assistant
-const canSeeStaffMonthly = role === "admin"; // ✅ ONLY admin
+
+// ✅ Teachers can scan staff QR (mark attendance for each other)
+const canScanStaff = isAdmin || isAssistant || isTeacher;
+
+// ✅ Only admin+assistant can view the staff daily list/details
+const canSeeStaffDailyList = isAdmin || isAssistant;
+
+// ✅ ONLY admin sees staff monthly table
+const canSeeStaffMonthly = isAdmin;
 
 
 
@@ -388,9 +397,9 @@ const fetchStaffMonthlySummary = async () => {
   }, [date, coursSelectionne]);
 
   useEffect(() => {
-  if (!canSeeStaffDaily) return;
+  if (!canSeeStaffDailyList) return;
   fetchStaffAttendance();
-}, [date, canSeeStaffDaily]);
+}, [date, canSeeStaffDailyList]);
 
 
   const saveAttendanceWithRules = async (enrollment_id, action, sessionStartISO) => {
@@ -527,7 +536,12 @@ const fetchStaffMonthlySummary = async () => {
     // ✅ This assumes you have an edge function for staff attendance
     const { data, error } = await supabase.functions.invoke("record-staff-attendance", {
       headers: { Authorization: `Bearer ${session.access_token}` },
-      body: { profile_id, selected_date: getHaitiDateISO(date) },
+      body: {
+  profile_id,
+  selected_date: getHaitiDateISO(date),
+  scanner_role: role,      // "teacher" | "assistant" | "admin"
+  scanner_id: user?.id,    // optional but recommended
+},
     });
 
     if (error) {
@@ -540,7 +554,7 @@ const fetchStaffMonthlySummary = async () => {
     }
 
     setModalResult(data?.message || "✅ Présence staff enregistrée !");
-    await fetchStaffAttendance();
+if (canSeeStaffDailyList) await fetchStaffAttendance();
 
     // Close only if not global scan
     if (modalAction !== "scan-global") closeModal();
@@ -902,62 +916,66 @@ const scanned_profile_id = m[0];
   </div>
 </div>
 
-{canSeeStaffDaily && (
-  <>
-{/* ✅ Staff Attendance Card (Teachers + Assistant) */}
-<div className="bg-white rounded-2xl shadow p-6">
-  <div className="flex items-center justify-between mb-4">
-    <h3 className="font-semibold text-lg">
-      Présence du {formatDateFrSafe(date)} / Professeurs et Assistante
-    </h3>
+{canScanStaff && (
+  <div className="bg-white rounded-2xl shadow p-6">
+    <div className="flex items-center justify-between mb-4">
+      <h3 className="font-semibold text-lg">
+        Présence du {formatDateFrSafe(date)} / Professeurs et Assistante
+      </h3>
 
-    <button
-      onClick={() => {
-        setModalAction("scan-staff");
-        setModalEnrollment(null);
-        setModalSessionStartISO(null);
-        setModalOpen(true);
-      }}
-      className="bg-aquaBlue text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition"
-    >
-      Démarrer le scan
-    </button>
-  </div>
-
-  {staffLoading ? (
-    <div className="text-center py-3 text-aquaBlue font-medium">⏳ Chargement…</div>
-  ) : staffList.length ? (
-    <div className="space-y-2">
-      {staffList.map((p) => {
-        const pres = staffMap[p.id];
-        return (
-          <div
-            key={p.id}
-            className="flex items-center justify-between border rounded-xl px-4 py-3"
-          >
-            <div className="flex flex-col">
-              <div className="font-medium text-gray-800">{p.full_name}</div>
-              <div className="text-xs text-gray-500">
-                {p.role === "assistant" ? "Assistante" : "Professeur"}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <StatusBadge status={pres?.status} />
-              <div className="text-xs text-gray-600">
-                {pres?.check_in_time ? `Arrivée: ${fmtHeure(pres.check_in_time)}` : "Arrivée: —"}
-                {pres?.check_out_time ? ` • Départ: ${fmtHeure(pres.check_out_time)}` : ""}
-              </div>
-            </div>
-          </div>
-        );
-      })}
+      <button
+        onClick={() => {
+          setModalAction("scan-staff");
+          setModalEnrollment(null);
+          setModalSessionStartISO(null);
+          setModalOpen(true);
+        }}
+        className="bg-aquaBlue text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition"
+      >
+        Démarrer le scan
+      </button>
     </div>
-  ) : (
-    <div className="text-gray-400 italic text-sm">Aucun staff trouvé.</div>
-  )}
-</div>
-</>
+
+    {/* ✅ Only show list/details to admin + assistant */}
+    {canSeeStaffDailyList ? (
+      staffLoading ? (
+        <div className="text-center py-3 text-aquaBlue font-medium">⏳ Chargement…</div>
+      ) : staffList.length ? (
+        <div className="space-y-2">
+          {staffList.map((p) => {
+            const pres = staffMap[p.id];
+            return (
+              <div
+                key={p.id}
+                className="flex items-center justify-between border rounded-xl px-4 py-3"
+              >
+                <div className="flex flex-col">
+                  <div className="font-medium text-gray-800">{p.full_name}</div>
+                  <div className="text-xs text-gray-500">
+                    {p.role === "assistant" ? "Assistante" : "Professeur"}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <StatusBadge status={pres?.status} />
+                  <div className="text-xs text-gray-600">
+                    {pres?.check_in_time ? `Arrivée: ${fmtHeure(pres.check_in_time)}` : "Arrivée: —"}
+                    {pres?.check_out_time ? ` • Départ: ${fmtHeure(pres.check_out_time)}` : ""}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="text-gray-400 italic text-sm">Aucun staff trouvé.</div>
+      )
+    ) : (
+      <div className="text-sm text-gray-500 italic">
+        Scannez le QR d’un collègue pour enregistrer sa présence.
+      </div>
+    )}
+  </div>
 )}
 
 

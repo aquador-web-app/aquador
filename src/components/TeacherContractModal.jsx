@@ -380,20 +380,82 @@ const teacherFolder = useMemo(() => {
     setSavedTeacherSig("");
 
 
-        // 1) Active template
-        const { data: tpls, error: tplErr } = await supabase
-          .from("teacher_contract_templates")
-          .select("id, version, title, html_template, is_active")
-          .eq("is_active", true)
-          .order("created_at", { ascending: false })
-          .limit(1);
+        // 1) Determine teacher category_id (salary assignment)
+let teacherCategoryId = null;
 
-        if (tplErr || !tpls?.length) {
-          setUiError("Aucun template actif trouvé pour le contrat professeur.");
-          return;
-        }
-        const tpl = tpls[0];
-setTemplate(tpl);
+{
+  const { data: asg, error: asgErr } = await supabase
+    .from("teacher_salary_assignments")
+    .select("category_id, created_at")
+    .eq("profile_id", teacherId)
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  if (!asgErr && asg?.length) {
+    teacherCategoryId = asg[0]?.category_id || null;
+  }
+}
+
+// 2) Active template (TEACHER-specific first, then category/global fallback)
+let tplQuery = supabase
+  .from("teacher_contract_templates")
+  .select("id, version, title, html_template, is_active, category_id, teacher_id, created_at")
+  .eq("is_active", true)
+  .order("created_at", { ascending: false });
+
+// We want:
+// (teacher_id = teacherId OR teacher_id IS NULL)
+// AND
+// (category_id = teacherCategoryId OR category_id IS NULL)   [if category exists]
+//
+// IMPORTANT: Must be in ONE `.or()` using PostgREST syntax: and(or(...),or(...))
+if (teacherCategoryId) {
+  tplQuery = tplQuery.or(
+    `and(or(teacher_id.eq.${teacherId},teacher_id.is.null),or(category_id.eq.${teacherCategoryId},category_id.is.null))`
+  );
+} else {
+  // no category => teacher-specific OR global, but only category_id NULL
+  tplQuery = tplQuery.or(
+    `and(or(teacher_id.eq.${teacherId},teacher_id.is.null),category_id.is.null)`
+  );
+}
+
+const { data: tpls, error: tplErr } = await tplQuery;
+
+if (tplErr) {
+  setUiError(tplErr.message || String(tplErr));
+  return;
+}
+if (!tpls?.length) {
+  setUiError("Aucun template actif trouvé (teacher/category/global).");
+  return;
+}
+
+// ✅ Pick with strict priority:
+// 1) teacher-specific active (teacher_id = teacherId)  [optionally match category if present]
+// 2) category-specific global (teacher_id null + category match)
+// 3) global (teacher_id null + category_id null)
+const teacherSpecific = tpls.filter((t) => String(t.teacher_id || "") === String(teacherId));
+const categoryGlobal = teacherCategoryId
+  ? tpls.filter(
+      (t) =>
+        t.teacher_id == null &&
+        String(t.category_id || "") === String(teacherCategoryId)
+    )
+  : [];
+const globalTpl = tpls.filter((t) => t.teacher_id == null && t.category_id == null);
+
+const chosen =
+  (teacherCategoryId
+    ? teacherSpecific.find((t) => String(t.category_id || "") === String(teacherCategoryId)) // if you ever store teacher+category
+    : null) ||
+  teacherSpecific[0] ||
+  categoryGlobal[0] ||
+  globalTpl[0] ||
+  tpls[0];
+
+setTemplate(chosen);
+
 
 // ...
 
