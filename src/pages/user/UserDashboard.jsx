@@ -64,6 +64,10 @@ export default function UserDashboard() {
   const [isClubMember, setIsClubMember] = useState(false);
   const [profile, setProfile] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [attendanceProfiles, setAttendanceProfiles] = useState([]);
+  const [selectedAttendanceProfileId, setSelectedAttendanceProfileId] = useState(null);
+  const [upcomingClasses, setUpcomingClasses] = useState([]);
+  const [upcomingLoading, setUpcomingLoading] = useState(false);
   const isMobile = () => window.innerWidth < 768;
 
 const goToTab = (tab) => {
@@ -111,6 +115,185 @@ const goToTabAnd = (tab, fn) => {
   const [clubProfileId, setClubProfileId] = useState(null);
   const [clubStatus, setClubStatus] = useState(null);
 
+  const fetchUpcomingClasses = async () => {
+  if (!selectedAttendanceProfileId) return;
+
+  setUpcomingLoading(true);
+  try {
+    const today = todayHaitiISO();
+
+    // enrollments (active)
+    const { data: enrollments, error: enrErr } = await supabase
+      .from("enrollments")
+      .select("id, course_id, session_group, start_date, status, plan_id, plans:plan_id ( duration_hours )")
+      .eq("profile_id", selectedAttendanceProfileId)
+      .eq("status", "active");
+
+    if (enrErr) throw enrErr;
+
+    if (!enrollments?.length) {
+      setUpcomingClasses([]);
+      return;
+    }
+
+    const sessionGroups = enrollments.map((e) => e.session_group).filter(Boolean);
+    const enrollmentIds = enrollments.map((e) => e.id);
+
+    // course names
+    const courseIds = [...new Set(enrollments.map((e) => e.course_id).filter(Boolean))];
+    const { data: courses } = await supabase.from("courses").select("id, name").in("id", courseIds);
+    const courseMap = Object.fromEntries((courses || []).map((c) => [c.id, c.name]));
+
+    // sessions (future)
+    const { data: sessions, error: sessErr } = await supabase
+      .from("sessions")
+      .select("id, session_group, start_date, day_of_week, start_time, duration_hours, status")
+      .in("session_group", sessionGroups)
+      .gte("start_date", today)
+      .neq("status", "deleted")
+      .order("start_date", { ascending: true })
+      .order("start_time", { ascending: true });
+
+    if (sessErr) throw sessErr;
+
+    // attendance for those enrollments
+    const { data: attData, error: attErr } = await supabase
+      .from("attendance")
+      .select("enrollment_id, attended_on, status, marked_by")
+      .in("enrollment_id", enrollmentIds);
+
+    if (attErr) throw attErr;
+
+    const attMap = {};
+    (attData || []).forEach((a) => {
+      attMap[`${a.enrollment_id}_${a.attended_on}`] = a;
+    });
+
+    const enrByGroup = {};
+    (enrollments || []).forEach((e) => {
+      if (!enrByGroup[e.session_group]) enrByGroup[e.session_group] = [];
+      enrByGroup[e.session_group].push(e);
+    });
+
+    const combined = [];
+    (sessions || []).forEach((s) => {
+      const ens = enrByGroup[s.session_group] || [];
+      ens.forEach((enr) => {
+        if (new Date(s.start_date) < new Date(enr.start_date)) return;
+
+        const a = attMap[`${enr.id}_${s.start_date}`];
+        const normalized =
+          a?.status === "excused" ? "unmarked" : (a?.status || "unmarked");
+
+        combined.push({
+          session_id: s.id,
+          enrollment_id: enr.id,
+          course_name: courseMap[enr.course_id] || "—",
+          start_date: s.start_date,
+          day_of_week: s.day_of_week,
+          start_time: s.start_time,
+          duration_hours: s.duration_hours ?? enr?.plans?.duration_hours ?? 1,
+          attendance_status: normalized,
+          marked_by: a?.marked_by || "user",
+        });
+      });
+    });
+
+   
+
+const nowHHMM = nowHaitiTimeHHMM();
+
+function timeToMinutes(hhmm) {
+  const [h, m] = String(hhmm || "00:00").slice(0, 5).split(":").map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+const nowMin = timeToMinutes(nowHHMM);
+
+const filtered = (combined || []).filter((x) => {
+  const d = String(x.start_date || "");
+  const startHHMM = String(x.start_time || "").slice(0, 5);
+  const durH = Number(x.duration_hours || 1);
+
+  if (!d || !startHHMM) return false;
+
+  // compute end time in minutes
+  const startMin = timeToMinutes(startHHMM);
+  const endMin = startMin + Math.round(durH * 60);
+
+  if (d > today) return true;
+  if (d < today) return false;
+
+  // same day: keep only if END is still in the future
+  return endMin > nowMin;
+});
+
+filtered.sort((a, b) => {
+  if (a.start_date !== b.start_date) return a.start_date.localeCompare(b.start_date);
+  return String(a.start_time || "").localeCompare(String(b.start_time || ""));
+});
+
+setUpcomingClasses(filtered);
+  } catch (e) {
+    console.error("fetchUpcomingClasses error:", e);
+    setUpcomingClasses([]);
+  } finally {
+    setUpcomingLoading(false);
+  }
+};
+
+useEffect(() => {
+  if (!selectedAttendanceProfileId) return;
+
+  // run immediately
+  fetchUpcomingClasses();
+
+  // auto-refresh every minute
+  const id = setInterval(() => {
+    fetchUpcomingClasses();
+  }, 60 * 1000);
+
+  return () => clearInterval(id);
+}, [selectedAttendanceProfileId]);
+
+const markAbsentFromOverview = async (enrollmentId, attendedOnISO, currentStatus) => {
+  try {
+    const question =
+      currentStatus === "unmarked"
+        ? `Êtes-vous sûr de vouloir marquer « absent » pour le cours du ${formatDateFrSafe(attendedOnISO)} ?`
+        : `Voulez-vous annuler l’absence pour le cours du ${formatDateFrSafe(attendedOnISO)} ?`;
+
+    const ok = await showConfirm(question);
+    if (!ok) return;
+
+    const { data: sess } = await supabase.auth.getSession();
+    const accessToken = sess?.session?.access_token;
+
+    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/mark-absent`;
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body: JSON.stringify({
+        enrollment_id: enrollmentId,
+        attended_on: attendedOnISO,
+        undo: currentStatus === "absent",
+      }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Unknown error");
+
+    await showAlert(data.message);
+    fetchUpcomingClasses();
+  } catch (err) {
+    await showAlert("❌ Erreur lors du marquage : " + err.message);
+  }
+};
 
   useEffect(() => {
   if (clubStatus === "pending") {
@@ -165,7 +348,39 @@ useEffect(() => {
   checkMemberships();
 }, [user?.id]);
 
+useEffect(() => {
+  if (!user?.id) return;
 
+  (async () => {
+    // parent
+    const { data: parent } = await supabase
+      .from("profiles_with_unpaid")
+      .select("id, full_name, signup_type")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    // children
+    const { data: kids } = await supabase
+      .from("profiles_with_unpaid")
+      .select("id, full_name, parent_id")
+      .eq("parent_id", user.id);
+
+    const options =
+      parent?.signup_type === "children_only"
+        ? (kids || [])
+        : [parent, ...(kids || [])].filter(Boolean);
+
+    setAttendanceProfiles(options);
+
+    // default selection
+    const defaultId =
+      parent?.signup_type === "children_only"
+        ? (kids?.[0]?.id || null)
+        : (parent?.id || kids?.[0]?.id || null);
+
+    setSelectedAttendanceProfileId((prev) => prev || defaultId);
+  })();
+}, [user?.id]);
 
 
 // 🎯 Determine default tab based on combined membership
@@ -758,6 +973,38 @@ useEffect(() => {
   }
 };
 
+function todayHaitiISO() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Port-au-Prince",
+  }).format(new Date());
+}
+
+function dayLabel(d) {
+  if (d == null) return "—";
+  const days = ["Dimanche","Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
+  return days[(d - 1 + 7) % 7] || "—";
+}
+
+function addHoursToTimeStr(timeStr, hoursToAdd) {
+  if (!timeStr) return "";
+  const [h, m] = String(timeStr).split(":").map(Number);
+  const base = new Date(2000, 0, 1, h || 0, m || 0, 0);
+  base.setHours(base.getHours() + (Number(hoursToAdd) || 1));
+  return `${String(base.getHours()).padStart(2, "0")}:${String(base.getMinutes()).padStart(2, "0")}`;
+}
+
+function nowHaitiTimeHHMM() {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "America/Port-au-Prince",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+
+  const h = parts.find((p) => p.type === "hour")?.value || "00";
+  const m = parts.find((p) => p.type === "minute")?.value || "00";
+  return `${h}:${m}`; // "HH:MM"
+}
 
 
   const renderContent = () => {
@@ -1059,6 +1306,100 @@ useEffect(() => {
     </p>
   </motion.div>
 </div>
+
+{/* === Next session (mark absent) === */}
+{(() => {
+  const next = (upcomingClasses || [])
+    .slice()
+    .sort((a, b) => {
+      const da = new Date(`${a.start_date}T${(a.start_time || "00:00").slice(0, 5)}:00`);
+      const db = new Date(`${b.start_date}T${(b.start_time || "00:00").slice(0, 5)}:00`);
+      return da - db;
+    })[0];
+
+  return (
+    <motion.div
+      className="p-5 bg-white shadow rounded-2xl border border-gray-100 mt-8"
+      whileHover={{ scale: 1.01, y: -2 }}
+    >
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+          <FaUserClock className="text-aquaBlue" />
+          Prochain cours
+        </h3>
+
+        <button
+          onClick={fetchUpcomingClasses}
+          className="px-4 h-[38px] bg-aquaBlue text-white rounded-lg text-sm hover:bg-blue-700"
+        >
+          Rafraîchir
+        </button>
+      </div>
+
+      {upcomingLoading ? (
+        <div className="text-center py-4 text-aquaBlue font-medium">⏳ Chargement…</div>
+      ) : !next ? (
+        <p className="text-gray-500 italic">Aucun cours à venir.</p>
+      ) : (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="space-y-1">
+            <div className="text-gray-900 font-semibold text-base">
+              {next.course_name || "—"}
+            </div>
+
+            <div className="text-sm text-gray-600">
+              {dayLabel(next.day_of_week)} • {formatDateFrSafe(next.start_date)} •{" "}
+              {(next.start_time || "").slice(0, 5)}–{addHoursToTimeStr(next.start_time, next.duration_hours)}
+            </div>
+
+            <div className="mt-2">
+              <span
+                className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                  next.attendance_status === "absent"
+                    ? "text-red-700 bg-red-100"
+                    : next.attendance_status === "present"
+                    ? "text-green-700 bg-green-100"
+                    : "text-gray-700 bg-gray-100"
+                }`}
+              >
+                {next.attendance_status === "absent"
+                  ? "Absent"
+                  : next.attendance_status === "present"
+                  ? "Présent"
+                  : "Non marqué"}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex gap-2 justify-end">
+            {next.attendance_status === "absent" ? (
+              <button
+                onClick={() => markAbsentFromOverview(next.enrollment_id, next.start_date, "absent")}
+                className="px-4 py-2 bg-gray-600 text-white rounded-lg text-sm hover:bg-gray-700"
+              >
+                Undo
+              </button>
+            ) : next.attendance_status === "unmarked" ? (
+              <button
+                onClick={() => markAbsentFromOverview(next.enrollment_id, next.start_date, "unmarked")}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700"
+              >
+                Marquer absent
+              </button>
+            ) : (
+              <button
+                onClick={() => setActiveTab("attendance")}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
+              >
+                Voir présence
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </motion.div>
+  );
+})()}
 
 {/* === Recent Activity === */}
 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
