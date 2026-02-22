@@ -36,7 +36,7 @@ import AdminFicheTechniques from "./AdminFicheTechniques";
 import AdminFicheTechniqueTemplates from "./AdminFicheTechniqueTemplates";
 import AdminNotificationsAll from "./AdminNotificationsAll";
 import AdminSalary from "./AdminSalary";
-import { formatDateFrSafe, formatCurrencyUSD } from "../../lib/dateUtils";
+import { formatDateFrSafe, formatCurrencyUSD, formatMonth } from "../../lib/dateUtils";
 import { motion } from "framer-motion";
 import AdminClubBookings from "./AdminClubBookings";
 import AdminClubInvoices from "./AdminClubInvoices";
@@ -363,31 +363,28 @@ const fetchStats = async () => {
     // 3) Unpaid invoices (across platform, not filtered by selected user)
     const { data: invs } = await supabase
       .from("invoices")
-      .select("id,total, full_name, paid_total,status, signup_type");
+      .select("id,total, full_name, paid_total,status, signup_type, month");
       
 
     const unpaid = (invs || [])
-  .map(r => {
-    const remaining =
-      Number(r.total || 0) - Number(r.paid_total || 0);
+  .map((r) => {
+    const remaining = Number(r.total || 0) - Number(r.paid_total || 0);
 
     return {
       id: r.id,
       name: r.full_name || "—",
+      period: r.month || null,  // ✅ use DB month
       signup_type: r.signup_type,
       status: r.status,
       remaining,
     };
   })
-  .filter(r =>
+  .filter((r) =>
     (r.status === "pending" || r.status === "partial") &&
     r.signup_type !== "children_only" &&
-    r.role !== "teacher" &&
     r.remaining > 0
   )
-  .sort((a, b) =>
-    a.name.localeCompare(b.name, "fr", { sensitivity: "base" })
-  );
+  .sort((a, b) => a.name.localeCompare(b.name, "fr", { sensitivity: "base" }));
 
 
 const unpaidCount = unpaid.length;
@@ -1094,7 +1091,12 @@ const totalUtilisateursPlateforme =
             key={r.id}
             className="flex justify-between gap-3 bg-red-50 px-2 py-1 rounded-md"
           >
-            <span className="truncate">{r.name}</span>
+            <span className="truncate">
+  {r.name}{" "}
+  <span className="text-xs text-gray-500">
+    - {r.period ? formatMonth(r.period) : "—"}
+  </span>
+</span>
             {role !== "assistant" && (
             <b className="text-red-600 whitespace-nowrap">
               {formatCurrencyUSD(r.remaining)}

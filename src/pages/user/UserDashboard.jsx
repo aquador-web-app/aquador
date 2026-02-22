@@ -115,8 +115,9 @@ const goToTabAnd = (tab, fn) => {
   const [clubProfileId, setClubProfileId] = useState(null);
   const [clubStatus, setClubStatus] = useState(null);
 
-  const fetchUpcomingClasses = async () => {
-  if (!selectedAttendanceProfileId) return;
+  const fetchUpcomingClasses = async (profileIdOverride = null) => {
+  const pid = profileIdOverride || selectedAttendanceProfileId;
+  if (!pid) return;
 
   setUpcomingLoading(true);
   try {
@@ -126,7 +127,7 @@ const goToTabAnd = (tab, fn) => {
     const { data: enrollments, error: enrErr } = await supabase
       .from("enrollments")
       .select("id, course_id, session_group, start_date, status, plan_id, plans:plan_id ( duration_hours )")
-      .eq("profile_id", selectedAttendanceProfileId)
+      .eq("profile_id", pid) // ✅ CHANGED (was selectedAttendanceProfileId)
       .eq("status", "active");
 
     if (enrErr) throw enrErr;
@@ -1006,6 +1007,8 @@ function nowHaitiTimeHHMM() {
   return `${h}:${m}`; // "HH:MM"
 }
 
+const hasManyAttendanceProfiles = (attendanceProfiles?.length || 0) > 1;
+const selectedAttendanceProfile = (attendanceProfiles || []).find(p => p.id === selectedAttendanceProfileId) || null;
 
   const renderContent = () => {
   // If user is club-only and activeTab is a school tab → redirect internally
@@ -1322,19 +1325,46 @@ function nowHaitiTimeHHMM() {
       className="p-5 bg-white shadow rounded-2xl border border-gray-100 mt-8"
       whileHover={{ scale: 1.01, y: -2 }}
     >
-      <div className="flex items-center justify-between gap-3 mb-3">
-        <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-          <FaUserClock className="text-aquaBlue" />
-          Prochain cours
-        </h3>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+  <div className="flex flex-col">
+    <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+      <FaUserClock className="text-aquaBlue" />
+      Prochain cours
+    </h3>
 
-        <button
-          onClick={fetchUpcomingClasses}
-          className="px-4 h-[38px] bg-aquaBlue text-white rounded-lg text-sm hover:bg-blue-700"
-        >
-          Rafraîchir
-        </button>
+    {/* ✅ Dropdown only if multiple profiles */}
+    {hasManyAttendanceProfiles ? (
+      <select
+        value={selectedAttendanceProfileId || ""}
+        onChange={(e) => {
+          const newId = e.target.value || null;
+          setSelectedAttendanceProfileId(newId);
+          setUpcomingClasses([]);           // optional: avoids showing old person's session
+          fetchUpcomingClasses(newId);      // ✅ immediate refresh for selected person
+        }}
+        className="mt-2 w-full sm:w-[280px] border rounded-lg px-3 py-2 text-sm bg-white"
+      >
+        {(attendanceProfiles || []).map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.full_name}
+          </option>
+        ))}
+      </select>
+    ) : (
+      // ✅ No dropdown if only one person
+      <div className="mt-2 text-sm text-gray-600">
+        {(selectedAttendanceProfile?.full_name || user?.full_name || "").trim()}
       </div>
+    )}
+  </div>
+
+  <button
+    onClick={() => fetchUpcomingClasses()}
+    className="px-4 h-[38px] bg-aquaBlue text-white rounded-lg text-sm hover:bg-blue-700"
+  >
+    Rafraîchir
+  </button>
+</div>
 
       {upcomingLoading ? (
         <div className="text-center py-4 text-aquaBlue font-medium">⏳ Chargement…</div>
