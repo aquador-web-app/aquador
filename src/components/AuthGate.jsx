@@ -4,7 +4,7 @@ import { useAuth } from "../context/AuthContext";
 export default function AuthGate({ children, redirectTo = "/login" }) {
   const { user, loading } = useAuth();
 
-  if (loading) {
+  if (loading && !user) {
     return (
       <div className="min-h-screen flex items-center justify-center text-gray-500">
         Chargement…

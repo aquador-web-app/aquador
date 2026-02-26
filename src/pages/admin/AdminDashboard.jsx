@@ -198,6 +198,27 @@ useEffect(() => {
   return () => console.log("🧨 AdminDashboard UNMOUNT");
 }, []);
 
+// 🔄 PREVENT remounting when tab regains focus
+useEffect(() => {
+  let wasHidden = false;
+
+  const handleVisibilityChange = () => {
+    if (document.hidden) {
+      wasHidden = true;
+    } else if (wasHidden) {
+      // Tab just became visible - only refresh data, don't remount
+      console.log('🔄 Tab became visible - refreshing data only');
+      realtimeRefresh('all');
+      wasHidden = false;
+    }
+  };
+
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+  
+  return () => {
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
+  };
+}, []);
 
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState(() => {

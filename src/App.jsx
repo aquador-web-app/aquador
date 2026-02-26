@@ -178,7 +178,7 @@ useEffect(() => {
         }
       >
         
-        <Route index element={<AdminDashboard />} />
+       
         <Route path="documents" element={<AdminDocuments />} />
         <Route path="calendar" element={<AdminCalendarManager />} />
         <Route path="referrals-overview" element={<AdminReferralOverview />} />

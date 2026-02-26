@@ -15,24 +15,36 @@ export default defineConfig({
     }),
 
     VitePWA({
-      registerType: "autoUpdate",
-      strategies: "generateSW",
+  registerType: "prompt",
+  strategies: "generateSW",
 
-      // ✅ iOS Safari can be sensitive to SW updates
-      workbox: {
-        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
-        cleanupOutdatedCaches: true,
-        skipWaiting: false,
-        clientsClaim: false,
+  workbox: {
+    maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+    cleanupOutdatedCaches: true,
+    skipWaiting: true,
+    clientsClaim: true,
+    runtimeCaching: [
+      {
+        urlPattern: /^https:\/\/.*\.supabase\.co\//,
+        handler: 'NetworkFirst',
+        options: {
+          cacheName: 'supabase-cache',
+          expiration: {
+            maxEntries: 50,
+            maxAgeSeconds: 300,
+          },
+        },
       },
+    ],
+  },
 
-      includeAssets: [
-        "favicon.ico",
-        "favicon-16x16.ico",
-        "favicon-32x32.ico",
-        "apple-touch-icon.ico",
-      ],
-    }),
+  includeAssets: [
+    "favicon.ico",
+    "favicon-16x16.ico",
+    "favicon-32x32.ico",
+    "apple-touch-icon.ico",
+  ],
+}),
   ],
 
   // ✅ Force safer JS output for Safari/iOS

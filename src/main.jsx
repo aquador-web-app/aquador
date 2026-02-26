@@ -8,6 +8,27 @@ import { AuthProvider } from "./context/AuthContext";
 import { GlobalAlertProvider } from "./components/GlobalAlert";
 import ErrorBoundary from "./components/ErrorBoundary";
 
+// in main.jsx (very top)
+console.log("BOOT", new Date().toISOString(), "nav", performance.getEntriesByType("navigation")[0]?.type);
+
+// detect true reload vs SPA re-render
+window.addEventListener("pageshow", (e) => {
+  console.log("PAGESHOW", { persisted: e.persisted });
+});
+
+document.addEventListener("visibilitychange", () => {
+  console.log("VISIBILITY", { hidden: document.hidden, t: new Date().toISOString() });
+});
+
+window.addEventListener("focus", () => console.log("FOCUS", new Date().toISOString()));
+window.addEventListener("blur", () => console.log("BLUR", new Date().toISOString()));
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    console.log("SW controllerchange", new Date().toISOString());
+  });
+}
+
 // ✅ Detect iOS (Safari / WebViews)
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 
@@ -54,18 +75,10 @@ if ("serviceWorker" in navigator && window.location.search.includes("sw-reset"))
   });
 }
 
-// 🔄 Reload ONCE when a new Service Worker takes control (skip iOS)
+// ✅ Check if running on production
 const isProd =
   window.location.hostname === "clubaquador.com" ||
   window.location.hostname === "www.clubaquador.com";
-
-if (isProd && "serviceWorker" in navigator && !isIOS) {
-  navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (sessionStorage.getItem("sw-reloaded")) return;
-    sessionStorage.setItem("sw-reloaded", "true");
-    window.location.reload();
-  });
-}
 
 async function bootstrap() {
   // ✅ OneSignal: do NOT block the app if it fails (and avoid iOS)

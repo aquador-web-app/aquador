@@ -22,7 +22,7 @@ export function AuthProvider({ children }) {
         return;
       }
 
-      setLoading(true);
+      //setLoading(true);
 
       let profile = null;
       try {
