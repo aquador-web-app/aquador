@@ -63,15 +63,41 @@ async function findPossibleMatch(fullName) {
   return bestMatch;
 }
 
-// Compute age from YYYY-MM-DD
+// Compute age from YYYY-MM-DD (only when complete + valid + realistic)
 function computeAge(dateStr) {
-  if (!dateStr) return null;
-  const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return null;
+  const s = String(dateStr || "").trim();
+
+  // ✅ only accept full ISO date: YYYY-MM-DD
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+
+  const [yy, mm, dd] = s.split("-").map(Number);
+  if (!yy || !mm || !dd) return null;
+
+  // ✅ block "0200-01-01" / "0001-..." / future years while typing
+  const currentYear = new Date().getFullYear();
+  if (yy < 1900 || yy > currentYear) return null;
+
+  // ✅ build a UTC date to avoid timezone shifting
+  const d = new Date(Date.UTC(yy, mm - 1, dd));
+
+  // validate actual date (e.g. 2024-02-31 should be rejected)
+  if (
+    d.getUTCFullYear() !== yy ||
+    d.getUTCMonth() !== mm - 1 ||
+    d.getUTCDate() !== dd
+  ) {
+    return null;
+  }
+
   const today = new Date();
-  let age = today.getFullYear() - d.getFullYear();
-  const m = today.getMonth() - d.getMonth();
-  if (m < 0 || (m === 0 && today.getDate() < d.getDate())) age--;
+  let age = today.getFullYear() - yy;
+
+  const m = (today.getMonth() + 1) - mm;
+  if (m < 0 || (m === 0 && today.getDate() < dd)) age--;
+
+  // ✅ sanity check (optional but recommended)
+  if (age < 0 || age > 120) return null;
+
   return age;
 }
 
@@ -379,7 +405,7 @@ if (familyType === "family") {
     const age = computeAge(child.birth_date);
 
     // 🚫 NEW RULE: Children older than 25 cannot be added
-    if (age > 25) {
+    if (age != null && age > 25) {
       return setErr(
         `L’enfant #${idx + 1} a ${age} ans — il doit s’inscrire individuellement.`
       );
@@ -1089,7 +1115,7 @@ function applyMatch() {
               const needsId = age != null && age >= 18;
 
               // 🚫 NEW WARNING IF AGE > 25
-if (age > 25) {
+if (age != null && age > 25) {
   return (
     <div key={idx} className="mt-3 border rounded-lg p-3 bg-red-50 shadow-sm">
       <div className="font-semibold text-sm text-red-700">
@@ -1152,9 +1178,15 @@ if (age > 25) {
                     type="date"
                     className="input"
                     value={child.birth_date}
-                    onChange={(e) =>
-                      updateChild(idx, "birth_date", e.target.value)
-                    }
+                    onChange={(e) => {
+  const v = e.target.value;
+  updateChild(idx, "birth_date", v);
+
+  const a = computeAge(v);
+  if (a != null && a < 18) {
+    updateChild(idx, "id_file", null);
+  }
+}}
                   />
 
                   {age != null && (
@@ -1164,25 +1196,28 @@ if (age > 25) {
                     </p>
                   )}
 
-                  {/* ID file only required for 18+ (but user can still upload if they want) */}
-                  <label className="label mt-3">
-                    Pièce d'identité (image / PDF)
-                    {needsId ? " *" : " (obligatoire à partir de 18 ans)"}
-                  </label>
-                  <input
-                    type="file"
-                    accept=".png,.jpg,.jpeg,.pdf"
-                    className="input"
-                    onChange={(e) =>
-                      updateChild(idx, "id_file", e.target.files?.[0] || null)
-                    }
-                  />
-                  {child.id_file && (
-                    <p className="text-xs text-gray-600 mt-1">
-                      Fichier sélectionné :{" "}
-                      <strong>{child.id_file.name}</strong>
-                    </p>
-                  )}
+                  {needsId && (
+  <>
+    <label className="label mt-3">
+      Pièce d'identité (image / PDF) *
+    </label>
+
+    <input
+      type="file"
+      accept=".png,.jpg,.jpeg,.pdf"
+      className="input"
+      onChange={(e) =>
+        updateChild(idx, "id_file", e.target.files?.[0] || null)
+      }
+    />
+
+    {child.id_file && (
+      <p className="text-xs text-gray-600 mt-1">
+        Fichier sélectionné : <strong>{child.id_file.name}</strong>
+      </p>
+    )}
+  </>
+)}
                 </div>
               );
             })}

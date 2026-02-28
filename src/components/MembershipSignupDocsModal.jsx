@@ -2,7 +2,8 @@
 // @ts-nocheck
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
-import SignaturePad from "./SignaturePad";
+import SignatureField from "./SignatureField";
+import { sanitizeFullName } from "../lib/sanitizeFullName";
 
 /**
  * Utilities
@@ -47,32 +48,33 @@ function computeAge(dateStr) {
 /**
  * Edge function endpoint that renders HTML -> PDF and uploads it to storage.
  */
-async function sendHTMLToPDFAndUpload({ html, formName, fullName, outputPath }) {
+async function sendHTMLToPDFAndUpload({ html, formName, fullName, safeName, outputPath }) {
   const endpoint = `${import.meta.env.VITE_SUPABASE_FUNCTIONS_URL}/sign-documents`;
   try {
     const safeForm = sanitizeFileName(formName);
-    const safeFull = sanitizeFileName(fullName || "Utilisateur");
-    const safeOutputPath =
-      sanitizeFileName(outputPath || `club/${safeFull}/${safeForm}_signed.pdf`);
+    const safeFull = sanitizeFileName(fullName || "Utilisateur"); // keep for default path only
+const safeSafeName = sanitizeFileName(safeName || "Utilisateur");
+const safeOutputPath =
+  sanitizeFileName(outputPath || `club/${safeSafeName}/${safeForm}_signed.pdf`);
 
     const res = await fetch(endpoint, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-      },
+     headers: {
+  "Content-Type": "application/json",
+  apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+},
       body: JSON.stringify({
-        user_id: "anonymous",
-        full_name: safeFull,
-        documents: [
-          {
-            form_name: safeForm,
-            html_content: html,
-            output_path: safeOutputPath,
-          },
-        ],
-      }),
+  user_id: "anonymous",
+  full_name: fullName || "Utilisateur", // ✅ display name (keeps accents)
+  safe_name: safeSafeName,              // ✅ REQUIRED by server
+  documents: [
+    {
+      form_name: safeForm,
+      html_content: html,
+      output_path: safeOutputPath,
+    },
+  ],
+}),
     });
 
     if (!res.ok) {
@@ -120,6 +122,7 @@ export default function MembershipSignupDocsModal({
   const [saving, setSaving] = useState(false);
   const [uiError, setUiError] = useState("");
   const [adultSignatures, setAdultSignatures] = useState([]);
+  const safeName = sanitizeFullName(fullName || "Utilisateur");
 
   // === Step 1: Règlements du club (membres) ===
   const [rulesSignature, setRulesSignature] = useState(null);
@@ -628,8 +631,7 @@ ${inner}
     try {
       setSaving(true);
       const safeFull = sanitizeFileName(fullName || "Utilisateur");
-      const folder = safeFull;
-      const outputPath = `club/${safeFull}/Reglements_du_club_membre_signed.pdf`;
+      const outputPath = `club/${sanitizeFileName(safeName)}/Reglements_du_club_membre_signed.pdf`;
 
       const html = renderRulesHTML();
       let pdfUrl;
@@ -638,6 +640,7 @@ ${inner}
           html,
           formName: "Reglements_du_club_membre",
           fullName,
+          safeName,
           outputPath,
         });
       } catch (pdfErr) {
@@ -691,13 +694,14 @@ ${inner}
     try {
       setSaving(true);
       const safeFull = sanitizeFileName(fullName || "Utilisateur");
-      const outputPath = `club/${safeFull}/Accord_du_participant_membre_signed.pdf`;
+      const outputPath = `club/${sanitizeFileName(safeName)}/Accord_du_participant_membre_signed.pdf`;
       const html = renderAccordHTML();
 
       const url = await sendHTMLToPDFAndUpload({
         html,
         formName: "Accord_du_participant_membre",
         fullName,
+        safeName,
         outputPath,
       });
 
@@ -865,8 +869,11 @@ ${inner}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {step === 1 && (
               <div className="sm:col-span-2">
-                <div className="text-sm font-semibold mb-2">Signature</div>
-                <SignaturePad onSave={setRulesSignature} />
+                <SignatureField
+  label="Signature"
+  value={rulesSignature}
+  onChange={setRulesSignature}
+/>
               </div>
             )}
 
@@ -876,32 +883,29 @@ ${inner}
                   Signature (au nom de votre famille / groupe)
                 </div>
                 <div className="space-y-6">
-                  {adults.map((name, idx) => (
-                    <div key={idx}>
-                      <div className="text-sm font-semibold mb-1">
-                        Signature pour : {name}
-                      </div>
-                      <SignaturePad
-                        onSave={(sig) =>
-                          setAdultSignatures((prev) => {
-                            const arr = [...prev];
-                            arr[idx] = sig;
-                            return arr;
-                          })
-                        }
-                      />
-                    </div>
-                  ))}
+  {adults.map((name, idx) => (
+    <SignatureField
+      key={idx}
+      label={`Signature pour : ${name}`}
+      value={adultSignatures[idx]}
+      onChange={(sig) =>
+        setAdultSignatures((prev) => {
+          const arr = [...prev];
+          arr[idx] = sig;
+          return arr;
+        })
+      }
+    />
+  ))}
 
-                  {minors.length > 0 && (
-                    <div>
-                      <div className="text-sm font-semibold mb-1">
-                        Signature du parent / tuteur
-                      </div>
-                      <SignaturePad onSave={setAccordSignature} />
-                    </div>
-                  )}
-                </div>
+  {minors.length > 0 && (
+    <SignatureField
+      label="Signature du parent / tuteur"
+      value={accordSignature}
+      onChange={setAccordSignature}
+    />
+  )}
+</div>
               </div>
             )}
           </div>
