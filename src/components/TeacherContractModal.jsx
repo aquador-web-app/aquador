@@ -373,6 +373,7 @@ const teacherFolder = useMemo(() => {
   if (!teacherId) return;
 
   (async () => {
+    try {
     setUiError("");
 
     // ✅ FORCE FRESH SIGNATURE EACH TIME MODAL LOADS
@@ -447,7 +448,9 @@ const globalTpl = tpls.filter((t) => t.teacher_id == null && t.category_id == nu
 
 const chosen =
   (teacherCategoryId
-    ? teacherSpecific.find((t) => String(t.category_id || "") === String(teacherCategoryId)) // if you ever store teacher+category
+    ? teacherSpecific.find(
+        (t) => String(t.category_id || "") === String(teacherCategoryId)
+      )
     : null) ||
   teacherSpecific[0] ||
   categoryGlobal[0] ||
@@ -455,6 +458,12 @@ const chosen =
   tpls[0];
 
 setTemplate(chosen);
+
+const tplId = chosen?.id;
+if (!tplId) {
+  setUiError("Template invalide (id manquant).");
+  return;
+}
 
 
 // ...
@@ -485,7 +494,7 @@ if (existing?.length) {
   if (!row.template_id) {
     await supabase
       .from("teacher_contracts")
-      .update({ template_id: tpl.id })
+      .update({ template_id: tplId })
       .eq("id", row.id);
   }
 
@@ -524,7 +533,7 @@ if (existing?.length) {
         school_year_start: startISO,
         school_year_end: endISO,
         status: "draft",
-        template_id: tpl.id, // ✅ REQUIRED (NOT NULL)
+        template_id: tplId, // ✅ REQUIRED (NOT NULL)
       },
     ])
     .select("id")
@@ -617,7 +626,10 @@ if (existing?.length) {
   }
 }
 
-        
+        } catch (err) {
+    console.error("❌ TeacherContractModal load error:", err);
+    setUiError(err?.message || String(err));
+  }
 
         // If unique constraint blocks duplicates, it's OK — we’ll fetch existing row.
 
