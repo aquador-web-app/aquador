@@ -155,7 +155,7 @@ const todayISODate = () => {
   let query = supabase
     .from("payments")
     .select(
-      "id, invoice_id, amount, method, notes, paid_at, invoices(full_name, invoice_no)",
+      "id, invoice_id, amount, method, notes, paid_at, invoices(full_name, invoice_no, proof_url)",
       { count: "exact" }
     )
     .eq("approved", true) // ✅ ONLY approved payments
@@ -443,32 +443,45 @@ if (item?.id) {
 }
 
 async function fetchExpectedRevenueLive() {
-  const monthKey = monthKeyNow();
-  const today = todayISODate(); // YYYY-MM-DD
+  const monthKey = monthKeyNow(); // "YYYY-MM-01"
 
-  // 1) active enrollments today (DATE comparisons)
+  // Month boundaries in LOCAL date, formatted as YYYY-MM-DD (no timezone surprises)
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+  const toYMD = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+
+  const startYMD = toYMD(monthStart);       // e.g. "2026-03-01"
+  const nextStartYMD = toYMD(nextMonthStart); // e.g. "2026-04-01"
+
+  // ✅ Active ANY TIME during the month (overlap logic)
+  // start_date < nextMonthStart
+  // AND (end_date is null OR end_date >= monthStart)
   const { data: enr, error: enrErr } = await supabase
     .from("enrollments")
     .select("id, plan_id, status, start_date, end_date, override_price, profiles:profile_id(full_name)")
-    .lte("start_date", today)
-    .or(`end_date.is.null,end_date.gte.${today}`);
+    .lt("start_date", nextStartYMD)
+    .or(`end_date.is.null,end_date.gte.${startYMD}`);
 
   if (enrErr) {
     console.error("fetchExpectedRevenueLive enrollments error:", enrErr);
     return;
   }
 
-  // Keep permissive: only exclude clearly inactive statuses
+  // Exclude only clearly inactive statuses
   const active = (enr || []).filter((e) => {
     const st = String(e.status || "").toLowerCase();
     return !["cancelled", "canceled", "stopped", "inactive", "abandoned"].includes(st);
   });
 
-    const planIds = [...new Set(active.map((e) => e.plan_id).filter(Boolean))];
+  const planIds = [...new Set(active.map((e) => e.plan_id).filter(Boolean))];
 
-
-
-  // If no active enrollments, still update counts
   if (active.length === 0 || planIds.length === 0) {
     setExpectedDetails([]);
     setSummary((s) => ({
@@ -480,7 +493,6 @@ async function fetchExpectedRevenueLive() {
     return;
   }
 
-  // 2) load plan prices
   const { data: plans, error: planErr } = await supabase
     .from("plans")
     .select("id, name, price")
@@ -491,7 +503,6 @@ async function fetchExpectedRevenueLive() {
     return;
   }
 
-   // ✅ Build hover details AFTER plans are loaded
   const planById = new Map((plans || []).map((p) => [p.id, p]));
 
   const details = active
@@ -515,19 +526,12 @@ async function fetchExpectedRevenueLive() {
 
   setExpectedDetails(details);
 
-  const priceByPlan = new Map((plans || []).map((p) => [p.id, Number(p.price || 0)]));
-
-  // 3) sum: use override_price if present, else plan price
-  const expectedTotal = active.reduce((sum, e) => {
-    const override = e.override_price;
-    const price = override != null ? Number(override) : (priceByPlan.get(e.plan_id) || 0);
-    return sum + price;
-  }, 0);
+  const expectedTotal = details.reduce((sum, r) => sum + Number(r.price || 0), 0);
 
   setSummary((s) => ({
     ...s,
     monthKey,
-    expectedCount: active.length,
+    expectedCount: details.length,
     expectedTotal,
   }));
 }
@@ -1340,6 +1344,7 @@ async function fetchRevertedPaymentsLive() {
                 <th className="px-3 py-2 text-left">Montant</th>
                 <th className="px-3 py-2 text-left">Méthode</th>
                 <th className="px-3 py-2 text-left">Date</th>
+                <th className="px-3 py-2 text-left">Preuve</th>
                 <th className="px-3 py-2 text-left">Notes</th>
                 {role === "admin" && (
                   <th className="px-3 py-2 text-left">Actions</th>
@@ -1356,6 +1361,20 @@ async function fetchRevertedPaymentsLive() {
                   </td>
                   <td className="px-3 py-2">{p.method}</td>
                   <td className="px-3 py-2">{formatDateFrSafe(p.paid_at)}</td>
+                  <td className="px-3 py-2">
+                    {p.invoices?.proof_url ? (
+                      <a
+                        href={p.invoices.proof_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-blue-600 underline"
+                      >
+                        Voir preuve
+                      </a>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                   <td className="px-3 py-2">{p.notes || "—"}</td>
                 {/* 🔁 Action column */}
                     {role === "admin" && (
@@ -1401,6 +1420,21 @@ async function fetchRevertedPaymentsLive() {
         <div className="mt-2 text-sm space-y-1">
           <p><b>Méthode:</b> {p.method}</p>
           <p><b>Date:</b> {formatDateFrSafe(p.paid_at)}</p>
+          <p>
+            <b>Preuve:</b>{" "}
+            {p.invoices?.proof_url ? (
+              <a
+                href={p.invoices.proof_url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-blue-600 underline"
+              >
+                Voir preuve
+              </a>
+            ) : (
+              "—"
+            )}
+          </p>
           {p.notes && <p><b>Notes:</b> {p.notes}</p>}
         </div>
 

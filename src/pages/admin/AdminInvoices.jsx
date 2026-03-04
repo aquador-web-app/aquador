@@ -13,6 +13,17 @@ const monthKeyOf = (inv) => {
   return `${year}-${month}`; // e.g. "2025-11"
 };
 
+// Resolve proof url whether it's a full URL or a storage path
+// If your proof is in a bucket (ex: "proofs" or "invoices"), set the bucket name below.
+const PROOF_BUCKET = "invoices"; // <-- change to your real proof bucket if different
+
+const getProofLink = (inv, supabase) => {
+  if (!inv?.proof_url) return null;
+  if (inv.proof_url.startsWith("http")) return inv.proof_url;
+
+  // storage path case
+  return supabase.storage.from(PROOF_BUCKET).getPublicUrl(inv.proof_url).data.publicUrl;
+};
 
 // Resolve pdf url whether it's a full URL or a storage path
 const getPdfLink = (inv, supabase) => {
@@ -667,6 +678,8 @@ function AdminInvoiceCard({
   const isOpen = !!expandingInvoice[inv.invoice_id];
   const balance = (inv.total || 0) - (inv.paid_total || 0);
 
+  console.log("MOBILE inv.proof_url:", inv?.proof_url);
+
   return (
     <div className="bg-white rounded-xl border shadow p-4 space-y-3">
       {/* Header */}
@@ -716,27 +729,54 @@ function AdminInvoiceCard({
 
       {/* Actions */}
       <div className="flex gap-3 pt-2">
-        {getPdfLink(inv, supabase) && (
-          <button
-            onClick={() =>
-              window.open(
-                `${getPdfLink(inv, supabase)}?refresh=${Date.now()}`,
-                "_blank"
-              )
-            }
-            className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg text-sm"
-          >
-            PDF
-          </button>
-        )}
+  {getPdfLink(inv, supabase) && (
+    <button
+      onClick={async () => {
+        const url = getPdfLink(inv, supabase);
+        try { await fetch(url, { method: "HEAD", cache: "no-store" }); } catch {}
+        const finalUrl = `${url}?refresh=${Date.now()}`;
 
-        <button
-          onClick={() => toggleExpandInvoice(inv.invoice_id)}
-          className="flex-1 bg-gray-100 py-2.5 rounded-lg text-sm"
-        >
-          {isOpen ? "Masquer" : "Détails"}
-        </button>
-      </div>
+        // PWA-safe: use location instead of window.open if needed
+        if (window.matchMedia("(display-mode: standalone)").matches) {
+          window.location.href = finalUrl;
+        } else {
+          window.open(finalUrl, "_blank");
+        }
+      }}
+      className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg text-sm"
+    >
+      PDF
+    </button>
+  )}
+
+  {getProofLink(inv, supabase) && (
+    <button
+      onClick={async () => {
+        const url = getProofLink(inv, supabase);
+        try { await fetch(url, { method: "HEAD", cache: "no-store" }); } catch {}
+        const finalUrl = `${url}?refresh=${Date.now()}`;
+
+        if (window.matchMedia("(display-mode: standalone)").matches) {
+          window.location.href = finalUrl;
+        } else {
+          window.open(finalUrl, "_blank");
+        }
+      }}
+      className="flex-1 bg-emerald-600 text-white py-2.5 rounded-lg text-sm"
+    >
+      Preuve
+    </button>
+  )}
+
+  <button
+    onClick={() => toggleExpandInvoice(inv.invoice_id)}
+    className="flex-1 bg-gray-100 py-2.5 rounded-lg text-sm"
+  >
+    {isOpen ? "Masquer" : "Détails"}
+  </button>
+</div>
+
+
 
  {/* Details */}
 {isOpen && (

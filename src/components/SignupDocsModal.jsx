@@ -470,12 +470,15 @@ Aucun élève ne sera admis aux cours sans présenter la carte d’accès conten
 Des frais de USD 10.00 devront être payés pour le remplacement de la carte d’accès perdue ou endommagée.</p><br/>
 
 <p><strong>5. Règles de propreté</strong><br/>
-Des poubelles sont placées dans l’enceinte du bâtiment afin de maintenir l’espace propre. Aucun objet, déchet ne doit trainer dans l’air de la piscine et à tout autre endroit de A’QUA D’OR. Crachats, émouchements du nez, jets d'eau, élimination des déchets corporels et actes insalubres dans la piscine sont interdits.</p><br/>
+Des poubelles sont placées dans l’enceinte du bâtiment afin de maintenir l’espace propre. Aucun objet, déchet ne doit trainer dans l’air de la piscine et à tout autre endroit de A’QUA D’OR. Crant de toutes responsabilités en ce qui a trait à la perte ou le vol d’objets personnels des élèves inscrits aux cours. Il est demandé à l’élève de se munir du strict minimum à son apprentissage.</p><br/>
 
-<p><strong>6. Responsabilités</strong><br/>
+<p><strong>6. Responsabilités</strong><br/> 
 A’QUA D’OR et le personnel de la piscine se dégagent de toutes responsabilités en ce qui a trait à la perte ou le vol d’objets personnels des élèves inscrits aux cours. Il est demandé à l’élève de se munir du strict minimum à son apprentissage.</p><br/>
 
-<p><strong>7. Frais et mensualité</strong><br/>
+<p><strong>7. Engagement de scolarisation et paiement mensuel</strong><br/>
+Le Client reconnaît et accepte qu’il s'inscrit ou inscrit son(ses) enfant(s) dans une école de natation (A’QUA D’OR) et qu’à ce titre, la mensualité est due <strong>chaque mois</strong>, indépendamment de la présence ou de l’absence de l’élève aux séances. Ainsi, <strong>toute absence pendant un mois n’annule pas la mensualité</strong> : le montant du mois concerné demeure payable, sauf si le Client procède à l’annulation de l’inscription. En cas d’annulation, si l’élève souhaite reprendre les cours ultérieurement, des <strong>frais de réactivation de USD 30.00</strong> seront exigés au moment du retour.</p><br/><br/>
+
+<p><strong>8. Frais et mensualité</strong><br/>
 Les frais d’inscription de USD 60.00 requis ne sont en aucun cas remboursables. <br/><br/>
 Les mensualités sont payables à l’avance. Le Client a pour obligation de verser entre le 25 et le 30 de mois les frais mensuels de USD 85.00 pour le mois prochain. <strong> TOUT MOIS COMMENCÉ EST DU DANS SON INTEGRALITÉ. </strong> <br/><br/>
 Les élèves régulièrement inscrits qui se sont absentés au cours ne seront pas remboursés. Il en sera de même pour les élèves qui ont dû être renvoyés chez eux pour mauvaise conduite. <br/><br/>
@@ -486,7 +489,7 @@ Tout élève ayant été absent pour une quelconque raison voulant rattraper sa 
 Les jeunes filles et femmes ont toutes droit à UNE séance de rattrapage gratuite par mois en raison de leur cycle menstruel.<br/><br/>
 Toute(s) séance(s) ratée(s) pour non-paiement des mensualités ne sera en aucun cas récupérable. <br/><br/>
 Toute(s) séance(s) ratée(s) n’implique(nt) pas le non-paiement de la mensualité totale.<br/><br/>
-Tout élève absent pendant plus de douze (12) séances consécutives est considéré comme ayant abandonné les cours. Des frais de réactivation de USD 30.00 seront exigés pour qu’il puisse reprendre.<br/><br/>
+Tout élève absent pendant plus de douze (12) séances consécutives est considéré comme ayant abandonné les cours. Des frais de réactivation de USD 30.00 seront exigés pour qu’il puisse reprendre. <strong>L’élève ou son représentant devra également s’acquitter de tout solde impayé figurant sur son compte, les mensualités demeurant dues tant que l’inscription n’a pas été formellement annulée.</strong><br/><br/>
 Des frais d’adhésion annuels de USD 30.00 devront être versés au début de chaque année, soit au mois de septembre.</p><br/><br/>
 
 <p>Je soussigné(e) <strong>{{NOM_COMPLET}}</strong> identifié(e) au numéro <strong>{{ID_NUMBER}}</strong>, responsable pour <strong>{{RESP_POUR}}</strong>, déclare avoir pris connaissance des règlements et conditions ci-dessus et y souscrire sans réserve.</p><br/><br/>

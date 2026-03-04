@@ -54,10 +54,10 @@ import HoverOverlay from "../../components/HoverOverlay";
 import AdminAuditBoutique from "./AdminAuditBoutique";
 import { FaQrcode } from "react-icons/fa";
 import AdminTeacherContract from "./AdminTeacherContract";
-
-
-
-
+import AdminTeacherSignedContracts from "./AdminTeacherSignedContracts";
+import AdminStudentCertificates from "./AdminStudentCertificates";
+import AdminAchievements from "./AdminAchievements";
+import AdminCardImpressions from "./AdminCardImpressions";
 
 
 function SidebarBtn({ id, icon, label, activeTab, setActiveTab, closeSidebar }) {
@@ -845,7 +845,8 @@ const HIDDEN_SECTIONS = [
   "fiches-template",
   "salary",
   "reports",
-  "teacher-contracts"
+  "teacher-contracts",
+  "student-certificates",
 ];
 
 function isHidden(tabId) {
@@ -889,6 +890,7 @@ const HIDDEN_ECOLE_TABS = [
   "reports",
   "salary",
   "teacher-contracts",
+  "student-certificates",
 ];
 
 function isEcoleTabVisibleToAssistant(tabId) {
@@ -1527,7 +1529,17 @@ const totalUtilisateursPlateforme =
       case "manage-attendance":
         return <AdminAttendance />
       case "teacher-contracts":
+        return <AdminTeacherContract />; // fallback (optional)
+      case "teacher-contracts-templates":
         return <AdminTeacherContract />;
+      case "teacher-contracts-signed":
+        return <AdminTeacherSignedContracts />;
+      case "student-certificates":
+        return <AdminStudentCertificates />;
+      case "achievements":
+        return <AdminAchievements />;
+      case "reports-cards":
+        return <AdminCardImpressions />;
       default:
         return <h2 className="text-xl">Sélectionnez une section</h2>
     }
@@ -1925,6 +1937,13 @@ const totalUtilisateursPlateforme =
       setActiveTab={setActiveTab}
       closeSidebar={() => setSidebarOpen(false)}
     />
+    <SidebarSub
+      id="reports-cards"
+      label="Cartes (Impressions)"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    />
   </SubGroup>
 )}
 
@@ -1941,15 +1960,54 @@ const totalUtilisateursPlateforme =
       />
     )}
     {!isHidden("teacher-contracts") && (
-  <SidebarBtn
-    id="teacher-contracts"
-    icon={<FaFileAlt />}
-    label="Contrats Professeurs"
+  <SubGroup
+    title={
+      <span className="flex items-center gap-2">
+        <FaFileAlt />
+        Contrats Professeurs
+      </span>
+    }
+    prefix="teacher-contracts"
+    defaultTab="teacher-contracts-templates"
     activeTab={activeTab}
     setActiveTab={setActiveTab}
     closeSidebar={() => setSidebarOpen(false)}
-  />
+  >
+    <SidebarSub
+      id="teacher-contracts-templates"
+      label="Templates"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    />
+
+    <SidebarSub
+      id="teacher-contracts-signed"
+      label="Contrats Signés"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    />
+  </SubGroup>
 )}
+{!isHidden("student-certificates") && (
+<SidebarBtn
+  id="student-certificates"
+  icon={<FaFileAlt />}
+  label="Certificats Élèves"
+  activeTab={activeTab}
+  setActiveTab={setActiveTab}
+  closeSidebar={() => setSidebarOpen(false)}
+/>
+)}
+<SidebarBtn
+  id="achievements"
+  icon={<FaPuzzlePiece />}
+  label="Réussites / Notes"
+  activeTab={activeTab}
+  setActiveTab={setActiveTab}
+  closeSidebar={() => setSidebarOpen(false)}
+/>
 
 
   </div>

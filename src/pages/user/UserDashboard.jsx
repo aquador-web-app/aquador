@@ -68,6 +68,13 @@ export default function UserDashboard() {
   const [selectedAttendanceProfileId, setSelectedAttendanceProfileId] = useState(null);
   const [upcomingClasses, setUpcomingClasses] = useState([]);
   const [upcomingLoading, setUpcomingLoading] = useState(false);
+  // 🎫 Card receipt confirmation (Access card)
+const [cardReceipt, setCardReceipt] = useState({
+  loading: false,
+  needed: false,
+  impressionId: null,
+  profileId: null,
+});
   const isMobile = () => window.innerWidth < 768;
 
 const goToTab = (tab) => {
@@ -243,18 +250,101 @@ setUpcomingClasses(filtered);
   }
 };
 
+const fetchCardReceiptStatus = async (profileId) => {
+  if (!profileId) {
+    setCardReceipt({ loading: false, needed: false, impressionId: null, profileId: null });
+    return;
+  }
+
+  setCardReceipt((p) => ({ ...p, loading: true, profileId }));
+
+  try {
+    const { data, error } = await supabase
+      .from("student_card_impressions")
+      .select("profile_id, card_given, given_at")
+      .eq("profile_id", profileId)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    // ✅ RULE: it disappears ONLY if card_given === true
+    const needed = data?.card_given !== true; // if missing row => needed = true
+
+    setCardReceipt({
+      loading: false,
+      needed,
+      impressionId: data?.profile_id || profileId,
+      profileId,
+    });
+  } catch (e) {
+    console.error("fetchCardReceiptStatus error:", e);
+
+    // ✅ Even if there's an error, keep it showing (so it doesn’t “disappear” by accident)
+    setCardReceipt({
+      loading: false,
+      needed: true,
+      impressionId: profileId,
+      profileId,
+    });
+  }
+};
+
+
+const confirmCardReceived = async () => {
+  try {
+    if (!cardReceipt.profileId) return;
+
+    const ok = await showConfirm("✅ Confirmer avoir reçu votre carte d’accès ?");
+    if (!ok) return;
+
+    const { error } = await supabase
+      .from("student_card_impressions")
+      .upsert(
+        {
+          profile_id: cardReceipt.profileId,
+          card_given: true,
+          given_at: new Date().toISOString(),
+        },
+        { onConflict: "profile_id" }
+      );
+
+    if (error) throw error;
+
+    await showAlert("✅ Merci ! La réception de votre carte a été confirmée.");
+    setCardReceipt((p) => ({ ...p, needed: false }));
+  } catch (e) {
+    console.error("confirmCardReceived error:", e);
+    await showAlert("❌ Erreur: impossible de confirmer la réception de la carte.");
+  }
+};
+
+// 🎫 Load + realtime refresh card receipt requirement for the selected profile
 useEffect(() => {
   if (!selectedAttendanceProfileId) return;
 
-  // run immediately
-  fetchUpcomingClasses();
+  // initial load
+  fetchCardReceiptStatus(selectedAttendanceProfileId);
 
-  // auto-refresh every minute
-  const id = setInterval(() => {
-    fetchUpcomingClasses();
-  }, 60 * 1000);
+  // realtime updates when admin changes card impression status
+  const channel = supabase
+    .channel("card-impressions-user-" + selectedAttendanceProfileId)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "student_card_impressions",
+        filter: `profile_id=eq.${selectedAttendanceProfileId}`,
+      },
+      () => {
+        fetchCardReceiptStatus(selectedAttendanceProfileId);
+      }
+    )
+    .subscribe();
 
-  return () => clearInterval(id);
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }, [selectedAttendanceProfileId]);
 
 const markAbsentFromOverview = async (enrollmentId, attendedOnISO, currentStatus) => {
@@ -1084,8 +1174,40 @@ const selectedAttendanceProfile = (attendanceProfiles || []).find(p => p.id === 
 
       {/* === Animated Balance + Pending Commissions === */}
 <div className="grid grid-cols-1 sm:grid-cols-1 gap-6">
-  <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-    
+  <div className={`grid grid-cols-1 sm:grid-cols-2 ${cardReceipt.needed ? "lg:grid-cols-4" : "lg:grid-cols-3"} gap-6`}>
+    {/* 🎫 Card receipt confirmation — shown only if required */}
+{cardReceipt.needed && (
+  <motion.div
+    className="relative p-4 bg-white shadow rounded-2xl border border-gray-100 transition-all"
+    whileHover={{ scale: 1.03, y: -3 }}
+  >
+    <div className="absolute top-0 left-0 h-1 w-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-t-2xl"></div>
+
+    <h3 className="text-center text-sm font-semibold text-gray-500">
+      Carte d’accès
+    </h3>
+
+    <p className="text-center text-base font-semibold text-gray-800 mt-3">
+      J’ai reçu ma carte d’accès
+    </p>
+
+    <p className="text-center text-xs text-gray-500 mt-2">
+      Merci de confirmer la réception afin de finaliser votre dossier.
+    </p>
+
+    <div className="mt-4 flex justify-center">
+      <button
+        onClick={confirmCardReceived}
+        disabled={cardReceipt.loading}
+        className={`px-4 py-2 rounded-lg text-white font-semibold shadow transition ${
+          cardReceipt.loading ? "bg-gray-400" : "bg-emerald-600 hover:bg-emerald-700"
+        }`}
+      >
+        {cardReceipt.loading ? "..." : "Oui, confirmer"}
+      </button>
+    </div>
+  </motion.div>
+)}
     {/* 🧾 Balance card with hover breakdown */}
     <motion.div
       className="relative group p-4 bg-white shadow rounded-2xl border border-gray-100 cursor-pointer transition-all"

@@ -32,6 +32,9 @@ import AdminReferralOverview from "./pages/admin/AdminReferralOverview";
 import AdminReferralDetails from "./pages/admin/AdminReferralDetails";
 import AdminMembershipApproval from "./pages/admin/AdminMembershipApproval";
 import AdminTeacherContract from "./pages/admin/AdminTeacherContract";
+import AdminTeacherSignedContracts from "./pages/admin/AdminTeacherSignedContracts";
+import AdminAchievements from "./pages/admin/AdminAchievements";
+import AdminCardImpressions from "./pages/admin/AdminCardImpressions";
 
 
 
@@ -228,6 +231,9 @@ useEffect(() => {
         }
       />
       <Route path="/admin/teacher-contracts" element={<AdminTeacherContract />} />
+      <Route path="/admin/teacher-contracts/signed" element={<AdminTeacherSignedContracts />} />
+      <Route path="/admin/achievements" element={<AdminAchievements />} />
+      <Route path="/admin/card-impressions" element={<AdminCardImpressions />} />
 
   
       {/* TEACHER */}
@@ -243,6 +249,7 @@ useEffect(() => {
       </Route>
       <Route path="/teacher/contract" element={<TeacherContractPage />} />
       <Route path="/teacher/salary" element={<TeacherSalary />} />
+      
 
 
 
