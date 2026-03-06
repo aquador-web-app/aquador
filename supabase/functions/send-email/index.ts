@@ -2,6 +2,11 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// === Resilience constants ===
+const QUERY_TIMEOUT_MS = 5000;
+const MAX_RETRIES = 3;
+const CIRCUIT_BREAKER_THRESHOLD = 3;
+
 function formatDateFrSafe(date) {
   if (!date) return "";
   return new Date(date).toLocaleDateString("fr-FR", {
@@ -43,6 +48,74 @@ const sender = "A'QUA D'OR <contact@clubaquador.com>";
 const ALERT_EMAIL = "deadrien@clubaquador.com";
 
 const supabase = createClient(supabaseUrl, supabaseKey);
+
+// === Utility: race a promise against a timeout ===
+function withTimeout(promise, ms, label = "operation") {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`${label} timed out after ${ms}ms`)),
+        ms
+      )
+    ),
+  ]);
+}
+
+// === Utility: retry with exponential backoff ===
+async function withRetry(fn, maxRetries = MAX_RETRIES, baseDelayMs = 300) {
+  let lastErr;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (attempt < maxRetries) {
+        const delay = baseDelayMs * Math.pow(2, attempt);
+        console.warn(
+          `⚠️ Retry ${attempt + 1}/${maxRetries} in ${delay}ms — ${err.message}`
+        );
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+  }
+  throw lastErr;
+}
+
+// === Utility: Supabase query with timeout + retry ===
+// Throws on network-level errors; returns { data, error } for Supabase-level results.
+// Retries automatically when the query itself times out or throws.
+async function safeQuery(queryFn, label = "query") {
+  return withRetry(
+    async () => {
+      const result = await withTimeout(queryFn(), QUERY_TIMEOUT_MS, label);
+      // If Supabase returned a transient error, throw so withRetry can retry it
+      if (result?.error) {
+        const msg =
+          result.error.message || JSON.stringify(result.error) || "";
+        const isTransient =
+          msg.toLowerCase().includes("timeout") ||
+          msg.includes("522") ||
+          msg.toLowerCase().includes("connection") ||
+          msg.toLowerCase().includes("econnrefused") ||
+          msg.toLowerCase().includes("network");
+        if (isTransient) {
+          throw new Error(`${label} transient error: ${msg}`);
+        }
+      }
+      return result;
+    },
+    MAX_RETRIES
+  );
+}
+
+// === Custom error: Resend daily quota exceeded ===
+class ResendQuotaError extends Error {
+  constructor() {
+    super("Resend daily email quota exceeded (429)");
+    this.name = "ResendQuotaError";
+  }
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -147,6 +220,9 @@ async function sendWithResend(toInput, subject, html, attachmentUrl = null) {
 
   if (!res.ok) {
     const errText = await res.text();
+    if (res.status === 429) {
+      throw new ResendQuotaError();
+    }
     throw new Error(`Resend API error: ${errText}`);
   }
 
@@ -214,12 +290,17 @@ serve(async (req) => {
   if (req.method === "GET") {
     console.log("🔄 Checking for pending emails...");
 
-    const { data: pending, error } = await supabase
-  .from("email_queue")
-  .select("id, email, subject, body, attachment_url, invoice_id, variables, kind, user_id")
-  .eq("status", "pending")
-  .limit(10);
-
+    const { data: pending, error } = await safeQuery(
+      () =>
+        supabase
+          .from("email_queue")
+          .select(
+            "id, email, subject, body, attachment_url, invoice_id, variables, kind, user_id"
+          )
+          .eq("status", "pending")
+          .limit(10),
+      "fetch pending emails"
+    );
 
     if (error) {
       console.error("❌ Error fetching pending emails:", error);
@@ -229,171 +310,238 @@ serve(async (req) => {
       });
     }
 
+    // ===================================================
+    // 🚀 BATCH PRE-FETCH: invoices, profiles upfront
+    // ===================================================
+    const invoiceIds = (pending || [])
+      .map((e) => e.invoice_id)
+      .filter(Boolean);
+    const emailAddrs = (pending || []).map((e) => e.email).filter(Boolean);
+
+    // Fetch all needed invoices in one query
+    let batchInvoiceMap = {}; // keyed by invoice id
+    if (invoiceIds.length > 0) {
+      const { data: batchInvoices } = await safeQuery(
+        () =>
+          supabase
+            .from("invoices")
+            .select(
+              "id, user_id, invoice_no, total, due_date, pdf_url, paid_total, month"
+            )
+            .in("id", invoiceIds),
+        "batch invoices fetch"
+      );
+      for (const inv of batchInvoices || []) {
+        batchInvoiceMap[inv.id] = inv;
+      }
+    }
+
+    // Collect all user_ids from those invoices, plus any directly on queue items
+    const userIds = [
+      ...new Set(
+        Object.values(batchInvoiceMap)
+          .map((inv) => inv.user_id)
+          .filter(Boolean)
+      ),
+    ];
+
+    // Fetch all needed profiles in one query (by user_id OR by email)
+    // Use separate .in() queries to avoid building raw filter strings with user data
+    let profileByIdMap = {};
+    let profileByEmailMap = {};
+    if (userIds.length > 0) {
+      const { data: byId } = await safeQuery(
+        () =>
+          supabase
+            .from("profiles")
+            .select("id, parent_id, full_name, email")
+            .in("id", userIds),
+        "batch profiles by id"
+      );
+      for (const p of byId || []) {
+        profileByIdMap[p.id] = p;
+        if (p.email) profileByEmailMap[p.email] = p;
+      }
+    }
+    if (emailAddrs.length > 0) {
+      const { data: byEmail } = await safeQuery(
+        () =>
+          supabase
+            .from("profiles")
+            .select("id, parent_id, full_name, email")
+            .in("email", emailAddrs),
+        "batch profiles by email"
+      );
+      for (const p of byEmail || []) {
+        profileByIdMap[p.id] = p;
+        if (p.email) profileByEmailMap[p.email] = p;
+      }
+    }
 
     let sentCount = 0;
-    for (const e of pending) {
-      let varsFromQueue = {};
+    let consecutiveFailures = 0;
 
-try {
-  if (typeof e.variables === "string") {
-    varsFromQueue = JSON.parse(e.variables);
-  } else if (typeof e.variables === "object" && e.variables !== null) {
-    varsFromQueue = e.variables;
-  }
-} catch (err) {
-  console.warn("⚠️ Failed to parse queue variables:", err);
-}
+    for (const e of pending || []) {
+      // 🔴 Circuit breaker: stop if too many consecutive failures
+      if (consecutiveFailures >= CIRCUIT_BREAKER_THRESHOLD) {
+        console.error(
+          `🔴 Circuit breaker tripped after ${CIRCUIT_BREAKER_THRESHOLD} consecutive failures. Stopping batch.`
+        );
+        break;
+      }
+
+      let varsFromQueue = {};
       try {
+        if (typeof e.variables === "string") {
+          varsFromQueue = JSON.parse(e.variables);
+        } else if (typeof e.variables === "object" && e.variables !== null) {
+          varsFromQueue = e.variables;
+        }
+      } catch (err) {
+        console.warn("⚠️ Failed to parse queue variables:", err);
+      }
+
+      try {
+        // Resolve profile from batch-fetched data
         let profileCheck = null;
 
-if (e.invoice_id) {
-  const { data: invUser } = await supabase
-    .from("invoices")
-    .select("user_id")
-    .eq("id", e.invoice_id)
-    .maybeSingle();
+        if (e.invoice_id) {
+          const inv = batchInvoiceMap[e.invoice_id];
+          if (inv?.user_id) {
+            profileCheck = profileByIdMap[inv.user_id] || null;
+          }
+        }
 
+        // Fallback: resolve profile from email
+        if (!profileCheck && e.email) {
+          profileCheck = profileByEmailMap[e.email] || null;
 
-  if (invUser?.user_id) {
-    const { data: prof } = await supabase
-      .from("profiles")
-      .select("id, parent_id, full_name")
-      .eq("id", invUser.user_id)
-      .maybeSingle();
-
-    profileCheck = prof;
-  }
-}
-
+          // If not in batch cache, do a targeted query with timeout + retry
+          if (!profileCheck) {
+            const { data: profByEmail } = await safeQuery(
+              () =>
+                supabase
+                  .from("profiles")
+                  .select("id, parent_id, full_name")
+                  .eq("email", e.email)
+                  .maybeSingle(),
+              "profile lookup by email"
+            );
+            profileCheck = profByEmail || null;
+          }
+        }
 
         if (profileCheck?.parent_id) {
           console.log(`⏩ Skipped child profile: ${e.email}`);
+          consecutiveFailures = 0;
           continue;
         }
 
         if (!e.email || typeof e.email !== "string" || !e.email.includes("@")) {
           console.warn(`⚠️ Skipped invalid email: ${e.email}`);
+          consecutiveFailures = 0;
           continue;
         }
 
         await new Promise((resolve) => setTimeout(resolve, 600)); // throttle
 
+        // Resolve invoice for template variables (from batch cache first)
+        let invoice = e.invoice_id ? batchInvoiceMap[e.invoice_id] || null : null;
 
+        // If invoice was not in the batch (edge case), fetch individually
+        if (e.invoice_id && !invoice) {
+          const { data: invoiceRow, error: invErr } = await safeQuery(
+            () =>
+              supabase
+                .from("invoices")
+                .select(
+                  "invoice_no, total, due_date, pdf_url, paid_total, month"
+                )
+                .eq("id", e.invoice_id)
+                .maybeSingle(),
+            "invoice fetch"
+          );
+          if (invErr) {
+            console.error("❌ Invoice fetch error:", invErr);
+          } else {
+            invoice = invoiceRow;
+          }
+        }
 
-// ==========================
-// 🔥 FETCH INVOICE FOR TEMPLATE VARIABLES
-// ==========================
-let invoice = null;
+        // Resolve attachment
+        const needsPdf = ["InvoiceIssued", "InvoiceReminder"].includes(e.kind);
+        const resolvedAttachmentUrl =
+          e.attachment_url || invoice?.pdf_url || null;
 
-if (e.invoice_id) {
-  const { data: invoiceRow, error: invErr } = await supabase
-    .from("invoices")
-    .select("invoice_no, total, due_date, pdf_url, paid_total, month")
-    .eq("id", e.invoice_id)
-    .maybeSingle();
+        if (needsPdf && !resolvedAttachmentUrl) {
+          console.warn("⏳ Waiting for PDF for email:", e.id);
+          await safeQuery(
+            () =>
+              supabase
+                .from("email_queue")
+                .update({ last_error: "Waiting for PDF" })
+                .eq("id", e.id),
+            "update email_queue waiting for PDF"
+          );
+          consecutiveFailures = 0;
+          continue;
+        }
 
-  if (invErr) {
-    console.error("❌ Invoice fetch error:", invErr);
-  } else {
-    invoice = invoiceRow;
-  }
-}
+        // Build merge variables
+        const mergeVars = {
+          ...(varsFromQueue || {}),
+          name: varsFromQueue?.full_name || profileCheck?.full_name || "",
+          full_name: varsFromQueue?.full_name || profileCheck?.full_name || "",
+          email: e.email,
+          invoice_no: invoice?.invoice_no || "",
+          total:
+            invoice?.total != null ? formatCurrencyUSD(invoice.total) : "",
+          due_date: invoice?.due_date
+            ? formatDateFrSafe(invoice.due_date)
+            : "",
+          month: invoice?.month ? formatMonth(invoice.month) : "",
+        };
 
-// 🔥 FALLBACK: resolve profile from email (for enrollment emails)
-if (!profileCheck && e.email) {
-  const { data: profByEmail, error } = await supabase
-    .from("profiles")
-    .select("id, parent_id, full_name")
-    .eq("email", e.email)
-    .maybeSingle();
+        const bodyWithVars = applyVars(e.body || "(no content)", mergeVars);
+        let wrappedHtml = renderEmailTemplate(bodyWithVars, mergeVars.full_name);
+        const subjectFinal = applyVars(e.subject || "(no subject)", mergeVars);
 
-  if (error) {
-    console.error("❌ Profile lookup by email failed:", error);
-  } else {
-    profileCheck = profByEmail;
-  }
-}
+        console.log("🧪 BODY BEFORE SEND:", bodyWithVars);
 
+        await sendWithResend(
+          e.email,
+          subjectFinal,
+          wrappedHtml,
+          needsPdf ? resolvedAttachmentUrl : null
+        );
 
-// ✅ Resolve attachment dynamically:
-// 1) prefer attachment_url stored in queue (manual/system cases)
-// 2) otherwise use invoice.pdf_url (monthly async case)
-// 🔎 Resolve attachment ONLY if required
-const needsPdf = ["InvoiceIssued", "InvoiceReminder"].includes(e.kind);
-
-const resolvedAttachmentUrl =
-  e.attachment_url || invoice?.pdf_url || null;
-
-if (needsPdf && !resolvedAttachmentUrl) {
-  console.warn("⏳ Waiting for PDF for email:", e.id);
-  await supabase
-    .from("email_queue")
-    .update({
-      last_error: "Waiting for PDF",
-    })
-    .eq("id", e.id);
-
-  continue;
-}
-
-
-// ==========================
-// 🧩 BUILD MERGE VARIABLES
-// ==========================
-const mergeVars = {
-  ...(varsFromQueue || {}),
-
-  name: varsFromQueue?.full_name || profileCheck?.full_name || "",
-  full_name: varsFromQueue?.full_name || profileCheck?.full_name || "",
-  email: e.email,
-
-  invoice_no: invoice?.invoice_no || "",
-  total: invoice?.total != null ? formatCurrencyUSD(invoice.total) : "",
-  due_date: invoice?.due_date ? formatDateFrSafe(invoice.due_date) : "",
-  month: invoice?.month ? formatMonth(invoice.month) : "",
-};
-
-
-// ==========================
-// 🔥 APPLY TEMPLATE VARIABLES
-// ==========================
-// 1️⃣ Apply variables ONLY ONCE to raw template
-const bodyWithVars = applyVars(e.body || "(no content)", mergeVars);
-
-// 2️⃣ Wrap the already-interpolated body
-let wrappedHtml = renderEmailTemplate(
-  bodyWithVars,
-  mergeVars.full_name
-);
-
-// 3️⃣ Subject replacement
-const subjectFinal = applyVars(e.subject || "(no subject)", mergeVars);
-
-console.log("🧪 BODY BEFORE SEND:", bodyWithVars);
-
-// ==========================
-// 📤 SEND EMAIL (WITH RESOLVED ATTACHMENT)
-// ==========================
-await sendWithResend(
-  e.email,
-  subjectFinal,
-  wrappedHtml,
-  needsPdf ? resolvedAttachmentUrl : null
-);
-
-
-
-        await supabase
-          .from("email_queue")
-          .update({
-            status: "sent",
-            sent_at: new Date().toISOString(),
-          })
-          .eq("id", e.id);
+        await safeQuery(
+          () =>
+            supabase
+              .from("email_queue")
+              .update({
+                status: "sent",
+                sent_at: new Date().toISOString(),
+              })
+              .eq("id", e.id),
+          "mark email sent"
+        );
 
         console.log(`✅ Sent → ${e.email}`);
         sentCount++;
+        consecutiveFailures = 0; // reset on success
       } catch (err) {
+        if (err instanceof ResendQuotaError) {
+          console.error(
+            "🚫 Resend quota exceeded — stopping batch email processing."
+          );
+          await queueSystemEmail(
+            "🚫 Resend quota exceeded",
+            "Daily email sending quota reached. Remaining emails will be retried next cycle."
+          );
+          break;
+        }
+        consecutiveFailures++;
         console.error("⚠️ Error sending email to:", e.email, err.message);
       }
     }
@@ -404,7 +552,6 @@ await sendWithResend(
     );
   }
 
-  
 // 📤 2️⃣ POST: direct email send (manual trigger)
 if (req.method === "POST") {
   try {
@@ -426,10 +573,9 @@ if (req.method === "POST") {
       if (typeof variables === "string") vars = JSON.parse(variables);
       else if (typeof variables === "object" && variables !== null) vars = variables;
     } catch (e) {
-  console.warn("⚠️ Could not parse variables; fallback to empty object", e);
-  vars = {};
-}
-
+      console.warn("⚠️ Could not parse variables; fallback to empty object", e);
+      vars = {};
+    }
 
     console.log("📦 Variables received:", vars);
 
@@ -443,181 +589,257 @@ if (req.method === "POST") {
 
     console.log(`📧 Sending "${subject}" to ${recipients.join(", ")}`);
 
-    // ✅ 3️⃣ For each recipient
-    for (const addr of recipients) {
-      // 🔍 ALWAYS fetch full_name from profiles (not profiles_with_unpaid)
-const { data: profileRow, error: profileErr } = await supabase
-  .from("profiles")
-  .select("id, parent_id, full_name")
-  .eq("email", addr)
-  .maybeSingle();
+    // ===================================================
+    // 🚀 BATCH PRE-FETCH: profiles, club_profiles, invoices
+    // ===================================================
 
-if (profileErr) console.error("❌ profile lookup error:", profileErr);
-
-// Build correct full name
-let recipientNameFinal =
-  recipient_name || profileRow?.full_name || "";
-
-// 🔥 fallback to club profiles
-if (!recipientNameFinal) {
-  const { data: clubRow, error: clubErr } = await supabase
-    .from("club_profiles")
-    .select("main_full_name")
-    .eq("email", addr)
-    .maybeSingle();
-
-  if (clubErr) console.error("❌ club profile lookup error:", clubErr);
-
-  if (clubRow?.main_full_name) {
-    recipientNameFinal = clubRow.main_full_name;
-  }
-}
-// 🔥 FINAL GUARANTEED FALLBACK (prevents blank greeting)
-if (!recipientNameFinal || recipientNameFinal.trim() === "") {
-  console.log("⚠️ No name found — forcing fallback");
-  recipientNameFinal = addr.split("@")[0].replace(/[._]/g, " ");
-}
-
-
-
-      if (profileRow?.parent_id) {
-        console.log(`⏩ Skipped child profile: ${addr}`);
-        continue;
+    // Batch fetch all profiles by email
+    let profileMap = {}; // email -> profile
+    {
+      const { data: batchProfiles } = await safeQuery(
+        () =>
+          supabase
+            .from("profiles")
+            .select("id, parent_id, full_name, email")
+            .in("email", recipients),
+        "batch profiles lookup"
+      );
+      for (const p of batchProfiles || []) {
+        if (p.email) profileMap[p.email] = p;
       }
+    }
 
-  // ==========================
-// 🔍 FETCH MOST RECENT INVOICE (school + club)
-// ==========================
-let invoice = null;
+    // Batch fetch club_profiles for name fallback (by email)
+    let clubProfileByEmailMap = {}; // email -> club_profile
+    {
+      const { data: cpByEmail } = await safeQuery(
+        () =>
+          supabase
+            .from("club_profiles")
+            .select("email, main_full_name, id, auth_user_id")
+            .in("email", recipients),
+        "batch club_profiles by email"
+      );
+      for (const cp of cpByEmail || []) {
+        if (cp.email) clubProfileByEmailMap[cp.email] = cp;
+      }
+    }
 
-// 🎓 1) SCHOOL INVOICE — uses invoices.user_id
-const { data: schoolInv, error: schoolInvErr } = await supabase
-  .from("invoices")
-  .select("invoice_no, total, due_date, pdf_url, paid_total, month, created_at")
-  .eq("user_id", profileRow?.id)
-  .order("created_at", { ascending: false })
-  .limit(1)
-  .maybeSingle();
+    // Batch fetch club_profiles by auth_user_id (for invoice resolution)
+    const profileIds = Object.values(profileMap)
+      .map((p) => p.id)
+      .filter(Boolean);
+    let clubProfileByAuthMap = {}; // auth_user_id -> club_profile
+    if (profileIds.length > 0) {
+      const { data: cpByAuth } = await safeQuery(
+        () =>
+          supabase
+            .from("club_profiles")
+            .select("id, auth_user_id, main_full_name")
+            .in("auth_user_id", profileIds),
+        "batch club_profiles by auth_user_id"
+      );
+      for (const cp of cpByAuth || []) {
+        if (cp.auth_user_id) clubProfileByAuthMap[cp.auth_user_id] = cp;
+      }
+    }
 
-if (schoolInvErr) console.error("❌ School invoice fetch error:", schoolInvErr);
+    // Batch fetch school invoices for all profile ids
+    let schoolInvoiceByUserMap = {}; // user_id -> most recent invoice
+    if (profileIds.length > 0) {
+      const { data: schoolInvs } = await safeQuery(
+        () =>
+          supabase
+            .from("invoices")
+            .select(
+              "user_id, invoice_no, total, due_date, pdf_url, paid_total, month, created_at"
+            )
+            .in("user_id", profileIds)
+            .order("created_at", { ascending: false }),
+        "batch school invoices"
+      );
+      for (const inv of schoolInvs || []) {
+        if (
+          !schoolInvoiceByUserMap[inv.user_id] ||
+          new Date(inv.created_at) >
+            new Date(schoolInvoiceByUserMap[inv.user_id].created_at)
+        ) {
+          schoolInvoiceByUserMap[inv.user_id] = inv;
+        }
+      }
+    }
 
+    // Batch fetch club invoices for all club profile ids
+    const clubProfileIds = Object.values(clubProfileByAuthMap)
+      .map((cp) => cp.id)
+      .filter(Boolean);
+    let clubInvoiceByCustomerMap = {}; // customer_id -> most recent invoice
+    if (clubProfileIds.length > 0) {
+      const { data: clubInvs } = await safeQuery(
+        () =>
+          supabase
+            .from("club_invoices")
+            .select(
+              "customer_id, invoice_no, total, due_date, pdf_url, paid_total, month, created_at"
+            )
+            .in("customer_id", clubProfileIds)
+            .order("created_at", { ascending: false }),
+        "batch club invoices"
+      );
+      for (const inv of clubInvs || []) {
+        if (
+          !clubInvoiceByCustomerMap[inv.customer_id] ||
+          new Date(inv.created_at) >
+            new Date(clubInvoiceByCustomerMap[inv.customer_id].created_at)
+        ) {
+          clubInvoiceByCustomerMap[inv.customer_id] = inv;
+        }
+      }
+    }
 
-// 🏊 2) FIND CLUB PROFILE VIA auth_user_id
-let clubProfileId = null;
+    // ✅ 3️⃣ For each recipient — errors are isolated per-recipient
+    let sentCount = 0;
+    let failedCount = 0;
+    for (const addr of recipients) {
+      try {
+        // Resolve profile from batch cache
+        const profileRow = profileMap[addr] || null;
 
-const { data: clubProf, error: cpErr } = await supabase
-  .from("club_profiles")
-  .select("id")
-  .eq("auth_user_id", profileRow?.id)
-  .maybeSingle();
+        if (profileRow?.parent_id) {
+          console.log(`⏩ Skipped child profile: ${addr}`);
+          continue;
+        }
 
-if (cpErr) console.error("❌ club_profiles lookup error:", cpErr);
+        // Resolve full name
+        let recipientNameFinal =
+          recipient_name || profileRow?.full_name || "";
 
-if (clubProf?.id) clubProfileId = clubProf.id;
+        // Fallback to club profile name
+        if (!recipientNameFinal) {
+          const clubRow =
+            clubProfileByEmailMap[addr] ||
+            (profileRow?.id ? clubProfileByAuthMap[profileRow.id] : null);
+          if (clubRow?.main_full_name) {
+            recipientNameFinal = clubRow.main_full_name;
+          }
+        }
 
+        // Final fallback: derive from email address
+        if (!recipientNameFinal || recipientNameFinal.trim() === "") {
+          console.log("⚠️ No name found — forcing fallback");
+          recipientNameFinal = addr.split("@")[0].replace(/[._]/g, " ");
+        }
 
-// 🏛️ 3) CLUB INVOICE — uses club_invoices.customer_id
-let clubInv = null;
+        // Resolve invoice: pick most recent between school and club
+        const schoolInv = profileRow?.id
+          ? schoolInvoiceByUserMap[profileRow.id] || null
+          : null;
+        const clubProfileForAddr = profileRow?.id
+          ? clubProfileByAuthMap[profileRow.id] || null
+          : null;
+        const clubInv = clubProfileForAddr?.id
+          ? clubInvoiceByCustomerMap[clubProfileForAddr.id] || null
+          : null;
 
-if (clubProfileId) {
-  const { data: ci, error: ciErr } = await supabase
-    .from("club_invoices")
-    .select("invoice_no, total, due_date, pdf_url, paid_total, month, created_at")
-    .eq("customer_id", clubProfileId)     // 🔥 FIXED COLUMN
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+        let invoice = null;
+        if (schoolInv && !clubInv) invoice = schoolInv;
+        else if (clubInv && !schoolInv) invoice = clubInv;
+        else if (schoolInv && clubInv) {
+          invoice =
+            new Date(clubInv.created_at) > new Date(schoolInv.created_at)
+              ? clubInv
+              : schoolInv;
+        }
 
-  if (ciErr) console.error("❌ Club invoice fetch error:", ciErr);
+        const mergeVars = {
+          ...(typeof vars === "object" ? vars : {}),
+          name: recipientNameFinal,
+          full_name: recipientNameFinal,
+          course: vars.course || "",
+          session_phrase: vars.session_phrase || "",
+          session_date: vars.session_date || "",
+          start_date: vars.start_date || "",
+          session_time: vars.session_time || "",
+          invoice_no: invoice?.invoice_no || "",
+          total:
+            invoice?.total != null ? formatCurrencyUSD(invoice.total) : "",
+          due_date: invoice?.due_date
+            ? formatDateFrSafe(invoice.due_date)
+            : "",
+          pdf_url: attachment_url || invoice?.pdf_url || "",
+          balance:
+            invoice &&
+            invoice.total != null &&
+            invoice.paid_total != null
+              ? formatCurrencyUSD(
+                  Number(invoice.total) - Number(invoice.paid_total)
+                )
+              : "",
+          month: invoice?.month
+            ? formatMonth(invoice.month)
+            : vars.month || "",
+          email: addr,
+        };
 
-  clubInv = ci;
-}
+        console.log("🧩 Final mergeVars:", mergeVars);
 
+        // Interpolate and wrap
+        let interpolatedBody = applyVars(
+          body || html || "(no content)",
+          mergeVars
+        );
+        let wrapped = renderEmailTemplate(interpolatedBody, recipientNameFinal);
+        wrapped = applyVars(wrapped, mergeVars);
+        const subjectFinal = applyVars(subject || "(no subject)", mergeVars);
 
-// 🧠 4) PICK MOST RECENT
-if (schoolInv && !clubInv) invoice = schoolInv;
-if (clubInv && !schoolInv) invoice = clubInv;
+        await sendWithResend(addr, subjectFinal, wrapped, attachment_url || null);
 
-if (schoolInv && clubInv) {
-  invoice =
-    new Date(clubInv.created_at) > new Date(schoolInv.created_at)
-      ? clubInv
-      : schoolInv;
-}
-
-
-
-      const mergeVars = {
-  ...(typeof vars === "object" ? vars : {}),
-
-  // Name
-  name: recipientNameFinal,
-  full_name: recipientNameFinal,
-
-  // Session / course
-  course: vars.course || "",
-  session_phrase: vars.session_phrase || "",
-  session_date: vars.session_date || "",
-  start_date: vars.start_date || "",
-  session_time: vars.session_time || "",
-
-  // 🔥 INVOICE MERGE LOGIC (FORMATTED ONCE HERE)
-invoice_no: invoice?.invoice_no || "",
-total: invoice?.total != null ? formatCurrencyUSD(invoice.total) : "",
-due_date: invoice?.due_date
-  ? formatDateFrSafe(invoice.due_date)
-  : "",
-pdf_url: attachment_url || invoice?.pdf_url || "",
-balance:
-  invoice && invoice.total != null && invoice.paid_total != null
-    ? formatCurrencyUSD(
-        Number(invoice.total) - Number(invoice.paid_total)
-      )
-    : "",
-month: invoice?.month
-  ? formatMonth(invoice.month)
-  : (vars.month || ""),
-
-
-  // Email
-  email: addr,
-};
-
-
-
-      console.log("🧩 Final mergeVars:", mergeVars);
-
-      // ✅ Interpolate subject and body
-      // 1️⃣ Apply vars to the raw template
-let interpolatedBody = applyVars(body || html || "(no content)", mergeVars);
-
-// 2️⃣ Wrap inside branded template
-let wrapped = renderEmailTemplate(interpolatedBody, recipientNameFinal);
-
-// 3️⃣ Apply placeholders AGAIN (because wrapper may contain placeholders)
-wrapped = applyVars(wrapped, mergeVars);
-
-// 4️⃣ Subject replacement
-const subjectFinal = applyVars(subject || "(no subject)", mergeVars);
-
-// 5️⃣ Send
-await sendWithResend(addr, subjectFinal, wrapped, attachment_url || null);
-
-      await new Promise((r) => setTimeout(r, 400));
-      console.log(`✅ Sent → ${addr}`);
+        await new Promise((r) => setTimeout(r, 400));
+        console.log(`✅ Sent → ${addr}`);
+        sentCount++;
+      } catch (err) {
+        if (err instanceof ResendQuotaError) {
+          console.error(
+            "🚫 Resend quota exceeded — stopping further sends."
+          );
+          await queueSystemEmail(
+            "🚫 Resend quota exceeded",
+            "Daily email sending quota reached. Remaining emails were not sent."
+          );
+          // Return 429 so the caller knows to retry later
+          return new Response(
+            JSON.stringify({
+              error: err.message,
+              sent: sentCount,
+              quota_exceeded: true,
+            }),
+            {
+              status: 429,
+              headers: { "Content-Type": "application/json", ...corsHeaders },
+            }
+          );
+        }
+        // Log and continue with remaining recipients
+        failedCount++;
+        console.error(`⚠️ Failed to send to ${addr}:`, err.message);
+      }
     }
 
     // ✅ 4️⃣ Mark queue as sent
     if (emailQueueId) {
-      await supabase
-        .from("email_queue")
-        .update({ status: "sent", sent_at: new Date().toISOString() })
-        .eq("id", emailQueueId);
+      await safeQuery(
+        () =>
+          supabase
+            .from("email_queue")
+            .update({ status: "sent", sent_at: new Date().toISOString() })
+            .eq("id", emailQueueId),
+        "mark email_queue sent"
+      );
       console.log(`✅ Email_queue ${emailQueueId} marked as sent`);
     }
 
     return new Response(
-      JSON.stringify({ success: true, message: "Email(s) sent successfully" }),
+      JSON.stringify({ success: true, message: "Email(s) sent successfully", sent: sentCount, failed: failedCount }),
       { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );
   } catch (err) {
