@@ -28,6 +28,7 @@ function asMonthDate(period) {
 export default function TeacherSalary() {
   const [months, setMonths] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [assignedCategoryBaseSalary, setAssignedCategoryBaseSalary] = useState(0);
 
   // expanded monthKey => details
   const [open, setOpen] = useState({}); // { "YYYY-MM": true }
@@ -35,16 +36,53 @@ export default function TeacherSalary() {
   const [loadingMonth, setLoadingMonth] = useState({}); // { "YYYY-MM": true }
 
   const loadMonths = async () => {
-    setLoading(true);
-    const { data, error } = await supabase.rpc("teacher_salary_months");
-    if (error) {
-      console.error("teacher_salary_months error:", error);
-      setMonths([]);
-    } else {
-      setMonths(data || []);
-    }
-    setLoading(false);
-  };
+  setLoading(true);
+
+  const { data, error } = await supabase.rpc("teacher_salary_months");
+  if (error) {
+    console.error("teacher_salary_months error:", error);
+    setMonths([]);
+  } else {
+    setMonths(data || []);
+  }
+
+  await loadAssignedCategoryBaseSalary();
+
+  setLoading(false);
+};
+
+  const loadAssignedCategoryBaseSalary = async () => {
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    console.error("getUser error:", userError);
+    setAssignedCategoryBaseSalary(0);
+    return;
+  }
+
+  const { data, error } = await supabase
+    .from("teacher_salary_assignments")
+    .select(`
+      category_id,
+      teacher_salary_categories (
+        base_salary
+      )
+    `)
+    .eq("profile_id", user.id)
+    .maybeSingle();
+
+  if (error) {
+    console.error("teacher_salary_assignments error:", error);
+    setAssignedCategoryBaseSalary(0);
+  } else {
+    setAssignedCategoryBaseSalary(
+      Number(data?.teacher_salary_categories?.base_salary || 0)
+    );
+  }
+};
 
   const loadMonthDetails = async (period) => {
     const monthDate = asMonthDate(period);
@@ -75,17 +113,20 @@ export default function TeacherSalary() {
   }, []);
 
   const totals = useMemo(() => {
-    let gross = 0;
-    let deductions = 0;
-    let net = 0;
-    for (const r of months || []) {
-      const g = num(r.base_salary) + num(r.commission_bonus) + num(r.attendance_bonus);
-      gross += g;
-      deductions += num(r.deductions);
-      net += num(r.net_salary);
-    }
-    return { gross, deductions, net };
-  }, [months]);
+  let deductions = 0;
+  let net = 0;
+
+  for (const r of months || []) {
+    deductions += num(r.deductions);
+    net += num(r.net_salary);
+  }
+
+  return {
+    gross: num(assignedCategoryBaseSalary),
+    deductions,
+    net,
+  };
+}, [months, assignedCategoryBaseSalary]);
 
   const toggleMonth = async (r) => {
     const key = ymLabel(r.period);
@@ -117,10 +158,6 @@ export default function TeacherSalary() {
         <div className="border rounded p-3">
           <div className="text-xs text-gray-500">Total déductions</div>
           <div className="text-lg font-bold">{formatCurrencyHTG(totals.deductions)}</div>
-        </div>
-        <div className="border rounded p-3">
-          <div className="text-xs text-gray-500">Total net</div>
-          <div className="text-lg font-bold">{formatCurrencyHTG(totals.net)}</div>
         </div>
       </div>
 

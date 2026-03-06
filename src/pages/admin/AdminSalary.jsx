@@ -141,15 +141,27 @@ setLoading(false);
   };
 
   async function fetchGlobalLiveCounts() {
-  const today = todayISODate();
   const monthKey = monthKeyNow();
+  const now = new Date();
+const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+const toYMD = (d) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
+const startYMD = toYMD(monthStart);
+const nextStartYMD = toYMD(nextMonthStart);
 
   // ✅ expectedCount = active enrollments today (same filter as AdminInvoicePayment)
   const { data: enr, error: enrErr } = await supabase
     .from("enrollments")
     .select("id, status, start_date, end_date")
-    .lte("start_date", today)
-    .or(`end_date.is.null,end_date.gte.${today}`);
+    .lte("start_date", nextStartYMD)
+    .or(`end_date.is.null,end_date.gte.${startYMD}`);
 
   if (enrErr) {
     console.error("fetchGlobalLiveCounts enrollments error:", enrErr);
@@ -621,9 +633,9 @@ const totalAfterExpected = Math.max(
       <td className="p-2 border text-center">
   <div className="text-xs leading-5">
     <div><b>Expected:</b> {formatCurrencyHTG(docDedExpectedHTG)}</div>
-    <div><b>Paid:</b> {formatCurrencyHTG(docDedPaidHTG)}</div>
+    <div><b>Deducted:</b> {formatCurrencyHTG(docDedPaidHTG)}</div>
     <div className="text-gray-500">
-      {deductions.doc.missingCount || 0} missing / {deductions.doc.expectedCount || 0} expected
+      {liveCounts.expectedCount || 0} expected / {deductions.doc.missingCount || 0} missing
       {" "}({Math.round(docPct * 100)}%)
     </div>
   </div>

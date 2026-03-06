@@ -8,21 +8,52 @@ const supabaseKey =
   Deno.env.get("FUNCTION_ROLE_KEY") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-serve(async () => {
+serve(async (req) => {
   try {
     console.log("🗓️ Monthly bulletin generation job running...");
 
-    // Target the *previous* month (since it’s end-of-month data)
-    const today = new Date();
-    const targetMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1)
-      .toISOString()
-      .slice(0, 7); // yyyy-MM
+    const body = await req.json().catch(() => ({}));
+    const selectedMonth = body?.selected_month;
 
-    // Fetch all summaries for that month with no PDF yet
+    const frMonths = [
+      "Janvier",
+      "Février",
+      "Mars",
+      "Avril",
+      "Mai",
+      "Juin",
+      "Juillet",
+      "Août",
+      "Septembre",
+      "Octobre",
+      "Novembre",
+      "Décembre",
+    ];
+
+    let targetDate: Date;
+
+    if (selectedMonth) {
+      targetDate = new Date(`${selectedMonth}T00:00:00`);
+    } else {
+      const today = new Date();
+      targetDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    }
+
+    if (Number.isNaN(targetDate.getTime())) {
+      return new Response(
+        JSON.stringify({ error: "Invalid selected_month" }),
+        { status: 400 }
+      );
+    }
+
+    const targetMonthLabel = `${frMonths[targetDate.getMonth()]} ${targetDate.getFullYear()}`;
+
+    console.log(`📅 Target bulletin month: ${targetMonthLabel}`);
+
     const { data: summaries, error } = await supabase
       .from("bulletin_monthly_summary")
-      .select("id, student_name, pdf_url")
-      .ilike("month", `${targetMonth}%`)
+      .select("id, student_name, pdf_url, month")
+      .eq("month", targetMonthLabel)
       .is("pdf_url", null);
     if (error) throw error;
 
@@ -31,7 +62,7 @@ serve(async () => {
       return new Response("No bulletins to process", { status: 200 });
     }
 
-    console.log(`🧾 Generating ${summaries.length} bulletins for ${targetMonth}...`);
+    console.log(`🧾 Generating ${summaries.length} bulletins for ${targetMonthLabel}...`);
 
     // Loop through each student and call your PDF function internally
     const results = [];
