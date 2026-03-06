@@ -75,6 +75,19 @@ if ("serviceWorker" in navigator && window.location.search.includes("sw-reset"))
   });
 }
 
+// 🧹 Clear stale caches on app load — keep only known essential caches
+// Note: cache names here must match those defined in vite.config.js runtimeCaching
+if ("caches" in window) {
+  const KNOWN_CACHES = ["supabase-api-cache", "app-shell-cache", "workbox-precache-v2"];
+  caches.keys().then((keys) => {
+    keys.forEach((key) => {
+      if (!KNOWN_CACHES.some((known) => key.startsWith(known))) {
+        caches.delete(key).catch(() => {});
+      }
+    });
+  }).catch(() => {});
+}
+
 // ✅ Check if running on production
 const isProd =
   window.location.hostname === "clubaquador.com" ||
