@@ -80,6 +80,25 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
+  // 3️⃣ 🔄 Proactive token refresh every 10 minutes to prevent expiry
+  useEffect(() => {
+    const REFRESH_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+
+    const refreshToken = async () => {
+      try {
+        const { error } = await supabase.auth.refreshSession();
+        if (error) console.warn("⚠️ Token refresh failed:", error.message);
+      } catch (e) {
+        console.warn("⚠️ Token refresh threw:", e);
+      }
+    };
+
+    // Refresh immediately in case the token is already close to expiry
+    refreshToken();
+    const interval = setInterval(refreshToken, REFRESH_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, []);
+
   // 2️⃣ ⏱️ loader failsafe (NEVER logs out)
   useEffect(() => {
     if (!loading) return;

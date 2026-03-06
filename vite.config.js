@@ -25,13 +25,35 @@ export default defineConfig({
     clientsClaim: true,
     runtimeCaching: [
       {
+        // NetworkOnly for all Supabase auth endpoints — never serve stale tokens
+        urlPattern: /^https:\/\/.*\.supabase\.co\/auth\//,
+        handler: 'NetworkOnly',
+      },
+      {
+        // NetworkFirst with short expiration for other Supabase API calls
         urlPattern: /^https:\/\/.*\.supabase\.co\//,
         handler: 'NetworkFirst',
         options: {
-          cacheName: 'supabase-cache',
+          cacheName: 'supabase-api-cache',
+          networkTimeoutSeconds: 10,
           expiration: {
             maxEntries: 50,
-            maxAgeSeconds: 300,
+            maxAgeSeconds: 300, // 5 minutes
+          },
+          cacheableResponse: {
+            statuses: [0, 200],
+          },
+        },
+      },
+      {
+        // CacheFirst for JS/CSS app shell assets
+        urlPattern: /\.(?:js|css)$/,
+        handler: 'CacheFirst',
+        options: {
+          cacheName: 'app-shell-cache',
+          expiration: {
+            maxEntries: 60,
+            maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
           },
         },
       },
