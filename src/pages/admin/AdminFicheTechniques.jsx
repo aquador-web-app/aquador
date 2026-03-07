@@ -178,41 +178,41 @@ useEffect(() => {
 
   // === Save fiche ===
   const saveFiche = async () => {
-    if (!studentId) return setMessage("⚠️ Veuillez sélectionner un élève.");
-    const num = (v) => (v === "" || v === null ? 0 : Number(v));
+  if (!studentId) return setMessage("⚠️ Veuillez sélectionner un élève.");
+  const num = (v) => (v === "" || v === null ? 0 : Number(v));
 
-    const record = {
-      student_id: studentId,
-      student_name: studentName,
-      academic_year: academicYear,
-      month: monthLabel, // same label format as bulletin
-      age: num(measure.age),
-      long_bras_gauche: num(measure.long_bras_gauche),
-      long_bras_droit: num(measure.long_bras_droit),
-      long_pied_gauche: num(measure.long_pied_gauche),
-      long_pied_droit: num(measure.long_pied_droit),
-      saut_avec: num(measure.saut_avec),
-      saut_elan_bras_gauche: num(measure.saut_elan_bras_gauche),
-      saut_elan_bras_droit: num(measure.saut_elan_bras_droit),
-      saut_stable_bras_gauche: num(measure.saut_stable_bras_gauche),
-      saut_stable_bras_droit: num(measure.saut_stable_bras_droit),
-      largeur_ventre: num(measure.largeur_ventre),
-      taille: num(measure.taille),
-      poids_lbs: num(measure.poids_lbs),
-      saut_stable_deux_bras: num(measure.saut_stable_deux_bras),
-    };
-
-    const { error } = await supabase
-      .from("fiche_technique")
-      .upsert(record, { onConflict: "student_id,month" });
-
-    setMessage(
-      error
-        ? "❌ " + error.message
-        : `💾 Fiche enregistrée avec succès pour ${monthLabel} !`
-    );
-    setTimeout(() => setMessage(""), 4000);
+  const record = {
+    student_id: studentId,
+    student_name: studentName,
+    academic_year: academicYear,
+    month: `${monthValue}-01`,
+    age: num(measure.age),
+    long_bras_gauche: num(measure.long_bras_gauche),
+    long_bras_droit: num(measure.long_bras_droit),
+    long_pied_gauche: num(measure.long_pied_gauche),
+    long_pied_droit: num(measure.long_pied_droit),
+    saut_avec: num(measure.saut_avec),
+    saut_elan_bras_gauche: num(measure.saut_elan_bras_gauche),
+    saut_elan_bras_droit: num(measure.saut_elan_bras_droit),
+    saut_stable_bras_gauche: num(measure.saut_stable_bras_gauche),
+    saut_stable_bras_droit: num(measure.saut_stable_bras_droit),
+    largeur_ventre: num(measure.largeur_ventre),
+    taille: num(measure.taille),
+    poids_lbs: num(measure.poids_lbs),
+    saut_stable_deux_bras: num(measure.saut_stable_deux_bras),
   };
+
+  const { error } = await supabase
+    .from("fiche_technique")
+    .upsert(record, { onConflict: "student_id,month" });
+
+  setMessage(
+    error
+      ? "❌ " + error.message
+      : `💾 Fiche enregistrée avec succès pour ${monthLabel} !`
+  );
+  setTimeout(() => setMessage(""), 4000);
+};
 
   const handleChange = (field, value) =>
     setMeasure((prev) => ({ ...prev, [field]: value }));
