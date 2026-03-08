@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { formatMonth, formatDateFrSafe } from "../../lib/dateUtils";
 
-const SCALE = ["E", "TB", "B", "AB", "A", "P"];
+const SCALE = ["N/A", "E", "TB", "B", "AB", "A", "P"];
 
 const FIELDS = {
   HABILITE: ["respiration", "flottage", "battement", "posture"],
@@ -359,6 +359,7 @@ const label = rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1);
         {/* Barème */}
         <p className="italic text-sm text-gray-600 mb-3">
           <span className="font-semibold">Barème :</span>{" "}
+          <span className="ml-2">N/A : Non Applicable</span>{" "}
           <span className="ml-2">E : Excellent</span>{" "}
           <span className="ml-4">TB : Très Bien</span>{" "}
           <span className="ml-4">B : Bien</span>{" "}
@@ -461,6 +462,7 @@ const label = rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1);
 <div className="bg-white border rounded-xl p-4 text-sm text-gray-700">
   <p className="font-semibold mb-2">Barème :</p>
   <ul className="space-y-1">
+    <li><strong>N/A</strong> : Non Applicable</li>
     <li><strong>E</strong> : Excellent</li>
     <li><strong>TB</strong> : Très Bien</li>
     <li><strong>B</strong> : Bien</li>

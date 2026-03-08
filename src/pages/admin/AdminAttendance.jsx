@@ -681,6 +681,16 @@ const staffMonthlyTop = useMemo(() => {
   return tops;
 }, [staffMonthlyRows]);
 
+const totalPresenceJournee = useMemo(() => {
+  return sessions.reduce((total, session) => {
+    const sessionPresentCount = (session.inscriptions || []).filter((e) =>
+      ["present", "late"].includes(e.presence?.status)
+    ).length;
+
+    return total + sessionPresentCount;
+  }, 0);
+}, [sessions]);
+
 
 
   const openModal = (action, enrollment_id, sessionStartHHMM) => {
@@ -987,6 +997,7 @@ const scanned_profile_id = m[0];
         {chargement ? (
           <div className="text-center py-3 text-aquaBlue font-medium">⏳ Chargement des données…</div>
         ) : (
+          <>
           <table className="w-full text-sm border-collapse">
             <thead className="bg-gray-100 text-gray-600">
               <tr>
@@ -1089,6 +1100,13 @@ const scanned_profile_id = m[0];
               )}
             </tbody>
           </table>
+          <div className="mt-4 pt-4 border-t flex justify-end">
+        <div className="bg-blue-50 text-aquaBlue font-semibold px-4 py-2 rounded-xl">
+          Total Présence de la journée :{" "}
+          <span className="text-xl font-bold">{totalPresenceJournee}</span>
+        </div>
+      </div>
+    </>
         )}
       </div>
       </div>
