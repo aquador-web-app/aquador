@@ -324,6 +324,10 @@ const realtimeRefresh = (type) => {
         fetchStats();
         break;
 
+      case "payments":
+        setTimeout(() => fetchStats(), 300);
+        break;
+
       case "attendance":
         fetchStats();
         break;
@@ -769,6 +773,12 @@ useEffect(() => {
       "postgres_changes",
       { event: "*", schema: "public", table: "invoices" },
       () => realtimeRefresh("invoices")
+    )
+
+        .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "payments" },
+      () => realtimeRefresh("payments")
     )
 
     .on(

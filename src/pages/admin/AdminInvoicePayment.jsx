@@ -4,6 +4,15 @@
   import { useGlobalAlert } from "../../components/GlobalAlert";
   import HoverOverlay from "../../components/HoverOverlay";
 
+  function sanitizeName(name) {
+  return String(name || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9_-]/g, "-")
+    .replace(/-+/g, "-")
+    .toLowerCase();
+}
+
   export default function AdminInvoicePayment() {
     const [invoices, setInvoices] = useState([]);
     const [selectedInvoiceId, setSelectedInvoiceId] = useState("");
@@ -19,6 +28,9 @@
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const pageSize = 10;
+    const [proofUrl, setProofUrl] = useState(null);
+const [uploadingProof, setUploadingProof] = useState(false);
+const proofInputRef = useRef(null);
     // Hover overlays
 const expectedCardRef = useRef(null);
 const [expectedHovered, setExpectedHovered] = useState(false);
@@ -191,17 +203,65 @@ const todayISODate = () => {
       fetchPayments();
     }, [page, selectedProfileId]);
 
+    useEffect(() => {
+  const saved = localStorage.getItem("admin_payment_proof_url");
+  if (saved) setProofUrl(saved);
+}, []);
+
+useEffect(() => {
+  if (proofUrl) localStorage.setItem("admin_payment_proof_url", proofUrl);
+  else localStorage.removeItem("admin_payment_proof_url");
+}, [proofUrl]);
+
+async function handleProofPick(file) {
+  if (!file) return;
+
+  if (!selectedInvoiceId) {
+  showAlert("Veuillez d’abord sélectionner une facture.");
+  return;
+}
+
+  setUploadingProof(true);
+  setProofUrl(null);
+
+  try {
+    const invoice = invoices.find((inv) => inv.id === selectedInvoiceId);
+    const ext = file.name.split(".").pop();
+    const cleanName = sanitizeName(invoice?.full_name || "unknown");
+    const path = `proofs/${cleanName}_${Date.now()}.${ext}`;
+
+    const { error: uploadErr } = await supabase.storage
+      .from("documents")
+      .upload(path, file, { upsert: true });
+
+    if (uploadErr) throw uploadErr;
+
+    const { data: pub } = supabase.storage.from("documents").getPublicUrl(path);
+    setProofUrl(pub?.publicUrl || null);
+  } catch (err) {
+    console.error("Proof upload error:", err);
+    showAlert("Erreur lors du téléversement de la preuve.");
+  } finally {
+    setUploadingProof(false);
+  }
+}
+
     // ----------------- HANDLE PAYMENT -----------------
     async function handlePayment() {
     if (!selectedInvoiceId || !amount)
-      return alert("Veuillez choisir une facture et entrer un montant.");
+      return showAlert("Veuillez choisir une facture et entrer un montant.");
 
     setLoading(true);
     const invoice = invoices.find((inv) => inv.id === selectedInvoiceId);
     if (!invoice) {
       setLoading(false);
-      return alert("Facture introuvable.");
+      return showAlert("Facture introuvable.");
     }
+
+    if (method === "transfer" && !proofUrl) {
+  setLoading(false);
+  return showAlert("Veuillez joindre une preuve de virement.");
+}
 
     // Determine if payment should be pending approval
     const isPending =
@@ -223,8 +283,20 @@ const todayISODate = () => {
 
     if (payError) {
       setLoading(false);
-      return alert("Erreur enregistrement paiement: " + payError.message);
+      return showAlert("Erreur enregistrement paiement: " + payError.message);
     }
+
+    if (method === "transfer" && proofUrl) {
+  const { error: proofErr } = await supabase
+    .from("invoices")
+    .update({ proof_url: proofUrl })
+    .eq("id", selectedInvoiceId);
+
+  if (proofErr) {
+    setLoading(false);
+    return showAlert("Erreur enregistrement preuve: " + proofErr.message);
+  }
+}
 
     // Only update invoice totals immediately if payment is auto-approved
     if (!isPending) {
@@ -247,21 +319,23 @@ const todayISODate = () => {
 
       if (invError) {
         setLoading(false);
-        return alert("Erreur mise à jour facture: " + invError.message);
+        return showAlert("Erreur mise à jour facture: " + invError.message);
       }
     }
 
     setLoading(false);
 
     if (isPending) {
-      alert("💸 Paiement soumis pour approbation par l’administrateur.");
+      showAlert("💸 Paiement soumis pour approbation par l’administrateur.");
     } else {
-      alert("✅ Paiement enregistré et approuvé automatiquement !");
+      showAlert("✅ Paiement enregistré et approuvé automatiquement !");
     }
 
     setAmount("");
     setNotes("");
     setSelectedInvoiceId("");
+    setProofUrl(null);
+    localStorage.removeItem("admin_payment_proof_url");
     fetchInvoices();
     fetchPayments();
     fetchPendingPayments();
@@ -1083,7 +1157,12 @@ async function fetchRevertedPaymentsLive() {
         <label className="block mb-2 font-medium">Choisir une facture</label>
         <select
           value={selectedInvoiceId}
-          onChange={(e) => setSelectedInvoiceId(e.target.value)}
+          onChange={(e) => {
+  setSelectedInvoiceId(e.target.value);
+  setProofUrl(null);
+  localStorage.removeItem("admin_payment_proof_url");
+  if (proofInputRef.current) proofInputRef.current.value = "";
+}}
           className="w-full border px-2 py-1 rounded mb-4"
         >
           <option value="">-- Sélectionner une facture --</option>
@@ -1109,7 +1188,16 @@ async function fetchRevertedPaymentsLive() {
         <label className="block mb-2 font-medium">Méthode de paiement</label>
         <select
           value={method}
-          onChange={(e) => setMethod(e.target.value)}
+          onChange={(e) => {
+  const value = e.target.value;
+  setMethod(value);
+
+  if (value !== "transfer") {
+    setProofUrl(null);
+    localStorage.removeItem("admin_payment_proof_url");
+    if (proofInputRef.current) proofInputRef.current.value = "";
+  }
+}}
           className="w-full border px-2 py-1 rounded mb-4"
         >
           <option value="cash">Espèces</option>
@@ -1117,6 +1205,37 @@ async function fetchRevertedPaymentsLive() {
           <option value="transfer">Virement</option>
           <option value="other">Autre</option>
         </select>
+
+        {method === "transfer" && (
+  <div className="mb-4">
+    <label className="block mb-2 font-medium">
+      Preuve de virement
+    </label>
+
+    <input
+  ref={proofInputRef}
+  type="file"
+  accept=".pdf,.jpg,.jpeg,.png"
+  onChange={(e) => handleProofPick(e?.target?.files?.[0])}
+  className="w-full border px-2 py-1 rounded"
+/>
+
+    {uploadingProof && (
+      <p className="text-sm text-gray-500 mt-2">Téléversement en cours...</p>
+    )}
+
+    {!uploadingProof && proofUrl && (
+      <a
+        href={proofUrl}
+        target="_blank"
+        rel="noreferrer"
+        className="text-sm text-blue-600 underline mt-2 inline-block"
+      >
+        Voir la preuve téléversée
+      </a>
+    )}
+  </div>
+)}
 
         {/* Notes */}
         <label className="block mb-2 font-medium">Notes</label>
