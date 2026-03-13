@@ -1,4 +1,5 @@
-  import React, { useEffect, useRef, useState } from "react";
+// src/pages/Admin/AdminInvoicePayment.jsx
+import React, { useEffect, useRef, useState } from "react";
   import { supabase } from "../../lib/supabaseClient";
   import { formatCurrencyUSD, formatDateFrSafe, formatMonth } from "../../lib/dateUtils";
   import { useGlobalAlert } from "../../components/GlobalAlert";
@@ -13,7 +14,7 @@
     .toLowerCase();
 }
 
-  export default function AdminInvoicePayment() {
+  export default function AdminInvoicePayment({ onPaymentChange }) {
     const [invoices, setInvoices] = useState([]);
     const [selectedInvoiceId, setSelectedInvoiceId] = useState("");
     const [amount, setAmount] = useState("");
@@ -145,7 +146,7 @@ const todayISODate = () => {
     async function fetchInvoices() {
       const { data, error } = await supabase
         .from("invoices")
-        .select("id, full_name, total, paid_total, status, due_date, month")
+        .select("id, full_name, total, paid_total, status, due_date, month, signup_type")
         .neq("status", "paid")
         .order("due_date", { ascending: true });
       if (!error) setInvoices(data);
@@ -299,31 +300,49 @@ async function handleProofPick(file) {
 }
 
     // Only update invoice totals immediately if payment is auto-approved
-    if (!isPending) {
-      const newPaidTotal = Number(invoice.paid_total) + Number(amount);
-      const newStatus =
-    newPaidTotal === 0
+    let updatedInvoiceForOverview = null;
+
+if (!isPending) {
+  const newPaidTotal = Number(invoice.paid_total || 0) + Number(amount || 0);
+  const invoiceTotal = Number(invoice.total || 0);
+
+  const newStatus =
+    newPaidTotal <= 0
       ? "pending"
-      : newPaidTotal < invoice.total
+      : newPaidTotal < invoiceTotal
       ? "partial"
       : "paid";
 
+  const { error: invError } = await supabase
+    .from("invoices")
+    .update({
+      paid_total: newPaidTotal,
+      status: newStatus,
+    })
+    .eq("id", selectedInvoiceId);
 
-      const { error: invError } = await supabase
-        .from("invoices")
-        .update({
-          paid_total: newPaidTotal,
-          status: newStatus,
-        })
-        .eq("id", selectedInvoiceId);
-
-      if (invError) {
-        setLoading(false);
-        return showAlert("Erreur mise à jour facture: " + invError.message);
-      }
-    }
-
+  if (invError) {
     setLoading(false);
+    return showAlert("Erreur mise à jour facture: " + invError.message);
+  }
+
+  const { data: refreshedInvoice, error: refreshedInvoiceErr } = await supabase
+    .from("invoices")
+    .select("id, full_name, total, paid_total, status, signup_type, month")
+    .eq("id", selectedInvoiceId)
+    .single();
+
+  if (refreshedInvoiceErr) {
+    setLoading(false);
+    return showAlert("Erreur lecture facture mise à jour: " + refreshedInvoiceErr.message);
+  }
+
+  console.log("✅ refreshed invoice from DB after payment:", refreshedInvoice);
+
+  updatedInvoiceForOverview = refreshedInvoice;
+}
+
+        setLoading(false);
 
     if (isPending) {
       showAlert("💸 Paiement soumis pour approbation par l’administrateur.");
@@ -336,13 +355,34 @@ async function handleProofPick(file) {
     setSelectedInvoiceId("");
     setProofUrl(null);
     localStorage.removeItem("admin_payment_proof_url");
-    fetchInvoices();
-    fetchPayments();
-    fetchPendingPayments();
-    fetchExpectedRevenueLive();
-    fetchCurrentRevenueLive();
-    fetchUnpaidRevenueLive();
-    fetchRevertedPaymentsLive();
+
+    console.log("💳 handlePayment updatedInvoiceForOverview:", updatedInvoiceForOverview);
+console.log("💳 handlePayment onPaymentChange exists:", !!onPaymentChange);
+console.log("💳 handlePayment isPending:", isPending);
+
+    // ✅ refresh parent overview immediately after payment/invoice update
+    // ✅ instant parent UI update first
+if (onPaymentChange && !isPending && updatedInvoiceForOverview) {
+  onPaymentChange({
+    type: "invoice-updated",
+    invoice: updatedInvoiceForOverview,
+  });
+} else if (onPaymentChange) {
+  onPaymentChange();
+}
+
+// ✅ then refresh local page data in background of this same action
+Promise.all([
+  fetchInvoices(),
+  fetchPayments(),
+  fetchPendingPayments(),
+  fetchExpectedRevenueLive(),
+  fetchCurrentRevenueLive(),
+  fetchUnpaidRevenueLive(),
+  fetchRevertedPaymentsLive(),
+]).catch((err) => {
+  console.error("Post-payment refresh error:", err);
+});
   }
 
 
@@ -354,10 +394,23 @@ async function handleProofPick(file) {
     try {
       // 1️⃣ Get payment + its invoice
       const { data: payment, error: fetchErr } = await supabase
-        .from("payments")
-        .select("id, amount, invoice_id, invoices(paid_total, total, status)")
-        .eq("id", id)
-        .single();
+  .from("payments")
+  .select(`
+    id,
+    amount,
+    invoice_id,
+    invoices (
+      id,
+      full_name,
+      total,
+      paid_total,
+      status,
+      signup_type,
+      month
+    )
+  `)
+  .eq("id", id)
+  .single();
 
       if (fetchErr) throw fetchErr;
       if (!payment) throw new Error("Paiement introuvable.");
@@ -391,14 +444,36 @@ async function handleProofPick(file) {
 
       if (payErr) throw payErr;
 
-      await showAlert("✅ Paiement approuvé et facture mise à jour !");
-      await fetchPendingPayments();
-      await fetchPayments();
-      await fetchInvoices();
-      fetchExpectedRevenueLive();
-      fetchCurrentRevenueLive();
-      fetchUnpaidRevenueLive();
-      fetchRevertedPaymentsLive();
+            await showAlert("✅ Paiement approuvé et facture mise à jour !");
+
+      // ✅ refresh overview first
+      if (onPaymentChange) {
+  onPaymentChange({
+    type: "invoice-updated",
+    invoice: {
+      id: payment.invoice_id,
+      full_name: payment.invoices?.full_name,
+      total: Number(payment.invoices?.total || 0),
+      paid_total: Number(newPaidTotal || 0),
+      status: newStatus,
+      signup_type: payment.invoices?.signup_type,
+      month: payment.invoices?.month,
+    },
+  });
+}
+
+// ✅ then refresh local data without blocking UI
+Promise.all([
+  fetchPendingPayments(),
+  fetchPayments(),
+  fetchInvoices(),
+  fetchExpectedRevenueLive(),
+  fetchCurrentRevenueLive(),
+  fetchUnpaidRevenueLive(),
+  fetchRevertedPaymentsLive(),
+]).catch((err) => {
+  console.error("Post-approval refresh error:", err);
+});
     } catch (err) {
       await showAlert("❌ Erreur lors de l’approbation : " + err.message);
     }
@@ -412,10 +487,10 @@ async function handleProofPick(file) {
 
     try {
       const { error } = await supabase.from("payments").delete().eq("id", id);
-      if (error) throw error;
+if (error) throw error;
 
-      await showAlert("🗑️ Paiement rejeté.");
-      fetchPendingPayments();
+await showAlert("🗑️ Paiement rejeté.");
+await fetchPendingPayments();
     } catch (err) {
       await showAlert("❌ Erreur rejet : " + err.message);
     }
@@ -494,22 +569,46 @@ if (item?.id) {
         : "paid";
 
     // 4️⃣ Update invoice
-    await supabase
-      .from("invoices")
-      .update({
-        paid_total: newPaidTotal,
-        status: newStatus,
-      })
-      .eq("id", invoiceId);
+    const { error: updateInvoiceErr } = await supabase
+  .from("invoices")
+  .update({
+    paid_total: newPaidTotal,
+    status: newStatus,
+  })
+  .eq("id", invoiceId);
 
-    await showAlert("🔄 Paiement remis en attente d’approbation.");
-    fetchPayments();
-    fetchPendingPayments();
-    fetchInvoices();
-    fetchExpectedRevenueLive();
-    fetchCurrentRevenueLive();
-    fetchUnpaidRevenueLive();
-    fetchRevertedPaymentsLive();
+if (updateInvoiceErr) throw updateInvoiceErr;
+
+const { data: updatedInvoice, error: updatedInvoiceErr } = await supabase
+  .from("invoices")
+  .select("id, full_name, total, paid_total, status, signup_type, month")
+  .eq("id", invoiceId)
+  .single();
+
+if (updatedInvoiceErr) throw updatedInvoiceErr;
+
+        await showAlert("🔄 Paiement remis en attente d’approbation.");
+
+    // ✅ refresh overview first
+   if (onPaymentChange) {
+  onPaymentChange({
+    type: "invoice-updated",
+    invoice: updatedInvoice,
+  });
+}
+
+// ✅ then refresh local data without blocking UI
+Promise.all([
+  fetchPayments(),
+  fetchPendingPayments(),
+  fetchInvoices(),
+  fetchExpectedRevenueLive(),
+  fetchCurrentRevenueLive(),
+  fetchUnpaidRevenueLive(),
+  fetchRevertedPaymentsLive(),
+]).catch((err) => {
+  console.error("Post-revert refresh error:", err);
+});
   } catch (err) {
     console.error(err);
     await showAlert("❌ Erreur : " + err.message);

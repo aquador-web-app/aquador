@@ -277,6 +277,7 @@ const [consentHovered, setConsentHovered] = useState(false);
 // Hover – Nouveaux inscrits
 const newUsersCardRef = useRef(null);
 const [newUsersHovered, setNewUsersHovered] = useState(false);
+const fetchStatsRequestRef = useRef(0);
 
 
 const [role, setRole] = useState(null);
@@ -307,7 +308,75 @@ const fetchUnread = async () => {
   }
 };
 
+const applyInvoiceRealtimeToUnpaid = (invoiceRow) => {
+  if (!invoiceRow?.id) return;
+
+  setUnpaidInvoices((prev) => {
+    const prevRows = [...(prev?.rows || [])];
+
+    const remaining = Math.max(
+      0,
+      Number(invoiceRow.total || 0) - Number(invoiceRow.paid_total || 0)
+    );
+
+    const shouldShow =
+      (invoiceRow.status === "pending" || invoiceRow.status === "partial") &&
+      invoiceRow.signup_type !== "children_only" &&
+      remaining > 0;
+
+    const idx = prevRows.findIndex((r) => r.id === invoiceRow.id);
+
+    let nextRows;
+
+    if (!shouldShow) {
+      nextRows = prevRows.filter((r) => r.id !== invoiceRow.id);
+    } else {
+      const nextRow = {
+        id: invoiceRow.id,
+        name: invoiceRow.full_name || "—",
+        period: invoiceRow.month || null,
+        signup_type: invoiceRow.signup_type,
+        status: invoiceRow.status,
+        remaining,
+      };
+
+      if (idx >= 0) {
+        nextRows = [...prevRows];
+        nextRows[idx] = nextRow;
+      } else {
+        nextRows = [...prevRows, nextRow];
+      }
+
+      nextRows.sort((a, b) =>
+        (a.name || "").localeCompare(b.name || "", "fr", {
+          sensitivity: "base",
+        })
+      );
+    }
+
+    const nextState = {
+      count: nextRows.length,
+      total: nextRows.reduce((sum, r) => sum + Number(r.remaining || 0), 0),
+      rows: nextRows,
+    };
+
+    console.log("⚡ applyInvoiceRealtimeToUnpaid ->", nextState);
+
+    return nextState;
+  });
+};
+
 const realtimeRefresh = (type) => {
+  // ✅ invoices are handled directly by realtime payload now
+  if (type === "invoices") {
+    return;
+  }
+
+  // 🚫 payments are not source of truth for unpaid invoices card
+  if (type === "payments") {
+    return;
+  }
+
   debounceRefresh(() => {
     switch (type) {
       case "profiles":
@@ -318,14 +387,6 @@ const realtimeRefresh = (type) => {
       case "enrollments":
         fetchStats();
         fetchSessions();
-        break;
-
-      case "invoices":
-        fetchStats();
-        break;
-
-      case "payments":
-        setTimeout(() => fetchStats(), 300);
         break;
 
       case "attendance":
@@ -344,239 +405,321 @@ const realtimeRefresh = (type) => {
 
 
 const fetchStats = async () => {
+  const requestId = ++fetchStatsRequestRef.current;
   setStatsLoaded(false);
-    // 1) TOTAL users on platform (use PROFILES, not auth.users)
+
+  try {
+    // 1) TOTAL users on platform
     const { count: profilesTotal } = await supabase
       .from("profiles")
       .select("*", { count: "exact", head: true });
-    setUserCount(profilesTotal || 0);
 
-    // Breakdown for tooltip
+    if (requestId !== fetchStatsRequestRef.current) return;
+
     const { count: infl } = await supabase
       .from("profiles")
       .select("*", { count: "exact", head: true })
       .eq("role", "influencer");
-    setInfluencerCount(infl || 0);
+
+    if (requestId !== fetchStatsRequestRef.current) return;
 
     const { count: parents } = await supabase
       .from("profiles")
       .select("*", { count: "exact", head: true })
       .eq("signup_type", "children_only");
 
-    setParentCount(parents || 0);
+    if (requestId !== fetchStatsRequestRef.current) return;
 
     const { count: staff } = await supabase
       .from("profiles")
       .select("*", { count: "exact", head: true })
       .in("role", ["admin", "teacher", "assistant"]);
 
-    setStaffCount(staff || 0);
-
+    if (requestId !== fetchStatsRequestRef.current) return;
 
     const { count: enrolls } = await supabase
       .from("enrollments")
       .select("*", { count: "exact", head: true })
       .eq("status", "active");
-    setActiveEnrollmentCount(enrolls || 0);
 
-    // 2) Courses (yours already worked)
+    if (requestId !== fetchStatsRequestRef.current) return;
+
     const { count: courses } = await supabase
       .from("courses")
       .select("*", { count: "exact", head: true });
-    setCourseCount(courses || 0);
 
-    // 3) Unpaid invoices (across platform, not filtered by selected user)
+    if (requestId !== fetchStatsRequestRef.current) return;
+
     const { data: invs } = await supabase
       .from("invoices")
-      .select("id,total, full_name, paid_total,status, signup_type, month");
-      
+      .select("id,total,full_name,paid_total,status,signup_type,month");
+
+    if (requestId !== fetchStatsRequestRef.current) return;
 
     const unpaid = (invs || [])
-  .map((r) => {
-    const remaining = Number(r.total || 0) - Number(r.paid_total || 0);
+      .map((r) => {
+        const remaining = Number(r.total || 0) - Number(r.paid_total || 0);
 
-    return {
-      id: r.id,
-      name: r.full_name || "—",
-      period: r.month || null,  // ✅ use DB month
-      signup_type: r.signup_type,
-      status: r.status,
-      remaining,
-    };
-  })
-  .filter((r) =>
-    (r.status === "pending" || r.status === "partial") &&
-    r.signup_type !== "children_only" &&
-    r.remaining > 0
-  )
-  .sort((a, b) => a.name.localeCompare(b.name, "fr", { sensitivity: "base" }));
+        return {
+          id: r.id,
+          name: r.full_name || "—",
+          period: r.month || null,
+          signup_type: r.signup_type,
+          status: r.status,
+          remaining,
+        };
+      })
+      .filter(
+        (r) =>
+          (r.status === "pending" || r.status === "partial") &&
+          r.signup_type !== "children_only" &&
+          r.remaining > 0
+      )
+      .sort((a, b) =>
+        a.name.localeCompare(b.name, "fr", { sensitivity: "base" })
+      );
 
+    const unpaidCount = unpaid.length;
+    const unpaidTotal = unpaid.reduce((sum, r) => sum + r.remaining, 0);
 
-const unpaidCount = unpaid.length;
+    const { data: presences } = await supabase
+      .from("attendance")
+      .select("status, created_at");
 
-const unpaidTotal = unpaid.reduce(
-  (sum, r) => sum + r.remaining,
-  0
-);
+    if (requestId !== fetchStatsRequestRef.current) return;
 
-setUnpaidInvoices({
-  count: unpaidCount,
-  total: unpaidTotal,
-  rows: unpaid,
-});
-
-
-    // 4) Attendance this month (if your table has a date column, prefer filtering in SQL)
-    const { data: presences } = await supabase.from("attendance").select("status, created_at");
-    const all = presences || [];
-    // compute % for current month
     const now = getHaitiNow();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
     const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-    const thisMonth = all.filter(p => {
+
+    const all = presences || [];
+    const thisMonth = all.filter((p) => {
       const d = new Date(p.created_at || now);
       return d >= start && d <= end;
     });
+
     const total = thisMonth.length;
-    const presents = thisMonth.filter(p => p.status === "present").length;
+    const presents = thisMonth.filter((p) => p.status === "present").length;
     const percent = total ? ((presents / total) * 100).toFixed(1) : 0;
+
+    const { data: comms, error: commErr } = await supabase
+      .from("commissions")
+      .select("amount, remaining_amount")
+      .gt("remaining_amount", 0);
+
+    if (requestId !== fetchStatsRequestRef.current) return;
+
+    const totalComms = commErr
+      ? 0
+      : (comms || []).reduce(
+          (sum, c) => sum + Number(c.remaining_amount ?? 0),
+          0
+        );
+
+    const firstDayThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const firstDayNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const firstDayPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+    const { data: newUsersRows } = await supabase
+      .from("profiles_with_unpaid")
+      .select("id, full_name, created_at")
+      .gte("created_at", getHaitiISOString(firstDayThisMonth))
+      .lt("created_at", getHaitiISOString(firstDayNextMonth))
+      .neq("signup_type", "children_only")
+      .neq("role", "teacher")
+      .order("created_at", { ascending: false });
+
+    if (requestId !== fetchStatsRequestRef.current) return;
+
+    const { count: prevMonthCount } = await supabase
+      .from("profiles_with_unpaid")
+      .select("*", { count: "exact", head: true })
+      .gte("created_at", getHaitiISOString(firstDayPrevMonth))
+      .lt("created_at", getHaitiISOString(firstDayThisMonth));
+
+    if (requestId !== fetchStatsRequestRef.current) return;
+
+    const { data: consentRows, error: consErr } = await supabase
+      .from("consentements_signed")
+      .select("user_id, full_name")
+      .order("full_name", { ascending: true });
+
+    if (requestId !== fetchStatsRequestRef.current) return;
+
+    const consentUsers = consErr
+      ? []
+      : (consentRows || [])
+          .map((r) => ({
+            id: r.user_id,
+            name: r.full_name,
+          }))
+          .sort((a, b) =>
+            a.name.localeCompare(b.name, "fr", { sensitivity: "base" })
+          );
+
+    const { data: nonEnrolledRows, error: nonEnrErr } = await supabase
+      .from("profiles")
+      .select(`
+        id,
+        full_name,
+        enrollments!left ( id )
+      `)
+      .eq("is_active", true)
+      .neq("signup_type", "children_only")
+      .not("role", "eq", "influencer")
+      .not("role", "eq", "admin")
+      .not("role", "eq", "teacher")
+      .not("role", "eq", "assistant")
+      .not("role", "eq", "owner")
+      .is("enrollments", null)
+      .order("full_name", { ascending: true });
+
+    if (requestId !== fetchStatsRequestRef.current) return;
+
+    const { data: inactiveRows, error: inactiveErr } = await supabase
+      .from("profiles")
+      .select("id, full_name")
+      .eq("is_active", false)
+      .neq("signup_type", "children_only")
+      .not("role", "eq", "influencer")
+      .not("role", "eq", "admin")
+      .not("role", "eq", "teacher")
+      .not("role", "eq", "assistant")
+      .not("role", "eq", "owner")
+      .order("full_name", { ascending: true });
+
+    if (requestId !== fetchStatsRequestRef.current) return;
+
+    // ✅ apply state ONLY for latest request
+    setUserCount(profilesTotal || 0);
+    setInfluencerCount(infl || 0);
+    setParentCount(parents || 0);
+    setStaffCount(staff || 0);
+    setActiveEnrollmentCount(enrolls || 0);
+    setCourseCount(courses || 0);
+
+    setUnpaidInvoices({
+      count: unpaidCount,
+      total: unpaidTotal,
+      rows: unpaid,
+    });
+
     setAttendance({ percent, total });
+    setCommissions(totalComms);
 
-    // 5) Commissions still available (sum of remaining_amount > 0)
-const { data: comms, error: commErr } = await supabase
-  .from("commissions")
-  .select("amount, remaining_amount")
-  .gt("remaining_amount", 0);  // only those with remaining funds
+    setNewUsers({
+      current: newUsersRows?.length || 0,
+      last: prevMonthCount || 0,
+      users: (newUsersRows || []).map((u) => ({
+        id: u.id,
+        name: u.full_name,
+        created_at: u.created_at,
+      })),
+    });
 
-if (commErr) {
-  console.error("❌ Error fetching commissions:", commErr);
-} else {
-  const totalComms = (comms || []).reduce(
-    (sum, c) => sum + Number(c.remaining_amount ?? 0),
-    0
-  );
-  setCommissions(totalComms);
-}
+    setConsentSigned({
+      count: consentUsers.length,
+      users: consentUsers,
+    });
 
+    setActiveNonEnrolled(
+      nonEnrErr
+        ? { count: 0, users: [] }
+        : {
+            count: nonEnrolledRows?.length || 0,
+            users: (nonEnrolledRows || []).map((u) => ({
+              id: u.id,
+              name: u.full_name,
+            })),
+          }
+    );
 
-// 6) New users (current month) + names
-const firstDayThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-const firstDayNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-const firstDayPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    setInactiveUsers(
+      inactiveErr
+        ? { count: 0, users: [] }
+        : {
+            count: inactiveRows?.length || 0,
+            users: (inactiveRows || []).map((u) => ({
+              id: u.id,
+              name: u.full_name,
+            })),
+          }
+    );
 
-// 👉 Current month users (with names)
-const { data: newUsersRows, error: newUsersErr } = await supabase
-  .from("profiles_with_unpaid")
-  .select("id, full_name, created_at")
-  .gte("created_at", getHaitiISOString(firstDayThisMonth))
-  .lt("created_at", getHaitiISOString(firstDayNextMonth))
-  .neq("signup_type", "children_only") 
-  .neq("role", "teacher") 
-  .order("created_at", { ascending: false });
+    setStatsLoaded(true);
+  } catch (err) {
+    console.error("❌ fetchStats error:", err);
+  }
+};
 
-// 👉 Previous month count (note only)
-const { count: prevMonthCount } = await supabase
-  .from("profiles_with_unpaid")
-  .select("*", { count: "exact", head: true })
-  .gte("created_at", getHaitiISOString(firstDayPrevMonth))
-  .lt("created_at", getHaitiISOString(firstDayThisMonth));
+const refreshOverviewCards = async (payload = null) => {
+  console.log("📥 refreshOverviewCards CALLED with payload:", payload);
 
-setNewUsers({
-  current: newUsersRows?.length || 0,
-  last: prevMonthCount || 0,
-  users: (newUsersRows || []).map(u => ({
-    id: u.id,
-    name: u.full_name,
-    created_at: u.created_at,
-  })),
-});
+  if (payload?.type === "invoice-updated" && payload.invoice) {
+    const inv = payload.invoice;
 
+    const remaining = Math.max(
+      0,
+      Number(inv.total || 0) - Number(inv.paid_total || 0)
+    );
 
-// 7) Consentement signé
-const { data: consentRows, error: consErr } = await supabase
-  .from("consentements_signed")
-  .select("user_id, full_name")
-  .order("full_name", { ascending: true });
+    const shouldShow =
+      (inv.status === "pending" || inv.status === "partial") &&
+      inv.signup_type !== "children_only" &&
+      remaining > 0;
 
-console.log("🔎 CONSENT ROWS FOUND:", consentRows, consErr);
+    setUnpaidInvoices((prev) => {
+      console.log("🟡 BEFORE unpaidInvoices:", prev);
 
+      const prevRows = [...(prev?.rows || [])];
+      const idx = prevRows.findIndex((r) => r.id === inv.id);
 
-if (!consErr) {
-  const users = (consentRows || [])
-  .map(r => ({
-    id: r.user_id,
-    name: r.full_name
-  }))
-  .sort((a, b) => a.name.localeCompare(b.name, "fr", { sensitivity: "base" }));
+      let nextRows;
 
+      if (!shouldShow) {
+        nextRows = prevRows.filter((r) => r.id !== inv.id);
+      } else {
+        const nextRow = {
+          id: inv.id,
+          name: inv.full_name || "—",
+          period: inv.month || null,
+          signup_type: inv.signup_type,
+          status: inv.status,
+          remaining,
+        };
 
-  setConsentSigned({
-    count: users.length,
-    users
-  });
-}
+        if (idx >= 0) {
+          nextRows = [...prevRows];
+          nextRows[idx] = nextRow;
+        } else {
+          nextRows = [...prevRows, nextRow];
+        }
 
-// 8) Actifs non inscrits (active users with ZERO enrollments)
-const { data: nonEnrolledRows, error: nonEnrErr } = await supabase
-  .from("profiles")
-  .select(`
-    id,
-    full_name,
-    enrollments!left ( id )
-  `)
-  .eq("is_active", true)
-  .neq("signup_type", "children_only")
-  .not("role", "eq", "influencer") // optional safety
-  .not("role", "eq", "admin")
-  .not("role", "eq", "teacher")
-  .not("role", "eq", "assistant")
-  .not("role", "eq", "owner")
-  .is("enrollments", null)
-  .order("full_name", { ascending: true });
+        nextRows.sort((a, b) =>
+          (a.name || "").localeCompare(b.name || "", "fr", {
+            sensitivity: "base",
+          })
+        );
+      }
 
+      const nextState = {
+        count: nextRows.length,
+        total: nextRows.reduce((sum, r) => sum + Number(r.remaining || 0), 0),
+        rows: nextRows,
+      };
 
-if (nonEnrErr) {
-  console.error("❌ Active non-enrolled error:", nonEnrErr);
-  setActiveNonEnrolled({ count: 0, users: [] });
-} else {
-  setActiveNonEnrolled({
-    count: nonEnrolledRows?.length || 0,
-    users: (nonEnrolledRows || []).map(u => ({
-      id: u.id,
-      name: u.full_name,
-    })),
-  });
-}
-setStatsLoaded(true);
+      console.log("🟢 AFTER unpaidInvoices:", nextState);
 
-// 9) Inactifs (inactive profiles)
-const { data: inactiveRows, error: inactiveErr } = await supabase
-  .from("profiles")
-  .select("id, full_name")
-  .eq("is_active", false)
-  .neq("signup_type", "children_only")
-  .not("role", "eq", "influencer")
-  .not("role", "eq", "admin")
-  .not("role", "eq", "teacher")
-  .not("role", "eq", "assistant")
-  .not("role", "eq", "owner")
-  .order("full_name", { ascending: true });
+      return nextState;
+    });
 
-if (inactiveErr) {
-  console.error("❌ Inactive users error:", inactiveErr);
-  setInactiveUsers({ count: 0, users: [] });
-} else {
-  setInactiveUsers({
-    count: inactiveRows?.length || 0,
-    users: (inactiveRows || []).map(u => ({
-      id: u.id,
-      name: u.full_name,
-    })),
-  });
-}
+    return;
+  }
 
+  console.log("🔄 refreshOverviewCards fallback -> fetchStats()");
+  await fetchStats();
+};
 
-  };
 
   
 
@@ -614,6 +757,17 @@ useEffect(() => {
   fetchBirthdays();
   fetchSessions();
 }, []);
+
+useEffect(() => {
+  if (activeTab === "overview") {
+    fetchStats();
+  }
+}, [activeTab]);
+
+useEffect(() => {
+  console.log("📊 unpaidInvoices STATE CHANGED:", unpaidInvoices);
+}, [unpaidInvoices]);
+
 
 async function fetchBirthdays() {
   const haitiNow = getHaitiNow();
@@ -770,10 +924,34 @@ useEffect(() => {
     )
 
     .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "invoices" },
-      () => realtimeRefresh("invoices")
-    )
+  "postgres_changes",
+  { event: "*", schema: "public", table: "invoices" },
+  (payload) => {
+    console.log("📡 invoices realtime payload:", payload);
+
+    // ✅ update unpaid card directly from realtime row
+    if (payload.eventType === "INSERT" || payload.eventType === "UPDATE") {
+      applyInvoiceRealtimeToUnpaid(payload.new);
+      return;
+    }
+
+    if (payload.eventType === "DELETE") {
+      setUnpaidInvoices((prev) => {
+        const nextRows = (prev?.rows || []).filter((r) => r.id !== payload.old?.id);
+
+        return {
+          count: nextRows.length,
+          total: nextRows.reduce((sum, r) => sum + Number(r.remaining || 0), 0),
+          rows: nextRows,
+        };
+      });
+      return;
+    }
+
+    // fallback safety
+    realtimeRefresh("invoices");
+  }
+)
 
         .on(
       "postgres_changes",
@@ -1456,7 +1634,12 @@ const totalUtilisateursPlateforme =
       case "factures-invoices":
         return <AdminInvoices />
       case "invoicespayment":
-        return <AdminInvoicePayment />
+  return (
+    <AdminInvoicePayment
+      key="admin-invoice-payment"
+      onPaymentChange={refreshOverviewCards}
+    />
+  )
       case "invoices-templates":
         return <AdminInvoiceTemplates/>
       case "boutique-invoices-templates":
