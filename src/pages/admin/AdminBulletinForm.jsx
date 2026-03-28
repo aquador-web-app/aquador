@@ -74,31 +74,127 @@ export default function AdminBulletinForm() {
 useEffect(() => {
   (async () => {
     try {
+      const today = new Date().toISOString().slice(0, 10);
+
+      // 1) Active enrollments
       const { data: activeEnrollments, error: enrErr } = await supabase
         .from("enrollments")
-        .select("profile_id")
-        .eq("status", "active");
+        .select(`
+          profile_id,
+          session_group,
+          course_id,
+          start_date,
+          end_date,
+          profiles_with_unpaid!inner (
+            id,
+            full_name
+          ),
+          courses:course_id (
+            name
+          )
+        `)
+        .eq("status", "active")
+        .lte("start_date", today)
+        .or(`end_date.is.null,end_date.gte.${today}`);
 
       if (enrErr) throw enrErr;
 
-      const activeIds = Array.from(
-        new Set((activeEnrollments || []).map((e) => e.profile_id))
+      const sessionGroups = Array.from(
+        new Set((activeEnrollments || []).map((e) => e.session_group).filter(Boolean))
       );
 
-      if (!activeIds.length) {
+      if (!sessionGroups.length) {
         setStudents([]);
         return;
       }
 
-      const { data: profilesData, error: profErr } = await supabase
-        .from("profiles_with_unpaid")
-        .select("id, full_name")
-        .in("id", activeIds)
-        .order("full_name", { ascending: true });
+      // 2) Get session info for each group so we can sort by class time
+      const { data: sessionsData, error: sessErr } = await supabase
+        .from("sessions")
+        .select(`
+          session_group,
+          start_time,
+          duration_hours,
+          start_date,
+          status,
+          course:course_id (
+            name
+          )
+        `)
+        .in("session_group", sessionGroups)
+        .order("start_date", { ascending: true })
+        .order("start_time", { ascending: true });
 
-      if (profErr) throw profErr;
+      if (sessErr) throw sessErr;
 
-      setStudents(profilesData || []);
+      // 3) Keep one representative session per session_group
+      const sessionMap = {};
+      (sessionsData || []).forEach((s) => {
+        if (!s.session_group) return;
+        if (!sessionMap[s.session_group]) {
+          sessionMap[s.session_group] = s;
+        }
+      });
+
+      const addHours = (hhmm, duration) => {
+        if (!hhmm || duration == null) return "";
+        const [h, m] = hhmm.split(":").map(Number);
+        const d = new Date();
+        d.setHours(h || 0, m || 0, 0, 0);
+        d.setHours(d.getHours() + Number(duration || 0));
+        return d.toTimeString().slice(0, 5);
+      };
+
+      // 4) Build student rows with course/time info
+      const rows = (activeEnrollments || []).map((e) => {
+        const sess = sessionMap[e.session_group] || null;
+
+        const startTime = sess?.start_time?.slice(0, 5) || "";
+        const endTime = startTime
+          ? addHours(startTime, sess?.duration_hours || 1)
+          : "";
+
+        const timeLabel =
+          startTime && endTime ? `${startTime} - ${endTime}` : "Sans horaire";
+
+        const courseName =
+          sess?.course?.name ||
+          e.courses?.name ||
+          "Cours sans nom";
+
+        return {
+          id: e.profile_id,
+          full_name: e.profiles_with_unpaid?.full_name || "—",
+          session_group: e.session_group || "",
+          course_name: courseName,
+          start_time: startTime,
+          end_time: endTime,
+          time_label: timeLabel,
+          group_label: `${timeLabel} — ${courseName}`,
+        };
+      });
+
+      // 5) Deduplicate same student in same group
+      const uniqueRows = Array.from(
+        new Map(
+          rows.map((r) => [`${r.id}-${r.session_group}`, r])
+        ).values()
+      );
+
+      // 6) Sort by class time, then course, then student name
+      uniqueRows.sort((a, b) => {
+        const tA = a.start_time || "99:99";
+        const tB = b.start_time || "99:99";
+
+        if (tA !== tB) return tA.localeCompare(tB);
+
+        const c = (a.course_name || "").localeCompare(b.course_name || "");
+        if (c !== 0) return c;
+
+        return (a.full_name || "").localeCompare(b.full_name || "");
+      });
+
+      setStudents(uniqueRows);
     } catch (err) {
       console.error("Erreur lors du chargement des élèves actifs :", err);
       setStudents([]);
@@ -111,6 +207,18 @@ useEffect(() => {
     const s = students.find((u) => u.id === studentId);
     setStudentName(s?.full_name || "");
   }, [studentId, students]);
+
+  const groupedStudents = useMemo(() => {
+  const map = {};
+
+  (students || []).forEach((s) => {
+    const key = s.group_label || "Sans groupe";
+    if (!map[key]) map[key] = [];
+    map[key].push(s);
+  });
+
+  return Object.entries(map);
+}, [students]);
 
   const monthRange = useMemo(() => {
     if (!monthValue) return null;
@@ -276,17 +384,22 @@ useEffect(() => {
         <div>
           <label className="text-sm text-gray-600 block mb-1">Élève</label>
           <select
-            className="border rounded-lg px-3 py-2 w-64 w-full"
-            value={studentId}
-            onChange={(e) => setStudentId(e.target.value)}
-          >
-            <option value="">— Sélectionner —</option>
-            {students.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.full_name}
-              </option>
-            ))}
-          </select>
+  className="border rounded-lg px-3 py-2 w-full"
+  value={studentId}
+  onChange={(e) => setStudentId(e.target.value)}
+>
+  <option value="">— Sélectionner —</option>
+
+  {groupedStudents.map(([groupLabel, items]) => (
+    <optgroup key={groupLabel} label={groupLabel}>
+      {items.map((s) => (
+        <option key={`${s.id}-${s.session_group}`} value={s.id}>
+          {s.full_name}
+        </option>
+      ))}
+    </optgroup>
+  ))}
+</select>
         </div>
 
         <div>
