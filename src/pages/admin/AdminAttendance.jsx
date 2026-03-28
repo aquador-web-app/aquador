@@ -932,6 +932,7 @@ const scanned_profile_id = m[0];
       <h3 className="font-semibold text-lg">
         Présence du {formatDateFrSafe(date)} / Professeurs et Assistante
       </h3>
+      
 
       <button
         onClick={() => {
@@ -1111,6 +1112,10 @@ const scanned_profile_id = m[0];
       </div>
       </div>
       <div className="md:hidden space-y-4">
+        <div className="bg-white rounded-xl shadow p-4 text-center text-blue-500">
+  Total Présence de la journée :{" "}
+  <span className="text-xl font-bold ">{totalPresenceJournee}</span>
+</div>
   {sessions.map((s) => (
     <div key={s.id} className="bg-white rounded-xl shadow p-4 space-y-2">
       <div className="font-semibold text-aquaBlue">
