@@ -74,31 +74,41 @@ const [unpaidDetails, setUnpaidDetails] = useState([]);    // [{ id, name, remai
 
 
 
-const fmtUSD = (v) => `USD ${Number(v || 0).toFixed(2)}`;
 
-// local YYYY-MM
-const monthKeyNow = () => {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  return `${y}-${m}-01`; // ✅ matches invoices.month like 2026-02-01
+const toMonthInputValue = (date = new Date()) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}`; // for <input type="month" />
 };
 
-
-const monthRangeUTC = () => {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  return { startISO: start.toISOString(), endISO: end.toISOString() };
+const monthKeyFromInput = (monthInput) => {
+  if (!monthInput) return "";
+  return `${monthInput}-01`; // "YYYY-MM-01"
 };
 
-const todayISODate = () => {
-  // "YYYY-MM-DD" in local time (matches typical date columns)
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+const [selectedLiveMonth, setSelectedLiveMonth] = useState(toMonthInputValue());
+
+
+const getMonthBoundaries = (monthInput) => {
+  const [year, month] = String(monthInput || toMonthInputValue())
+    .split("-")
+    .map(Number);
+
+  const monthStart = new Date(year, month - 1, 1);
+  const nextMonthStart = new Date(year, month, 1);
+
+  const toYMD = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+
+  return {
+    monthKey: `${year}-${String(month).padStart(2, "0")}-01`,
+    startYMD: toYMD(monthStart),
+    nextStartYMD: toYMD(nextMonthStart),
+  };
 };
 
 
@@ -118,39 +128,65 @@ const todayISODate = () => {
 
     // ----------------- INIT -----------------
     useEffect(() => {
-      (async () => {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (user) {
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("role")
-            .eq("id", user.id)
-            .single();
-          if (profile) setRole(profile.role);
-        }
+  (async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-        fetchInvoices();
-        fetchProfiles();
-        fetchPendingPayments();
-        fetchPayments();
-        fetchExpectedRevenueLive();
-        fetchCurrentRevenueLive();
-        fetchUnpaidRevenueLive();
-        fetchRevertedPaymentsLive();
-      })();
-    }, []);
+    if (user) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+
+      if (profile) setRole(profile.role);
+    }
+
+    await Promise.all([
+      fetchInvoices(),
+      fetchProfiles(),
+      fetchPendingPayments(),
+      fetchPayments(),
+    ]);
+
+  })();
+}, []);
+
+useEffect(() => {
+  if (!selectedLiveMonth) return;
+  refreshLiveSummary(selectedLiveMonth);
+}, [selectedLiveMonth]);
 
     // ----------------- FETCHES -----------------
     async function fetchInvoices() {
-      const { data, error } = await supabase
-        .from("invoices")
-        .select("id, full_name, total, paid_total, status, due_date, month, signup_type")
-        .neq("status", "paid")
-        .order("due_date", { ascending: true });
-      if (!error) setInvoices(data);
-    }
+  const { data, error } = await supabase
+    .from("invoices")
+    .select("id, full_name, total, paid_total, status, due_date, month, signup_type")
+    .neq("status", "paid");
+
+  if (!error) {
+    const filtered = (data || []).filter((inv) => Number(inv.total || 0) > 0);
+
+    const sorted = filtered.sort((a, b) => {
+      const nameCompare = String(a.full_name || "").localeCompare(
+        String(b.full_name || ""),
+        "fr",
+        { sensitivity: "base" }
+      );
+      if (nameCompare !== 0) return nameCompare;
+
+      const monthCompare = String(b.month || "").localeCompare(String(a.month || ""));
+      if (monthCompare !== 0) return monthCompare;
+
+      const dueA = new Date(a.due_date || 0).getTime();
+      const dueB = new Date(b.due_date || 0).getTime();
+      return dueB - dueA;
+    });
+
+    setInvoices(sorted);
+  }
+}
   
 
     async function fetchProfiles() {
@@ -187,6 +223,15 @@ const todayISODate = () => {
   }
 }
 
+async function refreshLiveSummary(monthInput = selectedLiveMonth) {
+  await Promise.all([
+    fetchExpectedRevenueLive(monthInput),
+    fetchCurrentRevenueLive(monthInput),
+    fetchUnpaidRevenueLive(monthInput),
+    fetchRevertedPaymentsLive(monthInput),
+  ]);
+}
+
 
     async function fetchPendingPayments() {
       const { data, error } = await supabase
@@ -213,6 +258,7 @@ useEffect(() => {
   if (proofUrl) localStorage.setItem("admin_payment_proof_url", proofUrl);
   else localStorage.removeItem("admin_payment_proof_url");
 }, [proofUrl]);
+
 
 async function handleProofPick(file) {
   if (!file) return;
@@ -376,10 +422,7 @@ Promise.all([
   fetchInvoices(),
   fetchPayments(),
   fetchPendingPayments(),
-  fetchExpectedRevenueLive(),
-  fetchCurrentRevenueLive(),
-  fetchUnpaidRevenueLive(),
-  fetchRevertedPaymentsLive(),
+  refreshLiveSummary(selectedLiveMonth),
 ]).catch((err) => {
   console.error("Post-payment refresh error:", err);
 });
@@ -464,13 +507,10 @@ Promise.all([
 
 // ✅ then refresh local data without blocking UI
 Promise.all([
-  fetchPendingPayments(),
-  fetchPayments(),
   fetchInvoices(),
-  fetchExpectedRevenueLive(),
-  fetchCurrentRevenueLive(),
-  fetchUnpaidRevenueLive(),
-  fetchRevertedPaymentsLive(),
+  fetchPayments(),
+  fetchPendingPayments(),
+  refreshLiveSummary(selectedLiveMonth),
 ]).catch((err) => {
   console.error("Post-approval refresh error:", err);
 });
@@ -599,13 +639,10 @@ if (updatedInvoiceErr) throw updatedInvoiceErr;
 
 // ✅ then refresh local data without blocking UI
 Promise.all([
+  fetchInvoices(),
   fetchPayments(),
   fetchPendingPayments(),
-  fetchInvoices(),
-  fetchExpectedRevenueLive(),
-  fetchCurrentRevenueLive(),
-  fetchUnpaidRevenueLive(),
-  fetchRevertedPaymentsLive(),
+  refreshLiveSummary(selectedLiveMonth),
 ]).catch((err) => {
   console.error("Post-revert refresh error:", err);
 });
@@ -615,27 +652,9 @@ Promise.all([
   }
 }
 
-async function fetchExpectedRevenueLive() {
-  const monthKey = monthKeyNow(); // "YYYY-MM-01"
+async function fetchExpectedRevenueLive(monthInput = selectedLiveMonth) {
+  const { monthKey, startYMD, nextStartYMD } = getMonthBoundaries(monthInput);
 
-  // Month boundaries in LOCAL date, formatted as YYYY-MM-DD (no timezone surprises)
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-
-  const toYMD = (d) => {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
-  };
-
-  const startYMD = toYMD(monthStart);       // e.g. "2026-03-01"
-  const nextStartYMD = toYMD(nextMonthStart); // e.g. "2026-04-01"
-
-  // ✅ Active ANY TIME during the month (overlap logic)
-  // start_date < nextMonthStart
-  // AND (end_date is null OR end_date >= monthStart)
   const { data: enr, error: enrErr } = await supabase
     .from("enrollments")
     .select("id, plan_id, status, start_date, end_date, override_price, profiles:profile_id(full_name)")
@@ -647,7 +666,6 @@ async function fetchExpectedRevenueLive() {
     return;
   }
 
-  // Exclude only clearly inactive statuses
   const active = (enr || []).filter((e) => {
     const st = String(e.status || "").toLowerCase();
     return !["cancelled", "canceled", "stopped", "inactive", "abandoned"].includes(st);
@@ -711,16 +729,18 @@ async function fetchExpectedRevenueLive() {
 
 
 
-async function fetchCurrentRevenueLive() {
-  const monthKey = monthKeyNow();
+async function fetchCurrentRevenueLive(monthInput = selectedLiveMonth) {
+  const { monthKey } = getMonthBoundaries(monthInput);
 
-  // 1) Get all current-month invoices with paid_total and the 2 lines
   const { data, error } = await supabase
     .from("invoices")
     .select("id, full_name, status, month, paid_total, description1, amount1, description2, amount2")
     .eq("month", monthKey);
 
-  if (error) return;
+  if (error) {
+    console.error("fetchCurrentRevenueLive error:", error);
+    return;
+  }
 
   const isReg = (desc) => {
     const d = String(desc || "").toLowerCase();
@@ -740,54 +760,31 @@ async function fetchCurrentRevenueLive() {
       const d1Reg = isReg(inv.description1);
       const d2Reg = isReg(inv.description2);
 
-      // ✅ registration amount = sum of lines that look like registration
       const regFee = (d1Reg ? a1 : 0) + (d2Reg ? a2 : 0);
-
-      // ✅ course amount = sum of lines that DO NOT look like registration
       const courseTotal = (!d1Reg ? a1 : 0) + (!d2Reg ? a2 : 0);
-
       const paidTotal = Number(inv.paid_total || 0);
 
-      // ✅ payments cover registration first, then course
       const paidTowardCourse = Math.max(0, paidTotal - regFee);
-
-      // ✅ "current revenue" for this invoice = course part paid so far (capped)
       const coursePaid = Math.min(courseTotal, paidTowardCourse);
-
       const regPaid = Math.min(regFee, paidTotal);
-
 
       return {
         id: inv.id,
         name: inv.full_name || "—",
         amount: coursePaid,
-        courseTotal, // debug
-        regPaid, // ✅ keep internal for total calc
+        courseTotal,
+        regPaid,
       };
     })
-    // ✅ remove "Plan / 0" invoices (no course amount)
     .filter((r) => r.courseTotal > 0)
-    // ✅ only show invoices with some course money paid
     .filter((r) => r.amount > 0)
-    .sort((a, b) => (a.name || "").localeCompare(b.name || "", "fr", { sensitivity: "base" }));
+    .sort((a, b) =>
+      (a.name || "").localeCompare(b.name || "", "fr", { sensitivity: "base" })
+    );
 
   const currentTotal = rows.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+
   const regCollectedTotal = (data || []).reduce((sum, inv) => {
-  const a1 = Number(inv.amount1 || 0);
-  const a2 = Number(inv.amount2 || 0);
-
-  const d1Reg = isReg(inv.description1);
-  const d2Reg = isReg(inv.description2);
-
-  const regFee = (d1Reg ? a1 : 0) + (d2Reg ? a2 : 0);
-  const paidTotal = Number(inv.paid_total || 0);
-
-  return sum + Math.min(regFee, paidTotal);
-}, 0);
-
-  // ✅ Registration fees collected (names)
-const regRows = (data || [])
-  .map((inv) => {
     const a1 = Number(inv.amount1 || 0);
     const a2 = Number(inv.amount2 || 0);
 
@@ -797,22 +794,34 @@ const regRows = (data || [])
     const regFee = (d1Reg ? a1 : 0) + (d2Reg ? a2 : 0);
     const paidTotal = Number(inv.paid_total || 0);
 
-    const regPaid = Math.min(regFee, paidTotal);
+    return sum + Math.min(regFee, paidTotal);
+  }, 0);
 
-    return {
-      id: inv.id,
-      name: inv.full_name || "—",
-      amount: regPaid,
-    };
-  })
-  .filter((r) => r.amount > 0)
-  .sort((a, b) =>
-    (a.name || "").localeCompare(b.name || "", "fr", { sensitivity: "base" })
-  );
+  const regRows = (data || [])
+    .map((inv) => {
+      const a1 = Number(inv.amount1 || 0);
+      const a2 = Number(inv.amount2 || 0);
 
-setRegCollectedDetails(regRows);
+      const d1Reg = isReg(inv.description1);
+      const d2Reg = isReg(inv.description2);
 
-  // hover list uses {id,name,amount}
+      const regFee = (d1Reg ? a1 : 0) + (d2Reg ? a2 : 0);
+      const paidTotal = Number(inv.paid_total || 0);
+
+      const regPaid = Math.min(regFee, paidTotal);
+
+      return {
+        id: inv.id,
+        name: inv.full_name || "—",
+        amount: regPaid,
+      };
+    })
+    .filter((r) => r.amount > 0)
+    .sort((a, b) =>
+      (a.name || "").localeCompare(b.name || "", "fr", { sensitivity: "base" })
+    );
+
+  setRegCollectedDetails(regRows);
   setCurrentDetails(rows.map(({ courseTotal, ...rest }) => rest));
 
   setSummary((s) => ({
@@ -820,20 +829,23 @@ setRegCollectedDetails(regRows);
     monthKey,
     currentTotal,
     currentCount: rows.length,
-    regCollectedTotal, // ✅
+    regCollectedTotal,
   }));
 }
 
 
-async function fetchUnpaidRevenueLive() {
-  const monthKey = monthKeyNow();
+async function fetchUnpaidRevenueLive(monthInput = selectedLiveMonth) {
+  const { monthKey } = getMonthBoundaries(monthInput);
 
   const { data, error } = await supabase
     .from("invoices")
     .select("id, full_name, status, month, paid_total, description1, amount1, description2, amount2")
     .eq("month", monthKey);
 
-  if (error) return;
+  if (error) {
+    console.error("fetchUnpaidRevenueLive error:", error);
+    return;
+  }
 
   const isReg = (desc) => {
     const d = String(desc || "").toLowerCase();
@@ -853,87 +865,76 @@ async function fetchUnpaidRevenueLive() {
       const d1Reg = isReg(inv.description1);
       const d2Reg = isReg(inv.description2);
 
-      // ✅ registration amount = sum of lines that look like registration
       const regFee = (d1Reg ? a1 : 0) + (d2Reg ? a2 : 0);
-
-      // ✅ course amount = sum of lines that DO NOT look like registration
       const courseTotal = (!d1Reg ? a1 : 0) + (!d2Reg ? a2 : 0);
-
       const paidTotal = Number(inv.paid_total || 0);
 
-      // ✅ payments cover registration first, then course
       const paidTowardCourse = Math.max(0, paidTotal - regFee);
-
       const remaining = courseTotal - paidTowardCourse;
-
       const regRemaining = Math.max(0, regFee - paidTotal);
-
 
       return {
         id: inv.id,
         name: inv.full_name || "—",
         status: inv.status,
         remaining,
-        regRemaining,    // ✅ NEW
-        courseTotal, // keep for debugging if needed
-        regFee,      // keep for debugging if needed
+        regRemaining,
+        courseTotal,
+        regFee,
       };
     })
-    // ✅ remove "Plan / 0" invoices (no course amount)
     .filter((r) => r.courseTotal > 0)
-    // ✅ only unpaid/partial with remaining course due
     .filter((r) => (r.status === "pending" || r.status === "partial") && r.remaining > 0)
-    .sort((a, b) => (a.name || "").localeCompare(b.name || "", "fr", { sensitivity: "base" }));
+    .sort((a, b) =>
+      (a.name || "").localeCompare(b.name || "", "fr", { sensitivity: "base" })
+    );
 
   const unpaidTotal = rows.reduce((sum, r) => sum + Number(r.remaining || 0), 0);
 
-  // ✅ registration still due — count only invoices that are pending/partial (same as unpaid logic)
-const regUnpaidTotal = rows.reduce(
-  (sum, r) => sum + Number(r.regRemaining || 0),
-  0
-);
-
-// ✅ Registration fees unpaid (names)
-const regUnpaidRows = (data || [])
-  .map((inv) => {
-    const a1 = Number(inv.amount1 || 0);
-    const a2 = Number(inv.amount2 || 0);
-
-    const d1Reg = isReg(inv.description1);
-    const d2Reg = isReg(inv.description2);
-
-    const regFee = (d1Reg ? a1 : 0) + (d2Reg ? a2 : 0);
-    const paidTotal = Number(inv.paid_total || 0);
-
-    const regRemaining = Math.max(0, regFee - paidTotal);
-
-    return {
-      id: inv.id,
-      name: inv.full_name || "—",
-      amount: regRemaining,
-      status: inv.status,
-    };
-  })
-  .filter((r) => (r.status === "pending" || r.status === "partial") && r.amount > 0)
-  .sort((a, b) =>
-    (a.name || "").localeCompare(b.name || "", "fr", { sensitivity: "base" })
+  const regUnpaidTotal = rows.reduce(
+    (sum, r) => sum + Number(r.regRemaining || 0),
+    0
   );
 
-setRegUnpaidDetails(regUnpaidRows);
+  const regUnpaidRows = (data || [])
+    .map((inv) => {
+      const a1 = Number(inv.amount1 || 0);
+      const a2 = Number(inv.amount2 || 0);
 
+      const d1Reg = isReg(inv.description1);
+      const d2Reg = isReg(inv.description2);
 
-  setUnpaidDetails(rows.map(({ courseTotal, regFee, regRemaining, ...rest }) => rest)); // don't show debug fields in hover
+      const regFee = (d1Reg ? a1 : 0) + (d2Reg ? a2 : 0);
+      const paidTotal = Number(inv.paid_total || 0);
+
+      const regRemaining = Math.max(0, regFee - paidTotal);
+
+      return {
+        id: inv.id,
+        name: inv.full_name || "—",
+        amount: regRemaining,
+        status: inv.status,
+      };
+    })
+    .filter((r) => (r.status === "pending" || r.status === "partial") && r.amount > 0)
+    .sort((a, b) =>
+      (a.name || "").localeCompare(b.name || "", "fr", { sensitivity: "base" })
+    );
+
+  setRegUnpaidDetails(regUnpaidRows);
+  setUnpaidDetails(rows.map(({ courseTotal, regFee, regRemaining, ...rest }) => rest));
+
   setSummary((s) => ({
     ...s,
     monthKey,
     unpaidCount: rows.length,
     unpaidTotal,
-    regUnpaidTotal, // ✅
+    regUnpaidTotal,
   }));
 }
 
-async function fetchRevertedPaymentsLive() {
-  const monthKey = monthKeyNow(); // "YYYY-MM-01" (matches invoices.month)
+async function fetchRevertedPaymentsLive(monthInput = selectedLiveMonth) {
+  const { monthKey } = getMonthBoundaries(monthInput);
 
   const { data, error } = await supabase
     .from("invoice_items")
@@ -941,7 +942,7 @@ async function fetchRevertedPaymentsLive() {
       "id, amount, invoice_id, created_at, reverted, invoices!inner(id, full_name, invoice_no, status, month)"
     )
     .eq("reverted", true)
-    .eq("invoices.month", monthKey) // ✅ CURRENT MONTH ONLY
+    .eq("invoices.month", monthKey)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -949,7 +950,6 @@ async function fetchRevertedPaymentsLive() {
     return;
   }
 
-  // ✅ aggregate per invoice (so hover list is clean)
   const byInvoice = new Map();
 
   for (const row of data || []) {
@@ -977,13 +977,11 @@ async function fetchRevertedPaymentsLive() {
 
   setSummary((s) => ({
     ...s,
+    monthKey,
     revertedTotal,
     revertedCount: rows.length,
   }));
 }
-
-
-
 
 
     // ----------------- RENDER -----------------
@@ -993,9 +991,26 @@ async function fetchRevertedPaymentsLive() {
 
         {/* ✅ LIVE Revenue Summary */}
 <div className="mb-4 border rounded-lg bg-gray-50 p-3">
-  <p className="text-xs text-gray-600">
-    Live view — {summary.monthKey ? formatMonth(summary.monthKey) : "—"} (as of today)
-  </p>
+   <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
+    <div>
+      <p className="text-xs text-gray-600">
+        Live view — {summary.monthKey ? formatMonth(summary.monthKey) : "—"}
+      </p>
+    </div>
+
+    <div className="w-full md:w-auto">
+      <label className="block text-xs text-gray-600 mb-1">
+        Select month
+      </label>
+      <input
+        type="month"
+        value={selectedLiveMonth}
+        onChange={(e) => setSelectedLiveMonth(e.target.value)}
+        max={toMonthInputValue()}
+        className="border rounded px-2 py-1 bg-white w-full md:w-auto"
+      />
+    </div>
+  </div>
   <div className="mt-3 grid grid-cols-1 md:grid-cols-4 gap-3">
   <div
   ref={expectedCardRef}
@@ -1006,7 +1021,7 @@ async function fetchRevertedPaymentsLive() {
   <p className="text-sm text-gray-600">Expected revenue (active enrollments)</p>
   <p className="text-xl font-bold">{formatCurrencyUSD(summary.expectedTotal)}</p>
   <p className="text-xs text-gray-500 mt-1">
-    Active enrollments today: <b>{summary.expectedCount}</b>
+    Active enrollments in selected month: <b>{summary.expectedCount}</b>
   </p>
 </div>
 
@@ -1016,7 +1031,7 @@ async function fetchRevertedPaymentsLive() {
   onMouseEnter={() => setCurrentHovered(true)}
   onMouseLeave={() => setCurrentHovered(false)}
 >
-  <p className="text-sm text-gray-600">Current revenue (approved payments MTD)</p>
+  <p className="text-sm text-gray-600">Current revenue (approved payments for selected month)</p>
   <p className="text-xl font-bold">
   {formatCurrencyUSD(summary.currentTotal)}
 
@@ -1033,7 +1048,7 @@ async function fetchRevertedPaymentsLive() {
 
 
     <p className="text-xs text-gray-500 mt-1">
-    Approved payments MTD: <b>{summary.currentCount || 0}</b>
+    Approved payments: <b>{summary.currentCount || 0}</b>
   </p>
 
 </div>
@@ -1044,7 +1059,7 @@ async function fetchRevertedPaymentsLive() {
   onMouseEnter={() => setRevertedHovered(true)}
   onMouseLeave={() => setRevertedHovered(false)}
 >
-  <p className="text-sm text-gray-600">Reverted payments (MTD)</p>
+  <p className="text-sm text-gray-600">Reverted payments (selected month)</p>
   <p className="text-xl font-bold">{formatCurrencyUSD(summary.revertedTotal)}</p>
 
   <p className="text-xs text-gray-500 mt-1">
@@ -1059,7 +1074,7 @@ async function fetchRevertedPaymentsLive() {
   onMouseEnter={() => setUnpaidHovered(true)}
   onMouseLeave={() => setUnpaidHovered(false)}
 >
-  <p className="text-sm text-gray-600">Unpaid (current month)</p>
+  <p className="text-sm text-gray-600">Unpaid (selected month)</p>
   <p className="text-xl font-bold">
   {formatCurrencyUSD(summary.unpaidTotal)}
 
@@ -1090,7 +1105,7 @@ async function fetchRevertedPaymentsLive() {
 >
   <div className="px-4 py-3 text-sm">
     <p className="font-semibold text-gray-800 mb-2 text-center">
-      Active enrollments (today)
+      Active enrollments (selected month)
     </p>
 
     {expectedDetails.length === 0 ? (
@@ -1122,7 +1137,7 @@ async function fetchRevertedPaymentsLive() {
 >
   <div className="px-4 py-3 text-sm">
     <p className="font-semibold text-gray-800 mb-2 text-center">
-      Approved payments (MTD)
+      Approved payments (selected month)
     </p>
 
     {currentDetails.length === 0 ? (
@@ -1145,7 +1160,7 @@ async function fetchRevertedPaymentsLive() {
   <>
     <div className="my-3 border-t pt-3" />
     <p className="font-semibold text-gray-800 mb-2 text-center">
-      Registration fees collected (MTD)
+      Registration fees collected (selected month)
     </p>
 
     <ul className="space-y-1 max-h-48 overflow-auto">
@@ -1173,7 +1188,7 @@ async function fetchRevertedPaymentsLive() {
 >
   <div className="px-4 py-3 text-sm">
     <p className="font-semibold text-gray-800 mb-2 text-center">
-      Reverted payments (MTD)
+      Reverted payments (selected month)
     </p>
 
     {revertedDetails.length === 0 ? (
@@ -1206,7 +1221,7 @@ async function fetchRevertedPaymentsLive() {
 >
   <div className="px-4 py-3 text-sm">
     <p className="font-semibold text-gray-800 mb-2 text-center">
-      Unpaid invoices (current month)
+      Unpaid invoices (selected month)
     </p>
 
     {unpaidDetails.length === 0 ? (
@@ -1231,7 +1246,7 @@ async function fetchRevertedPaymentsLive() {
   <>
     <div className="my-3 border-t pt-3" />
     <p className="font-semibold text-gray-800 mb-2 text-center">
-      Registration fees unpaid (current month)
+      Registration fees unpaid (selected month)
     </p>
 
     <ul className="space-y-1 max-h-48 overflow-auto">
