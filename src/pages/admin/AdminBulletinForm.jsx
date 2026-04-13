@@ -33,6 +33,7 @@ const makeEmptyRow = (dateStr) => ({
   perseverance: "",
   discipline: "",
   devoirs: "",
+  notes: "",
 });
 
 export default function AdminBulletinForm() {
@@ -299,6 +300,7 @@ useEffect(() => {
             perseverance: found.perseverance || "",
             discipline: found.discipline || "",
             devoirs: found.devoirs || "",
+            notes: found.notes || "",
           }
         : makeEmptyRow(d);
     });
@@ -355,6 +357,7 @@ useEffect(() => {
         perseverance: r.perseverance || null,
         discipline: r.discipline || null,
         devoirs: r.devoirs || null,
+        notes: r.notes?.trim() || null,
       }));
 
     if (!records.length)
@@ -504,6 +507,7 @@ const label = rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1);
         Attitude
       </th>
       <th className="border border-gray-300 p-2 text-center">Devoirs</th>
+      <th className="border border-gray-300 p-2 text-center min-w-[260px]">Notes</th>
     </tr>
 
     <tr className="text-xs text-gray-600">
@@ -515,6 +519,7 @@ const label = rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1);
             {labelFor(f)}
           </th>
         ))}
+      <th className="border border-gray-300 p-1">Notes</th>
     </tr>
   </thead>
 
@@ -562,6 +567,15 @@ const label = rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1);
                 />
               </td>
             ))}
+
+          <td className="border border-gray-300 p-1 align-top">
+            <textarea
+              className="border rounded px-2 py-2 w-full text-sm min-h-[80px] resize-y"
+              placeholder="Ajouter une note pour cette séance..."
+              value={row.notes || ""}
+              onChange={(e) => updateCell(idx, "notes", e.target.value)}
+            />
+          </td>
         </tr>
       );
     })}
@@ -636,6 +650,15 @@ const label = rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1);
             </div>
           </div>
         ))}
+                <div className="flex flex-col gap-1">
+          <label className="text-xs text-gray-600">Notes</label>
+          <textarea
+            className="border rounded px-3 py-2 w-full text-sm min-h-[90px] resize-y"
+            placeholder="Ajouter une note pour cette séance..."
+            value={row.notes || ""}
+            onChange={(e) => updateCell(idx, "notes", e.target.value)}
+          />
+        </div>
       </div>
     );
   })}

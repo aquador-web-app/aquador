@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { FaFilePdf, FaSpinner, FaTimesCircle } from "react-icons/fa";
-import { formatMonth } from "../../lib/dateUtils";
+import { formatMonth, formatDateFrSafe } from "../../lib/dateUtils";
 
 export default function UserReports() {
   const [loading, setLoading] = useState(true);
@@ -15,6 +15,8 @@ export default function UserReports() {
 
   const [ficheList, setFicheList] = useState([]);
   const [bulletinList, setBulletinList] = useState([]);
+  const [sessionNotes, setSessionNotes] = useState([]);
+  const [openMobileMonth, setOpenMobileMonth] = useState(null);
 
   // 1️⃣ Get auth user
   useEffect(() => {
@@ -67,6 +69,7 @@ export default function UserReports() {
     (async () => {
       setLoading(true);
       setUiError("");
+      setOpenMobileMonth(null);
 
       try {
         // Fiche Technique
@@ -85,13 +88,27 @@ export default function UserReports() {
 
         if (bErr) throw bErr;
 
+        const { data: notesRows, error: nErr } = await supabase
+          .from("bulletin_sessions")
+          .select("id, month, academic_year, date, notes, student_id")
+          .eq("student_id", selectedProfile.id)
+          .not("notes", "is", null)
+          .neq("notes", "")
+          .order("date", { ascending: true });
+
+        if (nErr) {
+          console.error("Erreur chargement notes :", nErr);
+        }
+
         setFicheList(fiches || []);
         setBulletinList(bulletins || []);
+        setSessionNotes(nErr ? [] : (notesRows || []));
       } catch (err) {
         console.error(err);
         setUiError(err.message);
         setFicheList([]);
         setBulletinList([]);
+        setSessionNotes([]);
       } finally {
         setLoading(false);
       }
@@ -139,12 +156,24 @@ export default function UserReports() {
     return isNaN(d) ? null : new Date(d.getFullYear(), d.getMonth(), 1);
   };
 
-  const addToGroup = (record, type) => {
+    const addToGroup = (record, type) => {
     const d = parseMonth(record?.month);
     if (!d) return;
 
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     const existing = groupByMonth.get(key) || {};
+
+    if (type === "note") {
+      const existingNotes = existing.notes || [];
+      groupByMonth.set(key, {
+        ...existing,
+        notes: [...existingNotes, record],
+        monthDate: existing.monthDate || d,
+        academic_year: record.academic_year || existing.academic_year || "—",
+      });
+      return;
+    }
+
     groupByMonth.set(key, {
       ...existing,
       [type]: record,
@@ -153,14 +182,26 @@ export default function UserReports() {
     });
   };
 
-  ficheList.forEach(x => addToGroup(x, "fiche"));
-  bulletinList.forEach(x => addToGroup(x, "bulletin"));
+  ficheList.forEach((x) => addToGroup(x, "fiche"));
+  bulletinList.forEach((x) => addToGroup(x, "bulletin"));
+  sessionNotes.forEach((x) => addToGroup(x, "note"));
 
   const rows = Array.from(groupByMonth.values())
-    .map(({ fiche, bulletin, monthDate, academic_year }) => {
+    .map(({ fiche, bulletin, notes, monthDate, academic_year }) => {
       const ficheUrl = fiche?.pdf_url?.trim() || null;
       const bulletinUrl = bulletin?.pdf_url?.trim() || null;
-      if (!ficheUrl && !bulletinUrl) return null;
+
+      const compiledNotes = (notes || [])
+        .filter((n) => n?.notes?.trim())
+        .map((n) => {
+          const dateLabel = n.date
+            ? formatDateFrSafe(n.date)
+            : "Date inconnue";
+          return `${dateLabel} : ${n.notes.trim()}`;
+        })
+        .join("\n\n");
+
+      if (!ficheUrl && !bulletinUrl && !compiledNotes) return null;
 
       const updated_at = new Date(
         Math.max(
@@ -180,6 +221,7 @@ export default function UserReports() {
         academic_year,
         fiche_url: ficheUrl,
         bulletin_url: bulletinUrl,
+        notes: compiledNotes,
         updated_at,
       };
     })
@@ -187,7 +229,7 @@ export default function UserReports() {
     .sort((a, b) => a.monthValue < b.monthValue ? 1 : -1);
 
   return rows;
-}, [ficheList, bulletinList]);
+}, [ficheList, bulletinList, sessionNotes]);
 
 
   if (loading)
@@ -204,22 +246,22 @@ export default function UserReports() {
   ].filter(Boolean);
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-6 md:px-12">
-      <div className="max-w-5xl mx-auto bg-white shadow-xl rounded-2xl p-8 border border-gray-100">
-        <h1 className="text-3xl font-bold text-[#001f5c] mb-6 text-center">
+        <div className="min-h-screen bg-gray-50 py-6 px-4 md:py-12 md:px-12">
+          <div className="max-w-7xl mx-auto bg-white shadow-xl rounded-2xl p-4 md:p-8 border border-gray-100">
+        <h1 className="text-2xl md:text-3xl font-bold text-[#001f5c] mb-6 text-center">
           📚 Mes Rapports — A’QUA D’OR
         </h1>
 
         {/* ✅ Profile selector */}
         {selectable.length > 1 ? (
-          <div className="flex justify-center mb-8">
+          <div className="flex justify-center mb-6 md:mb-8">
             <select
               value={selectedProfile?.id || ""}
               onChange={(e) => {
                 const p = selectable.find((x) => x.id === e.target.value);
                 setSelectedProfile(p || null);
               }}
-              className="bg-white text-gray-700 border border-gray-300 rounded-lg px-4 py-2 text-sm font-medium shadow focus:ring-4 focus:ring-blue-200 transition text-center"
+               className="w-full max-w-md bg-white text-gray-700 border border-gray-300 rounded-lg px-4 py-2 text-sm font-medium shadow focus:ring-4 focus:ring-blue-200 transition text-center"
             >
               {selectable.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -247,18 +289,20 @@ export default function UserReports() {
             Aucun rapport disponible pour le moment.
           </p>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          <div className="hidden md:block overflow-x-auto">
             <table className="min-w-full border border-gray-200 rounded-xl overflow-hidden">
               <thead className="bg-[#001f5c] text-white">
                 <tr>
                   <th className="px-4 py-3 text-left">Mois</th>
                   <th className="px-4 py-3 text-center">Bulletin</th>
                   <th className="px-4 py-3 text-center">Fiche Technique</th>
+                  <th className="px-4 py-3 text-center">Notes</th>
                   <th className="px-4 py-3 text-center">Année Académique</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {combined.map((item, idx) => (
+                               {combined.map((item, idx) => (
                   <tr key={idx} className="hover:bg-blue-50 transition">
                     <td className="px-4 py-3 font-semibold text-[#001f5c] capitalize">
                       {item.month}
@@ -297,6 +341,11 @@ export default function UserReports() {
                         </span>
                       )}
                     </td>
+                    <td className="px-4 py-3 text-left text-gray-700 whitespace-pre-line">
+                      {item.notes ? item.notes : (
+                        <span className="text-gray-400 italic">Aucune note</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-center text-gray-600">
                       {item.academic_year}
                     </td>
@@ -305,6 +354,97 @@ export default function UserReports() {
               </tbody>
             </table>
           </div>
+                      <div className="md:hidden space-y-4">
+                            {combined.map((item, idx) => {
+                const mobileKey = `${item.month}-${item.academic_year}-${idx}`;
+                const isOpen = openMobileMonth === mobileKey;
+
+                return (
+                  <div
+                    key={idx}
+                    className="bg-gray-50 border border-gray-200 rounded-xl p-4 shadow-sm space-y-4"
+                  >
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setOpenMobileMonth(isOpen ? null : mobileKey)
+                      }
+                      className="w-full flex items-center justify-between border-b border-gray-200 pb-3 text-left"
+                    >
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">Mois</p>
+                        <p className="font-semibold text-[#001f5c] text-lg">
+                          {item.month}
+                        </p>
+                      </div>
+
+                      <span className="text-[#001f5c] text-xl leading-none">
+                        {isOpen ? "−" : "+"}
+                      </span>
+                    </button>
+
+                    {isOpen && (
+                      <div className="grid grid-cols-1 gap-4">
+                        <div>
+                          <p className="text-xs text-gray-500 mb-2">Bulletin</p>
+                          {item.bulletin_url ? (
+                            <a
+                              href={item.bulletin_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex w-full justify-center items-center gap-2 bg-[#001f5c] hover:bg-[#004e75] text-white px-4 py-2 rounded-lg transition"
+                            >
+                              <FaFilePdf className="text-red-400" />
+                              Voir Bulletin
+                            </a>
+                          ) : (
+                            <span className="inline-flex items-center gap-2 text-gray-400 italic">
+                              <FaTimesCircle /> Non disponible
+                            </span>
+                          )}
+                        </div>
+
+                        <div>
+                          <p className="text-xs text-gray-500 mb-2">Fiche Technique</p>
+                          {item.fiche_url ? (
+                            <a
+                              href={item.fiche_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex w-full justify-center items-center gap-2 bg-[#004e75] hover:bg-[#006ca7] text-white px-4 py-2 rounded-lg transition"
+                            >
+                              <FaFilePdf className="text-yellow-300" />
+                              Voir Fiche
+                            </a>
+                          ) : (
+                            <span className="inline-flex items-center gap-2 text-gray-400 italic">
+                              <FaTimesCircle /> Non disponible
+                            </span>
+                          )}
+                        </div>
+
+                        <div>
+                          <p className="text-xs text-gray-500 mb-2">Notes</p>
+                          <div className="bg-white border border-gray-200 rounded-lg p-3 text-sm text-gray-700 whitespace-pre-line break-words">
+                            {item.notes ? item.notes : (
+                              <span className="text-gray-400 italic">Aucune note</span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Année Académique</p>
+                          <p className="text-sm font-medium text-gray-700">
+                            {item.academic_year}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
       </div>
     </div>
