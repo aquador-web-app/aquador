@@ -55,26 +55,31 @@ const safeOutputPath =
   outputPath ??
   `club/bookings/${safeFull}/${safeForm}_signed.pdf`;
 
+const payload = {
+  user_id: "anonymous",
+  full_name: fullName || "Utilisateur",
+  safe_name: safeFull,
+  documents: [
+    {
+      form_name: safeForm,
+      html_content: html,
+      output_path: safeOutputPath,
+    },
+  ],
+};
 
-    const res = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-      },
-      body: JSON.stringify({
-        user_id: "anonymous",  
-        full_name: safeFull,
-        documents: [
-          {
-            form_name: safeForm,
-            html_content: html,
-            output_path: safeOutputPath, // 👈 let edge function store under club/...
-          },
-        ],
-      }),
-    });
+console.log("SIGN_DOCS PAYLOAD =", payload);
+console.log("SIGN_DOCS PAYLOAD JSON =", JSON.stringify(payload));
+
+const res = await fetch(endpoint, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+  },
+  body: JSON.stringify(payload),
+});
 
     if (!res.ok) {
       const txt = await res.text().catch(() => "");
