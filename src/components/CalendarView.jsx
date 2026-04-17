@@ -816,108 +816,163 @@ if (useOvertime && cutoffM != null && endM != null && endM > cutoffM) {
 
   // ---------------- Submit booking
   const submitBooking = async (e) => {
-    e.preventDefault();
-    if (!validate()) return;
+  e.preventDefault();
+  if (!validate()) return;
 
   const frozenTotal =
-  typeof finalEstimate === "number" && !Number.isNaN(finalEstimate)
-    ? finalEstimate
-    : null;
+    typeof finalEstimate === "number" && !Number.isNaN(finalEstimate)
+      ? finalEstimate
+      : null;
 
-    const { title, date, start_time, end_time, booking_type } = form;
+  const { date, booking_type } = form;
 
-    // Optional conflict check
-    const { data: conflict } = await supabase.rpc("check_booking_conflict", {
+  // Optional conflict check
+  const { data: conflict, error: conflictError } = await supabase.rpc(
+    "check_booking_conflict",
+    {
       p_date: date,
       p_start_time: cleanTime(form.start_time),
       p_end_time: cleanTime(form.end_time),
       p_venue: "pool",
       p_booking_type: booking_type,
       p_quantity: Number(qty),
-      p_exclude_id: null
-    });
-
-    if (conflict?.has_conflict) {
-      showAlert(conflict.reason || "Ce créneau est déjà occupé.");
-      return;
+      p_exclude_id: null,
     }
+  );
 
-    const { data, error } = await supabase.rpc("create_booking_request", {
-      p_full_name: form.full_name,
-      p_email: form.email,
-      p_phone: form.phone,
-      p_title: form.title,
-      p_date: form.date,
-      p_start_time: cleanTime(form.start_time),
-      p_end_time: cleanTime(form.end_time),
-      p_booking_type: form.booking_type, // 'daypass' | 'full'
-      p_quantity: Number(qty),
-      p_venue: "pool",
+  if (conflictError) {
+    showAlert("Erreur vérification conflit : " + conflictError.message);
+    return;
+  }
 
-      p_forced_total: frozenTotal,
+  if (conflict?.has_conflict) {
+    showAlert(conflict.reason || "Ce créneau est déjà occupé.");
+    return;
+  }
 
-    });
+  const { data, error } = await supabase.rpc("create_booking_request", {
+    p_full_name: form.full_name,
+    p_email: form.email,
+    p_phone: form.phone,
+    p_title: form.title,
+    p_date: form.date,
+    p_start_time: cleanTime(form.start_time),
+    p_end_time: cleanTime(form.end_time),
+    p_booking_type: form.booking_type,
+    p_quantity: Number(qty),
+    p_venue: "pool",
+    p_forced_total: frozenTotal,
+  });
 
-    if (error) {
-      showAlert("Erreur : " + error.message);
-      return;
-    }
-    if (data?.reason) {
-      showAlert("Impossible de créer la demande : " + data.reason);
-      return;
-    }
+  console.log("create_booking_request RAW data:", data);
+  console.log("create_booking_request RAW error:", error);
 
-    // success UI
-    showAlert(
-      <div className="text-center">
-        <p className="text-xl font-semibold text-aquaBlue mb-2">
-          Demande envoyée ✅
-        </p>
+  if (error) {
+    showAlert("Erreur : " + error.message);
+    return;
+  }
 
-        <p className="text-lg text-gray-700 mb-2">
-          💵 Estimation : USD {Number(data.estimated_price).toFixed(2)}
-        </p>
+  // Handle RPC returning either an object or an array
+  const result = Array.isArray(data) ? data[0] : data;
 
-        <p className="text-lg text-gray-700">
-          📌 Statut : <strong>{data.status}</strong>
-          <br />
-          <span className="text-sm text-gray-500">
-            (en attente d'approbation administrateur)
-          </span>
-        </p>
-      </div>
+  console.log("create_booking_request NORMALIZED result:", result);
+
+  if (!result) {
+    showAlert("Erreur : la fonction n'a retourné aucune donnée.");
+    return;
+  }
+
+  if (result?.reason) {
+    showAlert("Impossible de créer la demande : " + result.reason);
+    return;
+  }
+
+  // Support multiple possible field names
+  const estimatedPriceRaw =
+    result.estimated_price ??
+    result.final_amount ??
+    result.total_amount ??
+    result.amount ??
+    frozenTotal;
+
+  const bookingStatus =
+    result.status ??
+    result.booking_status ??
+    "en attente";
+
+  const invoiceId =
+    result.invoice_id ??
+    result.club_invoice_id ??
+    result.id_invoice ??
+    null;
+
+  const estimatedPrice = Number(estimatedPriceRaw);
+
+  console.log("estimatedPriceRaw:", estimatedPriceRaw);
+  console.log("estimatedPrice:", estimatedPrice);
+  console.log("bookingStatus:", bookingStatus);
+  console.log("invoiceId:", invoiceId);
+
+  showAlert(
+    <div className="text-center">
+      <p className="text-xl font-semibold text-aquaBlue mb-2">
+        Demande envoyée ✅
+      </p>
+
+      <p className="text-lg text-gray-700 mb-2">
+        💵 Estimation : USD{" "}
+        {Number.isFinite(estimatedPrice) ? estimatedPrice.toFixed(2) : "0.00"}
+      </p>
+
+      <p className="text-lg text-gray-700">
+        📌 Statut : <strong>{bookingStatus}</strong>
+        <br />
+        <span className="text-sm text-gray-500">
+          (en attente d'approbation administrateur)
+        </span>
+      </p>
+    </div>
+  );
+
+  // Only call PDF generation if invoice_id exists
+  if (invoiceId) {
+    const sessionRes = await supabase.auth.getSession();
+    const accessToken = sessionRes.data.session?.access_token;
+
+    const pdfResponse = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-club-invoice-pdf`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          invoice_id: invoiceId,
+          trigger: "draft",
+        }),
+      }
     );
 
-    // 1️⃣ generate draft invoice PDF
-await fetch(
-  `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-club-invoice-pdf`,
-  {
-  method: "POST",
-  headers: {
-  "Content-Type": "application/json",
-  "Authorization": `Bearer ${
-    (await supabase.auth.getSession()).data.session?.access_token
-  }`,
-},
+    const pdfText = await pdfResponse.text();
+    console.log("generate-club-invoice-pdf status:", pdfResponse.status);
+    console.log("generate-club-invoice-pdf response:", pdfText);
 
-  body: JSON.stringify({
-    invoice_id: data.invoice_id,   // ⚠ must come from RPC return
-    trigger: "draft"               // ⚠ tells backend to send draft email
-  }),
-});
-
-
-// 2️⃣ Reload calendar
-setTimeout(() => {
-  if (visibleRange) {
-    loadEvents(visibleRange.start, visibleRange.end);
+    if (!pdfResponse.ok) {
+      console.error("PDF generation failed:", pdfText);
+    }
+  } else {
+    console.error("No invoice_id returned by create_booking_request:", result);
   }
-}, 150);
 
+  setTimeout(() => {
+    if (visibleRange) {
+      loadEvents(visibleRange.start, visibleRange.end);
+    }
+  }, 150);
 
-// 3️⃣ Close the modal
-setShowModal(false);
-  };
+  setShowModal(false);
+};
 
   const calendarProps = {
   ref: calendarRef,

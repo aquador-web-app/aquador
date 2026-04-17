@@ -58,22 +58,8 @@ function formatDateFrSafe(input, showTime = false) {
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const resendKey = Deno.env.get("RESEND_API_KEY")!;
+const siteUrl = Deno.env.get("SITE_URL")!;
 
-// 🔗 Frontend URL for portal
-// 🔗 Detect frontend base URL dynamically
-function getFrontendBaseUrl(req: Request) {
-  // 1️⃣ Prefer Origin header (best & safest)
-  const origin = req.headers.get("origin");
-  if (origin) return origin.replace(/\/+$/, "");
-
-  // 2️⃣ Fallback: derive from request URL
-  try {
-    const url = new URL(req.url);
-    return `${url.protocol}//${url.host}`;
-  } catch {
-    return "";
-  }
-}
 
 const supabase = createClient(supabaseUrl, serviceKey, {
   auth: { autoRefreshToken: false, persistSession: false },
@@ -127,9 +113,13 @@ serve(async (req) => {
       return new Response("No recipient email", { status: 400 });
     }
 
+    if (!siteUrl) {
+  console.error("Missing SITE_URL secret");
+  return new Response("Missing SITE_URL secret", { status: 500 });
+}
+
     // 3) Build payment portal URL
-    const base = getFrontendBaseUrl(req);
-const payUrl = `${base}/club/guest-dashboard?invoice_id=${encodeURIComponent(invoice_id)}`;
+const payUrl = `${siteUrl.replace(/\/+$/, "")}/club/guest-dashboard?invoice_id=${encodeURIComponent(invoice_id)}`;
 
 
 
