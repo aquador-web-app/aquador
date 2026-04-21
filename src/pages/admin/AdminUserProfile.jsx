@@ -5,6 +5,7 @@ import { supabase } from "../../lib/supabaseClient";
 import { FaUser, FaMoneyBillWave, FaUsers, FaReceipt, FaArrowLeft, FaLink } from "react-icons/fa";
 import { formatDateOnly, formatMonth, formatTimestamp, formatCurrencyUSD } from "../../lib/dateUtils";
 import { FaDollarSign } from "react-icons/fa";
+import { sanitizeFullName } from "../../lib/sanitizeFullName";
 
 // ---------- helpers ----------
 const fmtMoney = (n) => (n == null || isNaN(Number(n)) ? 0 : Number(n)).toFixed(2);
@@ -217,18 +218,39 @@ useEffect(() => {
   // === Load signed documents from bucket ===
 useEffect(() => {
   if (!profile?.full_name) return;
+
   (async () => {
     try {
       setLoadingDocs(true);
-      const folder = `${profile.full_name.replace(/\s+/g, "_")}`;
-      const { data, error } = await supabase.storage.from("signed_docs").list(folder, { limit: 100 });
+
+      const folder = sanitizeFullName(profile.full_name);
+
+      console.log("RAW FULL NAME:", profile.full_name);
+console.log("SANITIZED FOLDER:", folder);
+
+
+      const { data, error } = await supabase.storage
+        .from("signed_docs")
+        .list(folder, { limit: 100 });
+
+       console.log("LIST ERROR:", error);
+console.log("LIST DATA:", data); 
+
       if (error) throw error;
 
       const files = (data || [])
         .filter((f) => !f.name.endsWith("/"))
         .map((f) => {
-          const { data: pub } = supabase.storage.from("signed_docs").getPublicUrl(`${folder}/${f.name}`);
-          return { name: f.name, url: pub?.publicUrl };
+          const filePath = `${folder}/${f.name}`;
+          console.log("FILE PATH USED:", filePath);
+          const { data: pub } = supabase.storage
+            .from("signed_docs")
+            .getPublicUrl(filePath);
+
+          return {
+            name: f.name,
+            url: pub?.publicUrl,
+          };
         });
 
       setDocs(files);

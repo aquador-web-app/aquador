@@ -20,7 +20,7 @@ export default function AdminUsers() {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
-  const [sortAZ, setSortAZ] = useState("asc");
+  const [sortMode, setSortMode] = useState("az");
   const [formParentId, setFormParentId] = useState(null);
 
   const [role, setRole] = useState(null);
@@ -72,17 +72,28 @@ const handleAddChild = (parentId) => {
   )
   .filter((u) => (roleFilter ? u.role === roleFilter : true))
   .filter((u) =>
-  statusFilter === ""
-    ? true
-    : statusFilter === "active"
-    ? u.is_active === true
-    : u.is_active === false
-)
+    statusFilter === ""
+      ? true
+      : statusFilter === "active"
+      ? u.is_active === true
+      : u.is_active === false
+  )
   .sort((a, b) => {
-    const nameA = `${a.first_name} ${a.last_name}`.toLowerCase();
-    const nameB = `${b.first_name} ${b.last_name}`.toLowerCase();
-    if (sortAZ === "asc") return nameA.localeCompare(nameB);
-    else return nameB.localeCompare(nameA);
+    if (sortMode === "newest") {
+      return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+    }
+
+    if (sortMode === "oldest") {
+      return new Date(a.created_at || 0) - new Date(b.created_at || 0);
+    }
+
+    const nameA = `${a.first_name || ""} ${a.middle_name || ""} ${a.last_name || ""}`.toLowerCase();
+    const nameB = `${b.first_name || ""} ${b.middle_name || ""} ${b.last_name || ""}`.toLowerCase();
+
+    if (sortMode === "az") return nameA.localeCompare(nameB);
+    if (sortMode === "za") return nameB.localeCompare(nameA);
+
+    return 0;
   });
 
   
@@ -91,7 +102,7 @@ const handleAddChild = (parentId) => {
 
   const { data, error } = await supabase
     .from("profiles_with_unpaid")
-    .select("id, first_name, middle_name, last_name, email, phone, role, is_active, signup_type, referral_code, address, sex, birth_date,has_unpaid")
+    .select("id, first_name, middle_name, last_name, email, phone, role, is_active, signup_type, referral_code, address, sex, birth_date,has_unpaid, created_at")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -227,12 +238,16 @@ const stop = (e) => e.stopPropagation();
     </select>
 
     {/* Sort Button */}
-    <button
-      onClick={() => setSortAZ(sortAZ === "asc" ? "desc" : "asc")}
-      className="bg-gray-200 px-3 py-1 rounded"
-    >
-      {sortAZ === "asc" ? "A → Z" : "Z → A"}
-    </button>
+    <select
+  value={sortMode}
+  onChange={(e) => setSortMode(e.target.value)}
+  className="border rounded px-2 py-1"
+>
+  <option value="az">A → Z</option>
+  <option value="za">Z → A</option>
+  <option value="newest">Derniers inscrits</option>
+  <option value="oldest">Premiers inscrits</option>
+</select>
 
     {/* Create Button */}
     {role !== "assistant" && (
