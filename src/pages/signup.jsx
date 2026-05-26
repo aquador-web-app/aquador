@@ -151,7 +151,7 @@ if (!session?.access_token) {
       console.log('✅ Referral code saved to profile:', uniqueCode)
 
       // Step 4: Trigger the create-user Edge Function manually
-      await fetch(
+      const createUserRes = await fetch(
   `${import.meta.env.VITE_SUPABASE_FUNCTIONS_URL}/create-user`,
   {
     method: "POST",
@@ -180,7 +180,6 @@ if (!session?.access_token) {
       first_lesson: form.first_lesson || "",
       medical_note: form.medical_note || "",
       is_active: true,
-      // 👇 ADD THIS
       children:
   form.signup_type === "me"
     ? []
@@ -194,6 +193,11 @@ if (!session?.access_token) {
     }),
   }
 );
+
+      if (!createUserRes.ok) {
+        const errData = await createUserRes.json().catch(() => ({}));
+        throw new Error(errData.error || `Erreur serveur (${createUserRes.status})`);
+      }
 
       navigate("/post-login", { replace: true })
     } catch (err) {
