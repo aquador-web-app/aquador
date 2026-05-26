@@ -152,28 +152,71 @@ serve(async (req) => {
     const LOGO_URL = logoData?.publicUrl || "";
     const SIGN_URL = sigData?.publicUrl || "";
 
-    // === Date range ===
-    const baseDate = new Date(summary.month);
-    const startDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), 1)
-      .toISOString()
-      .slice(0, 10);
-    const endDate = new Date(baseDate.getFullYear(), baseDate.getMonth() + 1, 1)
-      .toISOString()
-      .slice(0, 10);
+// === Date range ===
+function parseFrenchMonthLabel(label) {
+  const monthsFr = [
+    "janvier",
+    "février",
+    "mars",
+    "avril",
+    "mai",
+    "juin",
+    "juillet",
+    "août",
+    "septembre",
+    "octobre",
+    "novembre",
+    "décembre",
+  ];
 
-    // === Attendance ===
-    const { data: attendanceRows } = await supabase
-      .from("attendance")
-      .select("status")
-      .eq("student_id", summary.student_id)
-      .gte("attended_on", startDate)
-      .lt("attended_on", endDate);
-    const counts = { presence: 0, absence: 0, retard: 0 };
-    for (const r of attendanceRows || []) {
-      if (r.status === "present") counts.presence++;
-      else if (r.status === "absent") counts.absence++;
-      else if (r.status === "late") counts.retard++;
-    }
+  const parts = String(label || "").trim().split(/\s+/);
+  const monthName = parts[0]?.toLowerCase();
+  const year = Number(parts[1]);
+
+  const monthIndex = monthsFr.indexOf(monthName);
+
+  if (monthIndex === -1 || !year) {
+    throw new Error(`Invalid bulletin month label: ${label}`);
+  }
+
+  return { year, monthIndex };
+}
+
+const { year, monthIndex } = parseFrenchMonthLabel(summary.month);
+
+const startDate = new Date(year, monthIndex, 1).toISOString().slice(0, 10);
+const endDate = new Date(year, monthIndex + 1, 1).toISOString().slice(0, 10);
+
+console.log("📅 Bulletin date range:", {
+  month: summary.month,
+  startDate,
+  endDate,
+});
+
+// === Attendance from monthly summary ===
+const { data: attendanceSummary, error: attendanceSummaryErr } = await supabase
+  .from("attendance_monthly_summary")
+  .select("presents, retards, absents, planned_sessions")
+  .eq("profile_id", summary.student_id)
+  .eq("month", startDate)
+  .maybeSingle();
+
+if (attendanceSummaryErr) {
+  console.warn("⚠️ Attendance monthly summary error:", attendanceSummaryErr);
+}
+
+const counts = {
+  presence: Number(attendanceSummary?.presents || 0),
+  absence: Number(attendanceSummary?.absents || 0),
+  retard: Number(attendanceSummary?.retards || 0),
+};
+
+console.log("📊 Attendance counts:", {
+  student_id: summary.student_id,
+  month: summary.month,
+  counts,
+  attendanceSummary,
+});
 
     // === Weekly Sessions ===
     const { data: weekly } = await supabase
