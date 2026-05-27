@@ -81,6 +81,17 @@ const toMonthInputValue = (date = new Date()) => {
   return `${y}-${m}`; // for <input type="month" />
 };
 
+const getMaxSelectableLiveMonth = () => {
+  const today = new Date();
+  const maxDate = new Date(today);
+
+  if (today.getDate() >= 25) {
+    maxDate.setMonth(maxDate.getMonth() + 1);
+  }
+
+  return toMonthInputValue(maxDate);
+};
+
 const monthKeyFromInput = (monthInput) => {
   if (!monthInput) return "";
   return `${monthInput}-01`; // "YYYY-MM-01"
@@ -1003,12 +1014,12 @@ async function fetchRevertedPaymentsLive(monthInput = selectedLiveMonth) {
         Select month
       </label>
       <input
-        type="month"
-        value={selectedLiveMonth}
-        onChange={(e) => setSelectedLiveMonth(e.target.value)}
-        max={toMonthInputValue()}
-        className="border rounded px-2 py-1 bg-white w-full md:w-auto"
-      />
+  type="month"
+  value={selectedLiveMonth}
+  onChange={(e) => setSelectedLiveMonth(e.target.value)}
+  max={getMaxSelectableLiveMonth()}
+  className="border rounded px-2 py-1 bg-white w-full md:w-auto"
+/>
     </div>
   </div>
   <div className="mt-3 grid grid-cols-1 md:grid-cols-4 gap-3">
