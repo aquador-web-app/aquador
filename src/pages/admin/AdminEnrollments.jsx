@@ -1364,7 +1364,28 @@ const { error } = await supabase
 
                   </select>
                 </td>
-                <td className="px-3 py-2">{formatDateFrSafe(e.start_date)}</td>
+                <td className="px-3 py-2">
+  <input
+    type="date"
+    value={e.start_date ? normalizeISODate(e.start_date) : ""}
+    onChange={async (ev) => {
+      const newStartDate = ev.target.value;
+
+      const { error } = await supabase
+        .from("enrollments")
+        .update({ start_date: newStartDate })
+        .eq("id", e.id);
+
+      if (error) {
+        alert("Erreur mise à jour de la date de début: " + error.message);
+        return;
+      }
+
+      await loadEnrollments();
+    }}
+    className="border rounded px-2 py-1 text-sm"
+  />
+</td>
                 <td className="px-3 py-2">
                   <span
                     className={`px-2 py-1 rounded text-xs ${
@@ -1652,10 +1673,30 @@ const { error } = await supabase
           {planName} — {formatCurrencyUSD(planPrice)}
         </div>
 
-        <div className="flex justify-between">
-          <span>Début</span>
-          <span>{formatDateFrSafe(e.start_date)}</span>
-        </div>
+        <div className="grid grid-cols-[70px,1fr] items-center gap-3">
+  <span className="text-gray-600">Début</span>
+
+  <input
+    type="date"
+    value={e.start_date ? normalizeISODate(e.start_date) : ""}
+    onChange={async (ev) => {
+      const newStartDate = ev.target.value;
+
+      const { error } = await supabase
+        .from("enrollments")
+        .update({ start_date: newStartDate })
+        .eq("id", e.id);
+
+      if (error) {
+        alert("Erreur mise à jour de la date de début: " + error.message);
+        return;
+      }
+
+      await loadEnrollments();
+    }}
+    className="w-full border rounded px-2 py-1 text-sm bg-white"
+  />
+</div>
       </div>
 
       <button
