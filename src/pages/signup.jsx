@@ -86,21 +86,25 @@ const removeChild = (index) => {
 
 
   const submit = async (e) => {
-    e.preventDefault()
-    setErr('')
+  e.preventDefault()
+  setErr('')
 
-    if (signedDocs.length < 2) {
-      setErr("Veuillez signer les documents requis avant de continuer.");
-      return;
-    }
+  if (signedDocs.length < 2) {
+    setErr("Veuillez signer les documents requis avant de continuer.");
+    return;
+  }
 
-    if (form.phone && !isValidPhoneNumber(form.phone)) {
-  setErr("Numéro de téléphone invalide.");
-  return;
-}
+  if (!form.phone) {
+    setErr("Le numéro de téléphone est obligatoire.");
+    return;
+  }
 
+  if (!isValidPhoneNumber(form.phone)) {
+    setErr("Numéro de téléphone invalide.");
+    return;
+  }
 
-    try {
+  try {
 // 1️⃣ Create auth user
 const { data: authRes, error: authErr } = await supabase.auth.signUp({
   email: form.email,
@@ -194,6 +198,8 @@ if (!session?.access_token) {
     }),
   }
 );
+
+
 
       navigate("/post-login", { replace: true })
     } catch (err) {
