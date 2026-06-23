@@ -594,6 +594,42 @@ async function loadInvoices() {
   }
 }
 
+async function updateStartDateAndInvoice(enrollmentId, newStartDate) {
+  const { data, error } = await supabase.rpc(
+    "update_enrollment_start_date_simple",
+    {
+      p_enrollment_id: enrollmentId,
+      p_start_date: newStartDate,
+    }
+  );
+
+  if (error) {
+    alert("Erreur mise à jour de la date de début: " + error.message);
+    return false;
+  }
+
+  const invoiceId = data?.invoice_id;
+
+  if (invoiceId) {
+    const { error: pdfErr } = await supabase.functions.invoke(
+      "generate-invoice-pdf",
+      {
+        body: {
+          invoice_id: invoiceId,
+          source: "start_date_update",
+        },
+      }
+    );
+
+    if (pdfErr) {
+      console.error("PDF generation error:", pdfErr);
+    }
+  }
+
+  await loadEnrollments();
+  return true;
+}
+
 
  async function handleSubmit(e) {
   e.preventDefault();
@@ -1371,17 +1407,7 @@ const { error } = await supabase
     onChange={async (ev) => {
       const newStartDate = ev.target.value;
 
-      const { error } = await supabase
-        .from("enrollments")
-        .update({ start_date: newStartDate })
-        .eq("id", e.id);
-
-      if (error) {
-        alert("Erreur mise à jour de la date de début: " + error.message);
-        return;
-      }
-
-      await loadEnrollments();
+      await updateStartDateAndInvoice(e.id, newStartDate);
     }}
     className="border rounded px-2 py-1 text-sm"
   />
@@ -1458,6 +1484,7 @@ const { error } = await supabase
       isAdminUser={isAdminUser}
       buildHourOptionsForCourse={buildHourOptionsForCourse}
       updateEnrollmentCourseAndHour={updateEnrollmentCourseAndHour}
+      updateStartDateAndInvoice={updateStartDateAndInvoice}
       seriesByCourse={seriesByCourse}
     />
   ))}
@@ -1469,7 +1496,8 @@ const { error } = await supabase
 }
 function EnrollmentCard({
   e, plans, publicPlans, courses, seriesByCourse, onDelete, loadEnrollments,
-  isAdminUser, buildHourOptionsForCourse, updateEnrollmentCourseAndHour
+  isAdminUser, buildHourOptionsForCourse, updateEnrollmentCourseAndHour,
+  updateStartDateAndInvoice
 }) {
   const currentDur = Number(
     (publicPlans?.find((p) => p.id === e.plan_id)?.duration_hours) ??
@@ -1682,17 +1710,7 @@ const { error } = await supabase
     onChange={async (ev) => {
       const newStartDate = ev.target.value;
 
-      const { error } = await supabase
-        .from("enrollments")
-        .update({ start_date: newStartDate })
-        .eq("id", e.id);
-
-      if (error) {
-        alert("Erreur mise à jour de la date de début: " + error.message);
-        return;
-      }
-
-      await loadEnrollments();
+      await updateStartDateAndInvoice(e.id, newStartDate);
     }}
     className="w-full border rounded px-2 py-1 text-sm bg-white"
   />
