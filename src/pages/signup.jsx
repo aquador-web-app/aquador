@@ -503,8 +503,13 @@ if (!session?.access_token) {
         ? "Continuer la signature des documents"
         : "Signer les documents requis"}
   </button>
+  {signedDocs.length >= 2 && (
+  <div className="mt-3 rounded-lg border border-green-200 bg-green-50 p-3 text-center text-sm text-green-700">
+    ✅ Vos documents ont été signés avec succès.<br />
+    <strong>N'oubliez pas de cliquer sur « Créer mon compte » pour finaliser votre inscription.</strong>
+  </div>
+)}
 </div>
-
 
         </form>
 

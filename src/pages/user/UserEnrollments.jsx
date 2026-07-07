@@ -545,34 +545,16 @@ const price2h = useMemo(() => {
   </select>
 </div>
 
-          {/* Choisir un cours (dropdown, auto-prefilled) */}
-          {courseMode !== "intensif" && (
-          <div>
-  <label className="block text-sm font-medium mb-1">Choisir un cours</label>
+          {/* Cours auto-sélectionné */}
+{courseMode !== "intensif" && (
+  <div>
+    <label className="block text-sm font-medium mb-1">Cours</label>
 
-  <select
-    value={selectedCourse?.id || ""}
-    onChange={(e) => {
-      const c = courses.find((x) => x.id === e.target.value) || null;
-      setSelectedCourse(c);
-      setSelectedHours([]);
-      setStartDate("");
-    }}
-    className="border p-2 rounded w-full"
-  >
-    {(courses.filter((c) => {
-  const t = normType(c.course_type);
-  const mode = normType(courseMode);
-  if (!t) return mode === "natation";
-  return t === mode;
-}) || []).map((c) => (
-      <option key={c.id} value={c.id}>
-        {c.name}
-      </option>
-    ))}
-  </select>
-</div>
-          )}
+    <div className="border p-2 rounded w-full bg-gray-100 text-gray-700">
+      {selectedCourse?.name || "Cours sélectionné automatiquement"}
+    </div>
+  </div>
+)}
           {courseMode === "intensif" && (
   <div>
     <label className="block text-sm font-medium mb-1">Durée</label>

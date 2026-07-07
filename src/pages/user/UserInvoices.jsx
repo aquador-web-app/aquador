@@ -157,7 +157,13 @@ if (!profile) {
       return;
     }
 
-    if (selectedMethod === "virement" && !proofUrl) {
+    if (selectedMethod === "virement" && uploadingProof) {
+  showAlert("Veuillez patienter pendant le téléversement de la preuve.");
+  setSubmitting(false);
+  return;
+}
+
+if (selectedMethod === "virement" && !proofUrl) {
   showAlert("Veuillez joindre une preuve de virement.");
   setSubmitting(false);
   return;
@@ -426,14 +432,14 @@ localStorage.removeItem("payment_proof_url");
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={submitting}
+              disabled={submitting || uploadingProof}
               className={`px-6 py-3 rounded-lg font-semibold shadow text-white transition ${
                 submitting
                   ? "bg-gray-400 cursor-not-allowed"
                   : "bg-aquaBlue hover:bg-blue-700"
               }`}
             >
-              {submitting ? "Traitement..." : "Soumettre"}
+              {uploadingProof ? "Téléversement..." : submitting ? "Traitement..." : "Soumettre"}
             </button>
           </div>
         )}
