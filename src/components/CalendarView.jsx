@@ -932,11 +932,14 @@ if (useOvertime && cutoffM != null && endM != null && endM > cutoffM) {
       result.booking?.id ??
       null;
 
-    if (isUuid(bookingId)) {
+    const bookingIdTrimmed =
+      typeof bookingId === "string" ? bookingId.trim() : bookingId;
+
+    if (isUuid(bookingIdTrimmed)) {
       const { data: bookingRow, error: bookingLookupError } = await supabase
         .from("venue_bookings")
         .select("club_invoice_id")
-        .eq("id", bookingId)
+        .eq("id", bookingIdTrimmed)
         .maybeSingle();
 
       if (bookingLookupError) {
