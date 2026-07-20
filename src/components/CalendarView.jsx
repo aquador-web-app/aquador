@@ -129,6 +129,7 @@ useEffect(() => {
   const [extraBlocks, setExtraBlocks] = useState(0); // 30 min blocks
   const isMobile = useIsMobile();
   const [currentView, setCurrentView] = useState("dayGridMonth");
+  const [rulesAccepted, setRulesAccepted] = useState(false);
 
 
 
@@ -817,7 +818,13 @@ if (useOvertime && cutoffM != null && endM != null && endM > cutoffM) {
   // ---------------- Submit booking
   const submitBooking = async (e) => {
   e.preventDefault();
+
   if (!validate()) return;
+
+  if (!rulesAccepted) {
+    showAlert("Veuillez accepter les règlements avant de continuer.");
+    return;
+  }
 
   const frozenTotal =
     typeof finalEstimate === "number" && !Number.isNaN(finalEstimate)
@@ -1569,6 +1576,34 @@ if (useOvertime && cutoffM != null && endM != null && endM > cutoffM) {
 
                 </div>
 
+                <div className="rounded-xl border bg-gray-50 p-4 space-y-3">
+  <p className="text-sm text-gray-700">
+    Veuillez lire les règlements avant de soumettre votre demande.
+  </p>
+
+  <a
+  href={`${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/docs/reglements_reservations.pdf`}
+  target="_blank"
+  rel="noopener noreferrer"
+  className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 underline text-sm font-medium"
+>
+  📄 Voir les règlements de réservation
+</a>
+
+  <label className="flex items-start gap-3 cursor-pointer">
+    <input
+      type="checkbox"
+      checked={rulesAccepted}
+      onChange={(e) => setRulesAccepted(e.target.checked)}
+      className="mt-1"
+    />
+
+    <span className="text-sm text-gray-700">
+      J’ai lu et j’accepte les règlements de réservation.
+    </span>
+  </label>
+</div>
+
                 {/* Footer actions */}
                 <div className="sticky bottom-0 bg-white border-t px-6 py-4 flex items-center justify-end gap-3">
                   <button
@@ -1579,11 +1614,16 @@ if (useOvertime && cutoffM != null && endM != null && endM > cutoffM) {
                     Annuler
                   </button>
                   <button
-                    type="submit"
-                    className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700"
-                  >
-                    Enregistrer
-                  </button>
+  type="submit"
+  disabled={!rulesAccepted}
+  className={`px-4 py-2 rounded-lg text-white transition ${
+    rulesAccepted
+      ? "bg-emerald-600 hover:bg-emerald-700"
+      : "bg-gray-400 cursor-not-allowed"
+  }`}
+>
+  Enregistrer
+</button>
                 </div>
               </form>
             </div>

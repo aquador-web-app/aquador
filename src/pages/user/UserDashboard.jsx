@@ -1136,29 +1136,38 @@ const selectedAttendanceProfile = (attendanceProfiles || []).find(p => p.id === 
   </div>
 
   {/* RIGHT COLUMN — Buttons */}
-  <div className="flex justify-center md:justify-center items-center gap-4 mt-4 md:mt-0">
-    <button
-  onClick={() => {
-    setActiveTab("profile");
-    setShowAddChildForm(true);
-    sessionStorage.setItem("userDashboard_showAddChildForm", "true");
-  }}
-  className="px-5 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow hover:bg-blue-700 transition-all"
->
-  Ajouter une personne
-</button>
+<div className="flex flex-col sm:flex-row justify-center md:justify-center items-stretch sm:items-center gap-3 mt-4 md:mt-0 w-full">
+  <button
+    onClick={() => {
+      setActiveTab("profile");
+      setShowAddChildForm(true);
+      sessionStorage.setItem("userDashboard_showAddChildForm", "true");
+    }}
+    className="px-5 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow hover:bg-blue-700 transition-all w-full sm:w-auto"
+  >
+    Ajouter une personne
+  </button>
 
+  <button
+    onClick={() => {
+      setActiveTab("enrollments");
+      setOpenClasses(true);
+    }}
+    className="px-5 py-2 bg-orange-500 text-white font-semibold rounded-lg shadow hover:bg-orange-600 transition-all w-full sm:w-auto"
+  >
+    S’enregistrer dans une classe
+  </button>
 
-    <button
-      onClick={() => {
-        setActiveTab("enrollments");
-        setOpenClasses(true);
-      }}
-      className="px-5 py-2 bg-orange-500 text-white font-semibold rounded-lg shadow hover:bg-orange-600 transition-all"
-    >
-      S’enregister dans une classe
-    </button>
-  </div>
+  <button
+    onClick={() => {
+      setInvoiceSubTab("paiements");
+      setActiveTab("invoices");
+    }}
+    className="px-5 py-2 bg-green-600 text-white font-semibold rounded-lg shadow hover:bg-green-700 transition-all w-full sm:w-auto"
+  >
+    Effectuer un paiement
+  </button>
+</div>
 </div>
 
 {/* === FORM PLACEHOLDER (optional — appears only when profile tab is active) === */}

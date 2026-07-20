@@ -86,21 +86,25 @@ const removeChild = (index) => {
 
 
   const submit = async (e) => {
-    e.preventDefault()
-    setErr('')
+  e.preventDefault()
+  setErr('')
 
-    if (signedDocs.length < 2) {
-      setErr("Veuillez signer les documents requis avant de continuer.");
-      return;
-    }
+  if (signedDocs.length < 2) {
+    setErr("Veuillez signer les documents requis avant de continuer.");
+    return;
+  }
 
-    if (form.phone && !isValidPhoneNumber(form.phone)) {
-  setErr("Numéro de téléphone invalide.");
-  return;
-}
+  if (!form.phone) {
+    setErr("Le numéro de téléphone est obligatoire.");
+    return;
+  }
 
+  if (!isValidPhoneNumber(form.phone)) {
+    setErr("Numéro de téléphone invalide.");
+    return;
+  }
 
-    try {
+  try {
 // 1️⃣ Create auth user
 const { data: authRes, error: authErr } = await supabase.auth.signUp({
   email: form.email,
@@ -198,6 +202,7 @@ if (!session?.access_token) {
         const errData = await createUserRes.json().catch(() => ({}));
         throw new Error(errData.error || `Erreur serveur (${createUserRes.status})`);
       }
+
 
       navigate("/post-login", { replace: true })
     } catch (err) {
@@ -501,8 +506,13 @@ if (!session?.access_token) {
         ? "Continuer la signature des documents"
         : "Signer les documents requis"}
   </button>
+  {signedDocs.length >= 2 && (
+  <div className="mt-3 rounded-lg border border-green-200 bg-green-50 p-3 text-center text-sm text-green-700">
+    ✅ Vos documents ont été signés avec succès.<br />
+    <strong>N'oubliez pas de cliquer sur « Créer mon compte » pour finaliser votre inscription.</strong>
+  </div>
+)}
 </div>
-
 
         </form>
 

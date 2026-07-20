@@ -90,8 +90,16 @@ useEffect(() => {
 }, [proofUrl]);
 
   
-    const allProfiles = [profile, ...children];
-    const allIds = allProfiles.map((p) => p.id);
+    const allProfiles = [profile, ...(children || [])].filter((p) => p && p.id);
+const allIds = allProfiles.map((p) => p.id);
+
+if (!profile) {
+  return (
+    <div className="py-10 text-center text-gray-500">
+      Chargement des informations de paiement...
+    </div>
+  );
+}
     const unpaidInvoices = invoices.filter(
       (inv) =>
         inv.status !== "paid" &&
@@ -122,7 +130,7 @@ useEffect(() => {
 
   try {
     const ext = f.name.split(".").pop();
-    const cleanName = sanitizeName(profile?.full_name || "unknown");
+    const cleanName = sanitizeName(profile?.full_name || "unknown_user");
     const path = `proofs/${cleanName}_${Date.now()}.${ext}`;
 
     const { error: uploadErr } = await supabase.storage
@@ -149,7 +157,13 @@ useEffect(() => {
       return;
     }
 
-    if (selectedMethod === "virement" && !proofUrl) {
+    if (selectedMethod === "virement" && uploadingProof) {
+  showAlert("Veuillez patienter pendant le téléversement de la preuve.");
+  setSubmitting(false);
+  return;
+}
+
+if (selectedMethod === "virement" && !proofUrl) {
   showAlert("Veuillez joindre une preuve de virement.");
   setSubmitting(false);
   return;
@@ -418,14 +432,14 @@ localStorage.removeItem("payment_proof_url");
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={submitting}
+              disabled={submitting || uploadingProof}
               className={`px-6 py-3 rounded-lg font-semibold shadow text-white transition ${
                 submitting
                   ? "bg-gray-400 cursor-not-allowed"
                   : "bg-aquaBlue hover:bg-blue-700"
               }`}
             >
-              {submitting ? "Traitement..." : "Soumettre"}
+              {uploadingProof ? "Téléversement..." : submitting ? "Traitement..." : "Soumettre"}
             </button>
           </div>
         )}
@@ -444,6 +458,9 @@ export default function UserInvoices({ userId, initialTab = "factures" }) {
   const [children, setChildren] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [activeTab, setActiveTab] = useState(initialTab);
+  useEffect(() => {
+  setActiveTab(initialTab || "factures");
+}, [initialTab]);
   const [monthFilter, setMonthFilter] = useState("");
   const [loading, setLoading] = useState(false);
   const { showAlert} = useGlobalAlert();
@@ -573,7 +590,7 @@ export default function UserInvoices({ userId, initialTab = "factures" }) {
 
    // ───────────────────────────────────────────────────
     const renderCardPayment = () => {
-    const allProfiles = [profile, ...children];
+    const allProfiles = [profile, ...(children || [])].filter(Boolean);
     const allIds = allProfiles.map((p) => p.id);
     const unpaidInvoices = invoices.filter(
   (inv) =>

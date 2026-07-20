@@ -35,7 +35,11 @@ serve(async (req) => {
         ? selected_date
         : todayHaiti();
 
-    const now = new Date();
+    const now = new Date(
+  new Date().toLocaleString("en-US", {
+    timeZone: "America/Port-au-Prince",
+  })
+);
 
     // 1) Active enrollments for this profile
     const { data: enrollments, error: enrollErr } = await supabase
@@ -69,39 +73,45 @@ const invoiceOwnerId = prof?.parent_id ?? profile_id;
 // Only enforce after the 7th
 if (day >= 8) {
   // Current month boundaries (Haiti)
-  const monthStart = new Date(haitiNow.getFullYear(), haitiNow.getMonth(), 1)
-    .toISOString()
-    .slice(0, 10);
+  const currentMonth = `${haitiNow.getFullYear()}-${String(
+  haitiNow.getMonth() + 1
+).padStart(2, "0")}-01`;
 
-  const monthEnd = new Date(haitiNow.getFullYear(), haitiNow.getMonth() + 1, 0)
-    .toISOString()
-    .slice(0, 10);
-
-  const { data: invoices, error: invErr } = await supabase
-    .from("invoices")
-    .select("status, total, paid_total")
-    .eq("user_id", invoiceOwnerId)
-    .gte("issued_at", monthStart)
-    .lte("issued_at", monthEnd);
+const { data: invoices, error: invErr } = await supabase
+  .from("invoices")
+  .select("status, total, paid_total, month")
+  .eq("user_id", invoiceOwnerId)
+  .eq("month", currentMonth);
 
   if (invErr) throw invErr;
 
   const list = invoices ?? [];
 
   const unpaid = list.some(
-    (i) => i.status === "pending" && Number(i.paid_total) === 0
-  );
+  (i) =>
+    Number(i.paid_total) <= 0 &&
+    Number(i.total) > 0
+);
 
-  const partial = list.some(
-    (i) =>
-      i.status === "partial" ||
-      (i.status === "pending" && Number(i.paid_total) > 0)
-  );
+const partial = list.some(
+  (i) =>
+    Number(i.paid_total) > 0 &&
+    Number(i.paid_total) < Number(i.total)
+);
 
-  let block = false;
+let block = false;
 
-  if (day >= 8 && day <= 15 && unpaid) block = true;
-  if (day >= 16 && (unpaid || partial)) block = true;
+// 8th–15th:
+// must have paid something
+if (day >= 8 && day <= 15) {
+  block = unpaid;
+}
+
+// 16th+:
+// must be fully paid
+if (day >= 16) {
+  block = unpaid || partial;
+}
 
   if (block) {
     return new Response(
