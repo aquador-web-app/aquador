@@ -879,8 +879,16 @@ if (useOvertime && cutoffM != null && endM != null && endM > cutoffM) {
     return;
   }
 
-  // Handle RPC returning either an object or an array
-  const result = Array.isArray(data) ? data[0] : data;
+  // Handle RPC returning an object, array row, or scalar value (uuid)
+  const rawResult = Array.isArray(data) ? data[0] : data;
+  const result =
+    rawResult && typeof rawResult === "object" ? rawResult : {};
+
+  const isUuid = (val) =>
+    typeof val === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      val.trim()
+    );
 
   console.log("create_booking_request NORMALIZED result:", result);
 
@@ -907,11 +915,47 @@ if (useOvertime && cutoffM != null && endM != null && endM > cutoffM) {
     result.booking_status ??
     "en attente";
 
-  const invoiceId =
+  let invoiceId =
+    (isUuid(rawResult) ? rawResult.trim() : null) ??
     result.invoice_id ??
     result.club_invoice_id ??
     result.id_invoice ??
+    result.invoiceId ??
+    result.clubInvoiceId ??
+    (isUuid(result.invoice) ? result.invoice.trim() : null) ??
+    result.invoice?.id ??
+    result.invoice?.invoice_id ??
+    result.club_invoice?.id ??
+    result.club_invoice?.invoice_id ??
     null;
+
+  if (!invoiceId) {
+    const bookingId =
+      result.booking_id ??
+      result.venue_booking_id ??
+      result.request_id ??
+      result.bookingId ??
+      result.id ??
+      result.booking?.id ??
+      null;
+
+    const bookingIdTrimmed =
+      typeof bookingId === "string" ? bookingId.trim() : bookingId;
+
+    if (isUuid(bookingIdTrimmed)) {
+      const { data: bookingRow, error: bookingLookupError } = await supabase
+        .from("venue_bookings")
+        .select("club_invoice_id")
+        .eq("id", bookingIdTrimmed)
+        .maybeSingle();
+
+      if (bookingLookupError) {
+        console.error("Failed to lookup club_invoice_id from booking:", bookingLookupError);
+      } else if (bookingRow?.club_invoice_id) {
+        invoiceId = bookingRow.club_invoice_id;
+      }
+    }
+  }
 
   const estimatedPrice = Number(estimatedPriceRaw);
 
