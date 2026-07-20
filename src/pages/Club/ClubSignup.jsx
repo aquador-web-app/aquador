@@ -431,7 +431,7 @@ if (emailExists) {
   });
 
   if (error) {
-    return setErr("Mot de passe incorrect pour ce compte existant.");
+    return setErr(error.message || "Mot de passe incorrect pour ce compte existant.");
   }
 
 
@@ -455,7 +455,7 @@ if (emailExists) {
     });
 
   if (signUpErr) {
-    return setErr("Erreur lors de la création du compte.");
+    return setErr(signUpErr.message || "Erreur lors de la création du compte.");
   }
 
  
@@ -546,7 +546,7 @@ setMinorMembers(minors);
     setShowDocsModal(true);
   } catch (e) {
     console.error(e);
-    setErr("Erreur lors de l’inscription.");
+    setErr(e?.message || "Erreur lors de l'inscription.");
   }
 }
 
@@ -688,7 +688,7 @@ setMinorMembers(minors);
 
       if (profErr) {
         console.error(profErr);
-        return setErr("Erreur lors de la création du profil.");
+        return setErr(profErr.message || "Erreur lors de la création du profil.");
       }
 
       const profileId = profData.id;
@@ -729,7 +729,7 @@ setMinorMembers(minors);
 
         if (famErr) {
           console.error(famErr);
-          return setErr("Erreur lors de l’ajout de la famille.");
+          return setErr(famErr.message || "Erreur lors de l'ajout de la famille.");
         }
       }
 
@@ -754,7 +754,7 @@ try {
       navigate("/login");
     } catch (e) {
       console.error(e);
-      setErr("Erreur lors de la finalisation.");
+      setErr(e?.message || "Erreur lors de la finalisation.");
     }
   }
 
