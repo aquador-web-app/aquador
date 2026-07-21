@@ -49,8 +49,10 @@ export default function ClubOverview() {
   const currentMonth = now.getMonth() + 1;
 
   const { data, error } = await supabase
-    .from("club_profiles")
-    .select("id, main_full_name, birth_date");
+  .from("club_profiles")
+  .select("id, main_full_name, birth_date")
+  .eq("status", "active")
+  .eq("docs_approved", true);
 
   if (error || !data) return;
 
@@ -64,24 +66,44 @@ export default function ClubOverview() {
 
 async function fetchClubFamilyBirthdays() {
   const now = getHaitiNow();
-  const currentMonth = now.getMonth() + 1; // 1–12
+  const currentMonth = now.getMonth() + 1;
 
   const { data, error } = await supabase
     .from("club_profile_families")
-    .select("id, full_name, birth_date");
+    .select(`
+      id,
+      full_name,
+      birth_date,
+      club_profiles!inner (
+        status,
+        docs_approved
+      )
+    `)
+    .eq("club_profiles.status", "active")
+    .eq("club_profiles.docs_approved", true);
 
-  if (error || !data) return;
+  if (error) {
+    console.error("Error loading Club family birthdays:", error);
+    return;
+  }
 
-  const list = data.filter((f) => {
+  const list = (data || []).filter((f) => {
     if (!f.birth_date) return false;
-    const month = Number(String(f.birth_date).split("-")[1]);
+
+    const month = Number(
+      String(f.birth_date).split("-")[1]
+    );
+
     return month === currentMonth;
   });
 
-  // 🔥 Merge into main list, convert full_name → main_full_name
   setClubBirthdays((prev) => [
     ...prev,
-    ...list.map((x) => ({ ...x, main_full_name: x.full_name }))
+    ...list.map((x) => ({
+      id: x.id,
+      main_full_name: x.full_name,
+      birth_date: x.birth_date,
+    })),
   ]);
 }
 
