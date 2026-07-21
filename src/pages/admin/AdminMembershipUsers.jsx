@@ -25,84 +25,101 @@ export default function AdminMembershipUsers() {
 
 
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("active");
   const [planFilter, setPlanFilter] = useState("all");
   const [membershipFilter, setMembershipFilter] = useState("all");
 
   // Fetch club profiles + families
-  async function loadProfiles() {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from("club_profiles")
-        .select(
-          `
+  async function loadProfiles(currentRole = role) {
+  setLoading(true);
+
+  try {
+    let query = supabase
+      .from("club_profiles")
+      .select(`
+        id,
+        auth_user_id,
+        main_full_name,
+        email,
+        phone,
+        address,
+        membership_type,
+        plan_code,
+        total_monthly_fee_usd,
+        is_couple,
+        has_swim_school_kids,
+        status,
+        created_at,
+        activated_at,
+        docs_approved,
+        qr_code_url,
+        membership_card_url,
+        id_file_url,
+        rules_pdf_url,
+        accord_pdf_url,
+        club_profile_families (
           id,
-          auth_user_id,
-          main_full_name,
-          email,
+          full_name,
+          relation,
+          birth_date,
           phone,
-          address,
-          membership_type,
-          plan_code,
-          total_monthly_fee_usd,
-          is_couple,
-          has_swim_school_kids,
-          status,
-          created_at,
-          activated_at,
-          docs_approved,
-          qr_code_url,
-          membership_card_url,
           id_file_url,
-          rules_pdf_url,
-          accord_pdf_url,
-          club_profile_families (
-            id,
-            full_name,
-            relation,
-            birth_date,
-            phone,
-            id_file_url,
-            monthly_fee_usd
-          )
-        `
+          monthly_fee_usd
         )
-        .order("created_at", { ascending: false });
+      `)
+      .order("created_at", { ascending: false });
 
-      if (error) {
-        console.error("Error loading club_profiles:", error);
-        setProfiles([]);
-        return;
-      }
-
-      setProfiles(data || []);
-    } finally {
-      setLoading(false);
+    // Assistants must never receive pending/rejected member information.
+    if (currentRole === "assistant") {
+      query = query
+        .eq("status", "active")
+        .eq("docs_approved", true);
     }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("Error loading club_profiles:", error);
+      setProfiles([]);
+      return;
+    }
+
+    setProfiles(data || []);
+  } finally {
+    setLoading(false);
   }
+}
 
-  useEffect(() => {
-  async function loadRole() {
-    const { data: { user } } = await supabase.auth.getUser();
+ useEffect(() => {
+  async function initializePage() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-    // Fetch the user's role from profiles table (or wherever your roles are)
-    const { data: profile } = await supabase
+    if (!user) {
+      setRole("user");
+      setProfiles([]);
+      return;
+    }
+
+    const { data: profile, error } = await supabase
       .from("profiles")
       .select("role")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
 
-    setRole(profile?.role || "user");
+    if (error) {
+      console.error("Error loading administrator role:", error);
+    }
+
+    const currentRole = profile?.role || "user";
+
+    setRole(currentRole);
+    await loadProfiles(currentRole);
   }
 
-  loadRole();
+  initializePage();
 }, []);
-
-
-  useEffect(() => {
-    loadProfiles();
-  }, []);
 
   async function handleDelete(profile) {
     if (loading) return;
@@ -303,10 +320,10 @@ await fetch(
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
           >
-            <option value="all">Tous les statuts</option>
-            <option value="pending">En attente</option>
             <option value="active">Actifs</option>
+            <option value="pending">En attente</option>
             <option value="rejected">Rejetés</option>
+            <option value="all">Tous les statuts</option>
           </select>
 
           <select
@@ -333,7 +350,7 @@ await fetch(
           </>
 )}
           <button
-            onClick={loadProfiles}
+            onClick={() => loadProfiles(role)}
             className="inline-flex items-center gap-1 px-3 py-2 text-sm border rounded-lg hover:bg-gray-50"
           >
             <FaSync className={loading ? "animate-spin" : ""} />

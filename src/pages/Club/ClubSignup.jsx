@@ -425,10 +425,12 @@ if (familyType === "family") {
   try {
    // STEP 1 — Existing email? → login required
 if (emailExists) {
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: form.email,
-    password: form.password,
-  });
+  const cleanEmail = form.email.trim().toLowerCase();
+
+const { data, error } = await supabase.auth.signInWithPassword({
+  email: cleanEmail,
+  password: form.password,
+});
 
   if (error) {
     return setErr(error.message || "Mot de passe incorrect pour ce compte existant.");
@@ -439,25 +441,35 @@ if (emailExists) {
   // Continue to the docs modal
 } else {
   // STEP 2 — New user → create account
-  const { data: signUpData, error: signUpErr } =
-    await supabase.auth.signUp({
-      email: form.email,
-      password: form.password,
-      options: {
-        data: {
-          full_name: form.full_name,
-          phone: form.phone,
-          address: form.address,
-          nif_cin: form.nif_cin,
-          type: "club_user",
-        },
+  const cleanEmail = form.email.trim().toLowerCase();
+
+const { data: signUpData, error: signUpErr } =
+  await supabase.auth.signUp({
+    email: cleanEmail,
+    password: form.password,
+    options: {
+      data: {
+        full_name: form.full_name.trim(),
+        phone: form.phone || null,
+        address: form.address.trim(),
+        nif_cin: form.nif_cin.trim(),
+        type: "club_user",
       },
-    });
+    },
+  });
 
-  if (signUpErr) {
-    return setErr(signUpErr.message || "Erreur lors de la création du compte.");
-  }
+if (signUpErr) {
+  console.error("FULL SIGNUP ERROR:", signUpErr);
+  console.error("SIGNUP MESSAGE:", signUpErr.message);
+  console.error("SIGNUP STATUS:", signUpErr.status);
+  console.error("SIGNUP CODE:", signUpErr.code);
 
+  return setErr(
+    signUpErr.message || "Erreur lors de la création du compte."
+  );
+}
+
+console.log("SIGNUP SUCCESS:", signUpData);
  
 }
 
