@@ -31,18 +31,34 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const { data, error } = await supabase.auth.admin.listUsers();
+    const target = email.toLowerCase();
+    let exists = false;
+    const perPage = 1000;
+    let page = 1;
 
-    if (error) {
-      console.error("Admin error:", error);
-      return new Response(JSON.stringify({ exists: false }), {
-        headers: { ...cors, "Content-Type": "application/json" },
+    while (true) {
+      const { data, error } = await supabase.auth.admin.listUsers({
+        page,
+        perPage,
       });
-    }
 
-    const exists = data.users.some(
-      (u) => u.email?.toLowerCase() === email.toLowerCase()
-    );
+      if (error) {
+        console.error("Admin error:", error);
+        return new Response(JSON.stringify({ exists: false }), {
+          headers: { ...cors, "Content-Type": "application/json" },
+        });
+      }
+
+      if (data.users.some((u) => u.email?.toLowerCase() === target)) {
+        exists = true;
+        break;
+      }
+
+      // No more pages when fewer users than perPage were returned
+      if (data.users.length < perPage) break;
+
+      page++;
+    }
 
     return new Response(JSON.stringify({ exists }), {
       headers: { ...cors, "Content-Type": "application/json" },

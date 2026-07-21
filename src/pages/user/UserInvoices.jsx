@@ -298,6 +298,7 @@ if (existingPending && existingPending.length > 0) {
     setSubmitting(false);
     setSelectedInvoice([]);
     setSelectedMethod(null);
+    setProofUrl(null);
 
     // ✅ clear saved proof after success
 localStorage.removeItem("payment_proof_url");
@@ -435,6 +436,8 @@ localStorage.removeItem("payment_proof_url");
               disabled={submitting || uploadingProof}
               className={`px-6 py-3 rounded-lg font-semibold shadow text-white transition ${
                 submitting
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : uploadingProof
                   ? "bg-gray-400 cursor-not-allowed"
                   : "bg-aquaBlue hover:bg-blue-700"
               }`}

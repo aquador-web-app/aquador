@@ -238,6 +238,18 @@ useEffect(() => {
   // -----------------------
   const [totalFee, setTotalFee] = useState(0);
 
+  function getChildFee(birthDate) {
+  if (!selectedPlan) return 0;
+
+  const age = computeAge(birthDate);
+  if (age == null) return 0;
+
+  const rules = selectedPlan.price_rules || [];
+  const rule = findRuleForAge(rules, age);
+
+  return rule ? Number(rule.monthly_fee_usd || 0) : 0;
+}
+
   useEffect(() => {
   if (!selectedPlan) return;
 
@@ -433,7 +445,7 @@ const { data, error } = await supabase.auth.signInWithPassword({
 });
 
   if (error) {
-    return setErr("Mot de passe incorrect pour ce compte existant.");
+    return setErr(error.message || "Mot de passe incorrect pour ce compte existant.");
   }
 
 
@@ -470,7 +482,6 @@ if (signUpErr) {
 }
 
 console.log("SIGNUP SUCCESS:", signUpData);
-
  
 }
 
@@ -559,7 +570,7 @@ setMinorMembers(minors);
     setShowDocsModal(true);
   } catch (e) {
     console.error(e);
-    setErr("Erreur lors de l’inscription.");
+    setErr(e?.message || "Erreur lors de l'inscription.");
   }
 }
 
@@ -701,7 +712,7 @@ setMinorMembers(minors);
 
       if (profErr) {
         console.error(profErr);
-        return setErr("Erreur lors de la création du profil.");
+        return setErr(profErr.message || "Erreur lors de la création du profil.");
       }
 
       const profileId = profData.id;
@@ -717,6 +728,7 @@ setMinorMembers(minors);
           birth_date: spouse.birth_date || null,
           phone: spouse.phone || null,
           id_file_url: spouseIdUrl || null,
+          monthly_fee_usd: 0,
           created_at: new Date().toISOString(),
         });
       }
@@ -730,6 +742,7 @@ setMinorMembers(minors);
             full_name: c.full_name,
             birth_date: c.birth_date,
             id_file_url: idUrl,
+            monthly_fee_usd: getChildFee(c.birth_date),
             created_at: new Date().toISOString(),
           });
         });
@@ -742,9 +755,27 @@ setMinorMembers(minors);
 
         if (famErr) {
           console.error(famErr);
-          return setErr("Erreur lors de l’ajout de la famille.");
+          return setErr(famErr.message || "Erreur lors de l'ajout de la famille.");
         }
       }
+
+      const { data: invoiceId, error: invoiceError } = await supabase.rpc(
+  "create_membership_invoice",
+  {
+    p_profile_id: profileId,
+  }
+);
+
+if (invoiceError) {
+  console.error("Membership invoice generation error:", invoiceError);
+
+  return setErr(
+    invoiceError.message ||
+      "Le compte a été créé, mais la facture n’a pas pu être générée."
+  );
+}
+
+console.log("Membership invoice generated:", invoiceId);
 
       // 🔵 SEND CLUB WELCOME EMAIL
 try {
@@ -767,7 +798,7 @@ try {
       navigate("/login");
     } catch (e) {
       console.error(e);
-      setErr("Erreur lors de la finalisation.");
+      setErr(e?.message || "Erreur lors de la finalisation.");
     }
   }
 
