@@ -263,21 +263,29 @@ for (let i = 1; i <= 7; i += 1) {
     }
 
     const { data: template, error: templateError } = await supabase
-      .from("membership_invoice_template")
-      .select("body")
-      .eq("active", true)
-      .limit(1)
-      .single();
+  .from("membership_invoice_template")
+  .select("body")
+  .eq("active", true)
+  .order("updated_at", { ascending: false })
+  .limit(1)
+  .maybeSingle();
 
-    if (templateError || !template?.body) {
-      return new Response(
-        JSON.stringify({
-          error: "Template missing",
-          details: templateError?.message || null,
-        }),
-        { status: 500, headers: corsHeaders }
-      );
+if (templateError || !template?.body) {
+  return new Response(
+    JSON.stringify({
+      error: "Template missing",
+      details:
+        templateError?.message ||
+        "No active membership invoice template was found",
+    }),
+    {
+      status: 500,
+      headers: corsHeaders,
     }
+  );
+}
+
+const templateHtml = template.body;
 
     const { data: logoData } = supabase.storage
       .from("assets")
@@ -290,7 +298,7 @@ for (let i = 1; i <= 7; i += 1) {
     const logoUrl = logoData?.publicUrl || "";
     const signatureUrl = signatureData?.publicUrl || "";
 
-    let html = template.body
+    let html = templateHtml
       .replaceAll("{{logo_url}}", logoUrl)
       .replaceAll("{{signature_url}}", signatureUrl)
       .replaceAll("{{doc_title}}", escapeHTML(docTitle))
