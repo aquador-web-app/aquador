@@ -238,6 +238,18 @@ useEffect(() => {
   // -----------------------
   const [totalFee, setTotalFee] = useState(0);
 
+  function getChildFee(birthDate) {
+  if (!selectedPlan) return 0;
+
+  const age = computeAge(birthDate);
+  if (age == null) return 0;
+
+  const rules = selectedPlan.price_rules || [];
+  const rule = findRuleForAge(rules, age);
+
+  return rule ? Number(rule.monthly_fee_usd || 0) : 0;
+}
+
   useEffect(() => {
   if (!selectedPlan) return;
 
@@ -716,6 +728,7 @@ setMinorMembers(minors);
           birth_date: spouse.birth_date || null,
           phone: spouse.phone || null,
           id_file_url: spouseIdUrl || null,
+          monthly_fee_usd: 0,
           created_at: new Date().toISOString(),
         });
       }
@@ -729,6 +742,7 @@ setMinorMembers(minors);
             full_name: c.full_name,
             birth_date: c.birth_date,
             id_file_url: idUrl,
+            monthly_fee_usd: getChildFee(c.birth_date),
             created_at: new Date().toISOString(),
           });
         });
@@ -744,6 +758,24 @@ setMinorMembers(minors);
           return setErr(famErr.message || "Erreur lors de l'ajout de la famille.");
         }
       }
+
+      const { data: invoiceId, error: invoiceError } = await supabase.rpc(
+  "create_membership_invoice",
+  {
+    p_profile_id: profileId,
+  }
+);
+
+if (invoiceError) {
+  console.error("Membership invoice generation error:", invoiceError);
+
+  return setErr(
+    invoiceError.message ||
+      "Le compte a été créé, mais la facture n’a pas pu être générée."
+  );
+}
+
+console.log("Membership invoice generated:", invoiceId);
 
       // 🔵 SEND CLUB WELCOME EMAIL
 try {
