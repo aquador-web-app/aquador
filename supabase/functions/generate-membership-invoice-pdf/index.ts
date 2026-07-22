@@ -361,7 +361,7 @@ const templateHtml = template.body;
       await pdfResponse.arrayBuffer()
     );
 
-    const pdfPath = `club/${safeName}/${safeNo}.pdf`;
+    const pdfPath = `membership/${safeName}/${safeNo}.pdf`;
 
     const { error: uploadError } = await supabase.storage
       .from("club_invoices")

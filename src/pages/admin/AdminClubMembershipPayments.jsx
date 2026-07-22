@@ -61,7 +61,7 @@ export default function AdminClubMembershipPayments() {
     .select(`
       id,
       invoice_no,
-      membership_id,
+      customer_id,
       total,
       paid_total,
       status,
@@ -70,19 +70,58 @@ export default function AdminClubMembershipPayments() {
     .order("created_at", { ascending: true });
 
   if (error) {
-    console.error("fetch membership invoices error:", error);
+    console.error(
+      "fetch membership invoices error:",
+      error
+    );
     setInvoices([]);
     return;
   }
 
-  const rows = data.map(inv => ({
-    id: inv.id,
-    invoice_no: inv.invoice_no || inv.id,
-    full_name: "Membre", // placeholder until you fetch membership separately
-    total: Number(inv.total || 0),
-    paid: Number(inv.paid_total || 0),
-    status: inv.status,
-    created_at: inv.created_at
+  const customerIds = [
+    ...new Set(
+      (data || [])
+        .map((invoice) => invoice.customer_id)
+        .filter(Boolean)
+    ),
+  ];
+
+  let profileMap = {};
+
+  if (customerIds.length > 0) {
+    const {
+      data: clubProfiles,
+      error: profilesError,
+    } = await supabase
+      .from("club_profiles")
+      .select("id, main_full_name")
+      .in("id", customerIds);
+
+    if (profilesError) {
+      console.error(
+        "fetch invoice member names error:",
+        profilesError
+      );
+    } else {
+      profileMap = Object.fromEntries(
+        (clubProfiles || []).map((profile) => [
+          profile.id,
+          profile.main_full_name,
+        ])
+      );
+    }
+  }
+
+  const rows = (data || []).map((invoice) => ({
+    id: invoice.id,
+    invoice_no: invoice.invoice_no || invoice.id,
+    full_name:
+      profileMap[invoice.customer_id] ||
+      "Membre inconnu",
+    total: Number(invoice.total || 0),
+    paid: Number(invoice.paid_total || 0),
+    status: invoice.status,
+    created_at: invoice.created_at,
   }));
 
   setInvoices(rows);
@@ -114,7 +153,8 @@ export default function AdminClubMembershipPayments() {
         method,
         notes,
         paid_at,
-        approved
+        approved,
+        proof_url
       `,
       { count: "exact" }
     )
@@ -123,48 +163,85 @@ export default function AdminClubMembershipPayments() {
     .range(from, to);
 
   if (selectedProfileId) {
-    const { data: invs } = await supabase
-      .from("club_invoices")
-      .select("id, membership_id")
-      .eq("membership_id", selectedProfileId);
+    const { data: profileInvoices, error: profileInvoicesError } =
+      await supabase
+        .from("club_invoices")
+        .select("id")
+        .eq("customer_id", selectedProfileId);
 
-    const ids = invs?.map((i) => i.id) || [];
+    if (profileInvoicesError) {
+      console.error(
+        "fetch filtered membership invoices error:",
+        profileInvoicesError
+      );
+    }
 
-    if (ids.length) query = query.in("invoice_id", ids);
-    else query = query.eq("invoice_id", "00000000-0000-0000-0000-000000000000");
+    const invoiceIds = (profileInvoices || []).map(
+      (invoice) => invoice.id
+    );
+
+    if (invoiceIds.length > 0) {
+      query = query.in("invoice_id", invoiceIds);
+    } else {
+      query = query.eq(
+        "invoice_id",
+        "00000000-0000-0000-0000-000000000000"
+      );
+    }
   }
 
   const { data, error, count } = await query;
 
-  if (error) return;
+  if (error) {
+    console.error("fetch approved membership payments error:", error);
+    setPayments([]);
+    return;
+  }
 
-  // Attach invoice + member names manually
   const enriched = await Promise.all(
-    data.map(async (p) => {
-      const { data: inv } = await supabase
+    (data || []).map(async (payment) => {
+      const { data: invoice, error: invoiceError } = await supabase
         .from("club_invoices")
-        .select("invoice_no, membership_id")
-        .eq("id", p.invoice_id)
-        .single();
+        .select(`
+          id,
+          invoice_no,
+          customer_id
+        `)
+        .eq("id", payment.invoice_id)
+        .maybeSingle();
 
-      let parent_name = "—";
-
-      if (inv?.membership_id) {
-        const { data: m } = await supabase
-          .from("club_memberships")
-          .select("parent_full_name")
-          .eq("id", inv.membership_id)
-          .single();
-
-        if (m) parent_name = m.parent_full_name;
+      if (invoiceError) {
+        console.error("fetch membership invoice error:", invoiceError);
       }
 
-      return { ...p, invoice: inv, parent_name };
+      let clientName = "—";
+
+      if (invoice?.customer_id) {
+        const { data: clubProfile, error: profileError } = await supabase
+          .from("club_profiles")
+          .select("main_full_name")
+          .eq("id", invoice.customer_id)
+          .maybeSingle();
+
+        if (profileError) {
+          console.error("fetch club profile error:", profileError);
+        }
+
+        clientName = clubProfile?.main_full_name || "—";
+      }
+
+      return {
+        ...payment,
+        invoice,
+        client_name: clientName,
+      };
     })
   );
 
   setPayments(enriched);
-  setTotalPages(Math.ceil((count || 0) / pageSize));
+  setTotalPages(
+    Math.max(1, Math.ceil((count || 0) / pageSize))
+  );
 }
 
 
@@ -179,34 +256,56 @@ export default function AdminClubMembershipPayments() {
       method,
       notes,
       paid_at,
-      approved
+      approved,
+      proof_url
     `)
     .in("method", ["cash", "transfer"])
     .eq("approved", false)
     .order("paid_at", { ascending: false });
 
-  if (error) return;
+  if (error) {
+    console.error("fetch pending membership payments error:", error);
+    setPendingPayments([]);
+    return;
+  }
 
   const enriched = await Promise.all(
-    (data || []).map(async (p) => {
-      const { data: inv } = await supabase
+    (data || []).map(async (payment) => {
+      const { data: invoice, error: invoiceError } = await supabase
         .from("club_invoices")
-        .select("invoice_no, membership_id")
-        .eq("id", p.invoice_id)
-        .single();
+        .select(`
+          id,
+          invoice_no,
+          customer_id
+        `)
+        .eq("id", payment.invoice_id)
+        .maybeSingle();
 
-      let parent_name = "—";
-
-      if (inv?.membership_id) {
-        const { data: m } = await supabase
-          .from("club_memberships")
-          .select("parent_full_name")
-          .eq("id", inv.membership_id)
-          .single();
-        if (m) parent_name = m.parent_full_name;
+      if (invoiceError) {
+        console.error("fetch membership invoice error:", invoiceError);
       }
 
-      return { ...p, invoice: inv, parent_name };
+      let clientName = "—";
+
+      if (invoice?.customer_id) {
+        const { data: clubProfile, error: profileError } = await supabase
+          .from("club_profiles")
+          .select("main_full_name")
+          .eq("id", invoice.customer_id)
+          .maybeSingle();
+
+        if (profileError) {
+          console.error("fetch club profile error:", profileError);
+        }
+
+        clientName = clubProfile?.main_full_name || "—";
+      }
+
+      return {
+        ...payment,
+        invoice,
+        client_name: clientName,
+      };
     })
   );
 
@@ -408,11 +507,11 @@ export default function AdminClubMembershipPayments() {
               {pendingPayments.map((p) => (
                 <tr key={p.id} className="border-t">
                   <td className="px-3 py-2">
-                    {p.club_invoices?.membership?.parent_full_name ||
-                      "—"}
+                    {p.client_name || "—"}
                   </td>
+
                   <td className="px-3 py-2">
-                    {p.club_invoices?.invoice_no || p.invoice_id}
+                    {p.invoice?.invoice_no || p.invoice_id}
                   </td>
                   <td className="px-3 py-2">
                     USD {Number(p.amount).toFixed(2)}
@@ -499,11 +598,11 @@ export default function AdminClubMembershipPayments() {
             {payments.map((p) => (
               <tr key={p.id} className="border-t">
                 <td className="px-3 py-2">
-                  {p.club_invoices?.membership?.parent_full_name ||
-                    "—"}
+                  {p.client_name || "—"}
                 </td>
+
                 <td className="px-3 py-2">
-                  {p.club_invoices?.invoice_no || p.invoice_id}
+                  {p.invoice?.invoice_no || p.invoice_id}
                 </td>
                 <td className="px-3 py-2">
                   USD {Number(p.amount).toFixed(2)}

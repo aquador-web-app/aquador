@@ -21,6 +21,7 @@ import { useGlobalAlert } from "../../components/GlobalAlert";
 import CalendarView from "../../components/CalendarView"; 
 import UserClubDashboard from "../Club/UserClubDashboard";
 import MemberProfile from "../Club/MemberProfile";
+import ClubMembershipInvoices from "../Club/ClubMembershipInvoices";
 import {
   formatDateFrSafe,
   formatDateOnly,
@@ -1827,7 +1828,12 @@ case "club-profile":
 
 
 case "club-invoices":
-  return <div>Club Invoices Placeholder</div>;
+  return (
+    <ClubMembershipInvoices
+      clubProfileId={clubProfileId}
+      initialTab={invoiceSubTab}
+    />
+  );
 
 case "club-boutique":
   return <UserBoutique setActiveTab={setActiveTab} isClubVersion={true} />;
