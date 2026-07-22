@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "../../context/AuthContext";
 import { motion } from "framer-motion";
-import { FaBell, FaFileInvoiceDollar, FaShoppingCart, FaUsers, FaLink } from "react-icons/fa";
+import { FaBell, FaFileInvoiceDollar, FaShoppingCart, FaUsers} from "react-icons/fa";
 import { formatDateFrSafe, formatCurrencyUSD } from "../../lib/dateUtils";
 import { useGlobalAlert } from "../../components/GlobalAlert";
 
@@ -16,10 +16,8 @@ export default function UserClubDashboard({ setActiveClubTab }) {
   const [invoices, setInvoices] = useState([]);
   const [recentInvoices, setRecentInvoices] = useState([]);
   const [notifications, setNotifications] = useState([]);
-  const [referrals, setReferrals] = useState([]);
   const [pendingBalance, setPendingBalance] = useState(0);
 
-  const [referralLink, setReferralLink] = useState("");
 
   // ====================================================
   // LOAD CLUB PROFILE
@@ -88,29 +86,6 @@ export default function UserClubDashboard({ setActiveClubTab }) {
     loadInvoices();
   }, [profile?.id]);
 
-  // ====================================================
-  // LOAD REFERRALS
-  // ====================================================
-  useEffect(() => {
-    if (!profile?.id) return;
-
-    const loadRefs = async () => {
-      const { data, error } = await supabase
-        .rpc("get_club_referrals", { p_user_id: user.id });
-
-      if (!error) setReferrals(data || []);
-    };
-
-    loadRefs();
-  }, [profile?.id]);
-
-  // ====================================================
-  // REFERRAL LINK
-  // ====================================================
-  useEffect(() => {
-    if (!user?.referral_code) return;
-    setReferralLink(`${window.location.origin}/club/signup?ref=${user.referral_code}`);
-  }, [user]);
 
   // ====================================================
   // LOAD NOTIFICATIONS
@@ -132,14 +107,6 @@ export default function UserClubDashboard({ setActiveClubTab }) {
         }
       });
 
-      // referrals
-      referrals.slice(0, 5).forEach((r) => {
-        notes.push({
-          id: `ref-${r.id}`,
-          text: `Nouveau membre parrainé: ${r.referred_full_name}`,
-          date: r.created_at,
-        });
-      });
 
       // DB notifications
       const { data: dbNotes } = await supabase
@@ -157,7 +124,7 @@ export default function UserClubDashboard({ setActiveClubTab }) {
     };
 
     buildNotifications();
-  }, [user?.id, recentInvoices, referrals]);
+  }, [user?.id, recentInvoices]);
 
   // ===============================================================================
   // RENDER OVERVIEW
@@ -290,54 +257,7 @@ export default function UserClubDashboard({ setActiveClubTab }) {
         )}
       </motion.div>
 
-      {/* REFERRALS */}
-      <motion.div className="p-5 bg-white rounded-2xl shadow border border-gray-100">
-        <h2 className="text-xl font-semibold text-gray-700 flex items-center gap-2">
-          <FaLink /> Parrainage
-        </h2>
-
-        <div className="mt-2">
-          <p className="text-gray-600 mb-2">Ton lien de parrainage :</p>
-
-          <div className="flex gap-2">
-            <input
-              type="text"
-              readOnly
-              className="flex-1 border rounded p-2"
-              value={referralLink}
-            />
-            <button
-              className="px-3 py-2 bg-blue-600 text-white rounded"
-              onClick={() => {
-                navigator.clipboard.writeText(referralLink);
-                showAlert("Lien copié !");
-              }}
-            >
-              Copier
-            </button>
-          </div>
-
-          <div className="mt-4 text-sm">
-            <p>Total parrainages : {referrals.length}</p>
-            <p>
-              Membres actifs :{" "}
-              {referrals.filter((r) => r.referred_is_active).length}
-            </p>
-            <p>
-              Membres inactifs :{" "}
-              {referrals.filter((r) => !r.referred_is_active).length}
-            </p>
-          </div>
-
-          <button
-            className="mt-4 px-5 py-2 bg-orange-500 text-white rounded shadow"
-            onClick={() => setActiveClubTab("referrals")}
-          >
-            Voir plus
-          </button>
-        </div>
-      </motion.div>
-
+    
       {/* NOTIFICATIONS */}
       <motion.div className="p-5 bg-white rounded-2xl shadow border border-gray-100">
         <h2 className="text-xl font-semibold text-gray-700 flex items-center gap-2">

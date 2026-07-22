@@ -1,5 +1,5 @@
 // src/pages/user/UserDashboard.jsx
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { useAuth } from "../../context/AuthContext"
 import UserProfile from "../user/UserProfile"
@@ -60,6 +60,7 @@ export default function UserDashboard() {
   const { user } = useAuth()
   const [hasUnpaid, setHasUnpaid] = useState(false)
   const navigate = useNavigate()
+  const dashboardContentRef = useRef(null);
   const [isSchoolMember, setIsSchoolMember] = useState(false);
   const [isClubMember, setIsClubMember] = useState(false);
   const [profile, setProfile] = useState(null);
@@ -603,19 +604,22 @@ useEffect(() => {
   // 🎯 Ask influencers if they want to change their referral code
 useEffect(() => {
   async function askReferralChange() {
-    if (!user?.id) return;
+    if (!user?.id || !isSchoolMember) return;
 
     // Fetch influencer role + flag
     const { data: profile, error } = await supabase
-      .from("profiles")
-      .select("id, role, referral_code, referral_prompt_shown")
-      .eq("id", user.id)
-      .single();
+  .from("profiles")
+  .select("id, role, referral_code, referral_prompt_shown")
+  .eq("id", user.id)
+  .maybeSingle();
 
-    if (error) {
-      console.error("❌ Error checking influencer popup:", error.message);
-      return;
-    }
+if (error) {
+  console.error("❌ Error checking influencer popup:", error.message);
+  return;
+}
+
+// Club-only users do not have a school profile
+if (!profile) return;
 
     // ✅ Only trigger popup if user is influencer and hasn’t seen it yet
 if (profile.role === "influencer" && profile.referral_prompt_shown === false) {
@@ -656,7 +660,7 @@ if (newCode && /^[A-Za-z0-9]+$/.test(newCode)) {
   }
 
   askReferralChange();
-}, [user?.id]);
+}, [user?.id, isSchoolMember]);
 
 
   // ✅ Centralized invoice loader
@@ -680,8 +684,14 @@ const { data: creditRow } = await supabase
 setCredit(creditRow?.amount || 0);
 
 
-    if (parent) setHasUnpaid(parent.has_unpaid);
-    console.log("🧾 has_unpaid for", parent.full_name, "=", parent.has_unpaid);
+    setHasUnpaid(!!parent?.has_unpaid);
+
+console.log(
+  "🧾 has_unpaid for",
+  parent?.full_name || user?.full_name || "Unknown user",
+  "=",
+  !!parent?.has_unpaid
+);
 
     const { data: children, error: childError } = await supabase
       .from("profiles_with_unpaid")
@@ -735,13 +745,18 @@ setBalance(finalBalance);
 };
 
 useEffect(() => {
-  if (user?.id) fetchAllInvoices();
-}, [user?.id]);
+  if (user?.id && isSchoolMember) {
+    fetchAllInvoices();
+  }
+}, [user?.id, isSchoolMember]);
 
  
 useEffect(() => {
   const fetchUnpaidStatus = async () => {
-    if (!user?.id) return;
+    if (!user?.id || !isSchoolMember) {
+      setHasUnpaid(false);
+      return;
+    }
     const { data: parent, error } = await supabase
       .from("profiles_with_unpaid")
       .select("id, full_name, has_unpaid")
@@ -754,7 +769,7 @@ useEffect(() => {
   };
 
   fetchUnpaidStatus();
-}, [user?.id]);
+}, [user?.id, isSchoolMember]);
 
 
 
@@ -999,10 +1014,10 @@ useEffect(() => {
 
 // ✅ STEP 2 — Automatically refresh data when switching back to "Aperçu"
 useEffect(() => {
-  if (activeTab === "overview") {
+  if (activeTab === "overview" && isSchoolMember) {
     refreshOverviewData();
   }
-}, [activeTab]);
+}, [activeTab, isSchoolMember]);
 
 useEffect(() => {
   if (!user?.id) return;
@@ -1850,11 +1865,20 @@ if (!membershipReady) return <div>Loading...</div>;
   </button>
 
   <img
-    src="/logo/aquador.png"
-    alt="A'QUA D'OR"
-    className="h-12 w-auto cursor-pointer"
-    onClick={() => goToTab("overview")}
-  />
+  src="/logo/aquador.png"
+  alt="A'QUA D'OR"
+  className="h-12 w-auto cursor-pointer"
+  onClick={() => {
+    goToTab(isSchoolMember ? "overview" : "club-overview");
+
+    requestAnimationFrame(() => {
+    dashboardContentRef.current?.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  });
+  }}
+/>
 
   <div className="w-6" />
 </div>
@@ -2197,7 +2221,10 @@ if (!membershipReady) return <div>Loading...</div>;
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 pt-20 md:pt-6 px-4 md:p-6 overflow-y-auto">
+<main
+  ref={dashboardContentRef}
+  className="flex-1 pt-20 md:pt-6 px-4 md:p-6 overflow-y-auto"
+>
   {renderContent()}
 </main>
 

@@ -53,12 +53,9 @@ export default function UserBoutique() {
       setUser(user || null);
       if (!user) return;
 
-      const { data: prof } = await supabase
-        .from("profiles_with_unpaid")
-        .select("full_name")
-        .eq("id", user.id)
-        .single();
-      setProfile(prof || null);
+      setProfile({
+  full_name: user.full_name || user.email || "Client",
+});
 
       await refreshCommissionBalance(user.id);
     })();
