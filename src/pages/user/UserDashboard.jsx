@@ -1875,15 +1875,15 @@ if (!membershipReady) return <div>Loading...</div>;
   alt="A'QUA D'OR"
   className="h-12 w-auto cursor-pointer"
   onClick={() => {
-    goToTab(isSchoolMember ? "overview" : "club-overview");
+  goToTab(isSchoolMember ? "overview" : "club-overview");
 
-    requestAnimationFrame(() => {
+  setTimeout(() => {
     dashboardContentRef.current?.scrollTo({
       top: 0,
       behavior: "smooth",
     });
-  });
-  }}
+  }, 100);
+}}
 />
 
   <div className="w-6" />

@@ -225,6 +225,7 @@ useEffect(() => {
   return sessionStorage.getItem("adminActiveTab") || "overview";
 });
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false)
+  const dashboardContentRef = useRef(null);
 
 
   const [userCount, setUserCount] = useState(0)
@@ -750,6 +751,13 @@ useEffect(() => {
   if (activeTab) {
     sessionStorage.setItem("adminActiveTab", activeTab);
   }
+}, [activeTab]);
+
+useEffect(() => {
+  dashboardContentRef.current?.scrollTo({
+    top: 0,
+    behavior: "smooth",
+  });
 }, [activeTab]);
 
 
@@ -1766,11 +1774,18 @@ const totalUtilisateursPlateforme =
   </button>
 
   <img
-    src="/logo/aquador.png"
-    alt="A'QUA D'OR"
-    className="h-12 w-auto cursor-pointer"
-    onClick={() => setActiveTab("overview")}
-  />
+  src="/logo/aquador.png"
+  alt="A'QUA D'OR"
+  className="h-12 w-auto cursor-pointer"
+  onClick={() => {
+    setActiveTab("overview");
+
+    dashboardContentRef.current?.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  }}
+/>
 
   <div className="w-6" />
 </div>
@@ -2413,7 +2428,9 @@ const totalUtilisateursPlateforme =
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 pt-20 md:pt-6 px-4 md:p-6 overflow-y-auto">{renderContent()}</main>
+      <main 
+      ref={dashboardContentRef}
+      className="flex-1 pt-20 md:pt-6 px-4 md:p-6 overflow-y-auto">{renderContent()}</main>
 
       {/* Confirmation Modal */}
       {showSignOutConfirm && (
