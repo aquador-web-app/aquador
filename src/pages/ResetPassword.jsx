@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom"
 
 export default function ResetPassword() {
   const [password, setPassword] = useState("")
-  const [confirmPassword, setConfirmPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("") 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [ready, setReady] = useState(false)
@@ -13,26 +13,61 @@ export default function ResetPassword() {
 
   // 🔑 CRITICAL PART
   useEffect(() => {
-    const exchangeSession = async () => {
-      const url = new URL(window.location.href)
-      const code = url.searchParams.get("code")
+  let active = true;
 
-      if (!code) {
-        setError("Lien invalide ou expiré.")
-        return
-      }
+  const prepareRecovery = async () => {
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get("code");
 
-      const { error } = await supabase.auth.exchangeCodeForSession(code)
+    // PKCE recovery link
+    if (code) {
+      const { error: exchangeError } =
+        await supabase.auth.exchangeCodeForSession(code);
 
-      if (error) {
-        setError("Lien invalide ou expiré.")
+      if (!active) return;
+
+      if (exchangeError) {
+        setError("Lien invalide ou expiré.");
       } else {
-        setReady(true)
+        setReady(true);
       }
+
+      return;
     }
 
-    exchangeSession()
-  }, [])
+    // Recovery session may already have been restored from the URL
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+
+    if (!active) return;
+
+    if (sessionError) {
+      setError("Impossible de vérifier le lien de réinitialisation.");
+    } else if (session) {
+      setReady(true);
+    }
+  };
+
+  const {
+    data: { subscription },
+  } = supabase.auth.onAuthStateChange((event, session) => {
+    if (!active) return;
+
+    if (event === "PASSWORD_RECOVERY" && session) {
+      setError("");
+      setReady(true);
+    }
+  });
+
+  prepareRecovery();
+
+  return () => {
+    active = false;
+    subscription.unsubscribe();
+  };
+}, []);
 
   const handleReset = async (e) => {
     e.preventDefault()
