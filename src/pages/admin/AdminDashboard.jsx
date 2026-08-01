@@ -1,691 +1,387 @@
-// src/pages/Admin/AdminDashboard.jsx
-import { useState, useRef } from "react"
-import { FaUsers, FaChalkboardTeacher, FaClipboardList, FaCalendarAlt, FaBox, FaChartBar, FaSignOutAlt, FaFileAlt, FaPrayingHands, FaUserFriends, FaBell, FaPuzzlePiece, FaCogs } from "react-icons/fa"
-import AdminCourses from "./AdminCourses"
-import AdminPlans from "./AdminPlans"
-import AdminReferrals from "./AdminReferrals"
-import AdminCalendarManager from "./AdminCalendarManager"
-import AdminProducts from "./AdminProducts"
-import AdminReports from "./AdminReports"
-import AdminReportsBulletinetFiche from "./AdminReportsBulletinetFiche"
-import AdminCommissions from "./AdminCommissions"
-import AdminProfitandLoss from "./AdminProfitandLoss"
-import AdminCommissionRequests from "./AdminCommissionRequests"
-import AdminAttendance from "./AdminAttendance"
-import AdminAttendanceReports from "./AdminAttendanceReports"
-import { useNavigate } from "react-router-dom"
-import { supabase } from "../../lib/supabaseClient"
-import { useEffect } from "react"
-import { FaCheckToSlot, FaMoneyBill1Wave, FaMoneyBillTransfer } from "react-icons/fa6"
-import AdminUsers from "./AdminUsers";
-import AdminInvoices from "./AdminInvoices";
-import AdminInvoicePayment from "./AdminInvoicePayment";
-import AdminSessions from "./AdminSessions";
-import AdminEnrollments from "./AdminEnrollments";
-import AdminEmailQueue from "./AdminEmailQueue"; // new file
-import AdminEmailTemplates from "./AdminEmailTemplates";
-import AdminInvoiceTemplates from "./AdminInvoiceTemplates"; 
-import AdminBoutiqueInvoiceTemplates from "./AdminBoutiqueInvoiceTemplates";  
-import AdminSendEmails from "./AdminSendEmails";
-import AdminBoutiqueInvoices from "./AdminBoutiqueInvoices";
-import AdminNotificationTemplates from "./AdminNotificationTemplates";
-import AdminBulletinsetFiches from "./AdminBulletinsetFiches";
-import AdminBulletinTemplates from "./AdminBulletinTemplates";
-import AdminBulletinForm from "./AdminBulletinForm";
-import AdminFicheTechniques from "./AdminFicheTechniques";
-import AdminFicheTechniqueTemplates from "./AdminFicheTechniqueTemplates";
-import AdminNotificationsAll from "./AdminNotificationsAll";
-import AdminSalary from "./AdminSalary";
-import { formatDateFrSafe, formatCurrencyUSD, formatMonth } from "../../lib/dateUtils";
-import { motion } from "framer-motion";
-import AdminClubBookings from "./AdminClubBookings";
-import AdminClubInvoices from "./AdminClubInvoices";
-import AdminClubInvoicePayment from "./AdminClubInvoicePayment";
-import AdminClubInvoiceTemplates from "./AdminClubInvoiceTemplates";
-import AdminClubMembership from "./AdminClubMembership"; 
-import ClubQRScanner from "../Club/ClubQRScanner";
-import AdminClubMembershipInvoices from "./AdminClubMembershipInvoices";
-import AdminClubMembershipInvoiceTemplates from "./AdminClubMembershipInvoiceTemplates";
-import AdminClubMembershipPayments from "./AdminClubMembershipPayments";
-import AdminClubOverview from "./AdminClubOverview";
-import AdminMembershipApproval from "./AdminMembershipApproval";
-import AdminMembershipUsers from "./AdminMembershipUsers";
-import HoverOverlay from "../../components/HoverOverlay";
-import AdminAuditBoutique from "./AdminAuditBoutique";
-import { FaQrcode } from "react-icons/fa";
-import AdminTeacherContract from "./AdminTeacherContract";
-import AdminTeacherSignedContracts from "./AdminTeacherSignedContracts";
-import AdminStudentCertificates from "./AdminStudentCertificates";
-import AdminAchievements from "./AdminAchievements";
-import AdminCardImpressions from "./AdminCardImpressions";
+  // src/pages/Admin/AdminDashboard.jsx
+  import { useState, useRef } from "react"
+  import { FaUsers, FaChalkboardTeacher, FaClipboardList, FaCalendarAlt, FaBox, FaChartBar, FaSignOutAlt, FaFileAlt, FaPrayingHands, FaUserFriends, FaBell, FaPuzzlePiece, FaCogs } from "react-icons/fa"
+  import AdminCourses from "./AdminCourses"
+  import AdminPlans from "./AdminPlans"
+  import AdminReferrals from "./AdminReferrals"
+  import AdminCalendarManager from "./AdminCalendarManager"
+  import AdminProducts from "./AdminProducts"
+  import AdminReports from "./AdminReports"
+  import AdminReportsBulletinetFiche from "./AdminReportsBulletinetFiche"
+  import AdminCommissions from "./AdminCommissions"
+  import AdminProfitandLoss from "./AdminProfitandLoss"
+  import AdminCommissionRequests from "./AdminCommissionRequests"
+  import AdminAttendance from "./AdminAttendance"
+  import AdminAttendanceReports from "./AdminAttendanceReports"
+  import { useNavigate } from "react-router-dom"
+  import { supabase } from "../../lib/supabaseClient"
+  import { useEffect } from "react"
+  import { FaCheckToSlot, FaMoneyBill1Wave, FaMoneyBillTransfer } from "react-icons/fa6"
+  import AdminUsers from "./AdminUsers";
+  import AdminInvoices from "./AdminInvoices";
+  import AdminInvoicePayment from "./AdminInvoicePayment";
+  import AdminSessions from "./AdminSessions";
+  import AdminEnrollments from "./AdminEnrollments";
+  import AdminEmailQueue from "./AdminEmailQueue"; // new file
+  import AdminEmailTemplates from "./AdminEmailTemplates";
+  import AdminInvoiceTemplates from "./AdminInvoiceTemplates"; 
+  import AdminBoutiqueInvoiceTemplates from "./AdminBoutiqueInvoiceTemplates";  
+  import AdminSendEmails from "./AdminSendEmails";
+  import AdminBoutiqueInvoices from "./AdminBoutiqueInvoices";
+  import AdminNotificationTemplates from "./AdminNotificationTemplates";
+  import AdminBulletinsetFiches from "./AdminBulletinsetFiches";
+  import AdminBulletinTemplates from "./AdminBulletinTemplates";
+  import AdminBulletinForm from "./AdminBulletinForm";
+  import AdminFicheTechniques from "./AdminFicheTechniques";
+  import AdminFicheTechniqueTemplates from "./AdminFicheTechniqueTemplates";
+  import AdminNotificationsAll from "./AdminNotificationsAll";
+  import AdminSalary from "./AdminSalary";
+  import { formatDateFrSafe, formatCurrencyUSD, formatMonth } from "../../lib/dateUtils";
+  import { motion } from "framer-motion";
+  import AdminClubBookings from "./AdminClubBookings";
+  import AdminClubInvoices from "./AdminClubInvoices";
+  import AdminClubInvoicePayment from "./AdminClubInvoicePayment";
+  import AdminClubInvoiceTemplates from "./AdminClubInvoiceTemplates";
+  import AdminClubMembership from "./AdminClubMembership"; 
+  import ClubQRScanner from "../Club/ClubQRScanner";
+  import AdminClubMembershipInvoices from "./AdminClubMembershipInvoices";
+  import AdminClubMembershipInvoiceTemplates from "./AdminClubMembershipInvoiceTemplates";
+  import AdminClubMembershipPayments from "./AdminClubMembershipPayments";
+  import AdminClubOverview from "./AdminClubOverview";
+  import AdminMembershipApproval from "./AdminMembershipApproval";
+  import AdminMembershipUsers from "./AdminMembershipUsers";
+  import HoverOverlay from "../../components/HoverOverlay";
+  import AdminAuditBoutique from "./AdminAuditBoutique";
+  import { FaQrcode } from "react-icons/fa";
+  import AdminTeacherContract from "./AdminTeacherContract";
+  import AdminTeacherSignedContracts from "./AdminTeacherSignedContracts";
+  import AdminStudentCertificates from "./AdminStudentCertificates";
+  import AdminAchievements from "./AdminAchievements";
+  import AdminCardImpressions from "./AdminCardImpressions";
+  import AdminSpa from "./AdminSpa";
+  import AdminSpaInvoices from "./Spa/AdminSpaInvoices";
+  import AdminSpaClients from "./Spa/AdminSpaClients";
+  import AdminSpaServices from "./Spa/AdminSpaServices";
+  import AdminSpaRooms from "./Spa/AdminSpaRooms";
+  import AdminSpaReports from "./Spa/AdminSpaReports";
+  import AdminSpaInvoicesPayments from "./Spa/AdminSpaInvoicesPayments";
+  import AdminSpaInvoiceTemplates from "./Spa/AdminSpaInvoiceTemplates";
+  import AdminSpaReservations from "./Spa/AdminSpaReservations";
 
 
-function SidebarBtn({ id, icon, label, activeTab, setActiveTab, closeSidebar }) {
-  return (
-    <button
-      onClick={() => {
-        setActiveTab(id);
-        closeSidebar();
-      }}
-      className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-left ${
-        activeTab === id
-          ? "bg-aquaBlue text-white"
-          : "text-gray-100 hover:bg-orange-700"
-      }`}
-    >
-      {icon} {label}
-    </button>
-  );
-}
-
-
-
-function SidebarSub({
-  id,
-  label,
-  activeTab,
-  setActiveTab,
-  closeSidebar,
-}) {
-  const isActive = activeTab === id;
-
-  return (
-    <button
-      onClick={() => {
-        setActiveTab(id);
-        closeSidebar();
-      }}
-      className={`
-        text-left w-full px-3 py-2 rounded-lg text-sm transition
-        ${
-          isActive
-            ? "bg-aquaBlue text-white"
-            : "text-gray-200 hover:bg-orange-700"
-        }
-      `}
-    >
-      {label}
-    </button>
-  );
-}
-
-
-
-function SubGroup({
-  title,
-  prefix,
-  defaultTab,
-  activeTab,
-  setActiveTab,
-  closeSidebar,
-  children,
-}) {
-  const open = activeTab.startsWith(prefix);
-
-  // 🔑 detect mobile sidebar (PWA)
-  const isMobile =
-    typeof window !== "undefined" &&
-    window.matchMedia("(max-width: 767px)").matches;
-
-  const toggle = () => {
-    // If it's open → close it
-    if (open) {
-      setActiveTab("");
-      return;
-    }
-
-    // If closed:
-    // - If defaultTab exists, go there
-    // - Otherwise just set tab to prefix to "open" the group
-    setActiveTab(defaultTab || prefix);
-  };
-
-  return (
-    <div>
+  function SidebarBtn({ id, icon, label, activeTab, setActiveTab, closeSidebar }) {
+    return (
       <button
         onClick={() => {
-          // 📱 MOBILE / PWA → ONLY expand / collapse
-          if (isMobile) {
-            setActiveTab(open ? "" : prefix);
-            return;
-          }
-
-          // 🖥️ DESKTOP → toggle properly even if defaultTab is missing
-          toggle();
+          setActiveTab(id);
+          closeSidebar();
         }}
-        className={`flex items-center justify-between w-full px-3 py-2 rounded-lg ${
-          open ? "bg-aquaBlue text-white" : "text-gray-100 hover:bg-orange-700"
+        className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-left ${
+          activeTab === id
+            ? "bg-aquaBlue text-white"
+            : "text-gray-100 hover:bg-orange-700"
         }`}
       >
-        <span>{title}</span>
-        <span>{open ? "▲" : "▼"}</span>
+        {icon} {label}
       </button>
-
-      {open && <div className="ml-4 mt-1 space-y-1">{children}</div>}
-    </div>
-  );
-}
+    );
+  }
 
 
-function getHaitiNow() {
-  return new Date(
-    new Date().toLocaleString("en-US", { timeZone: "America/Port-au-Prince" })
-  );
-}
 
-function getHaitiISOString(date) {
-  const local = new Date(
-    date.toLocaleString("en-US", { timeZone: "America/Port-au-Prince" })
-  );
-  return local.toISOString();
-}
+  function SidebarSub({
+    id,
+    label,
+    activeTab,
+    setActiveTab,
+    closeSidebar,
+  }) {
+    const isActive = activeTab === id;
 
-function isToday(birthDate) {
-  if (!birthDate) return false;
-  const [y, m, d] = String(birthDate).slice(0, 10).split("-");
-  const bdMonth = Number(m);
-  const bdDay = Number(d);
-
-  const haitiNow = getHaitiNow();
-  return bdMonth === haitiNow.getMonth() + 1 && bdDay === haitiNow.getDate();
-}
-
-
-export default function AdminDashboard() {
-  // put this inside AdminDashboard() function
-useEffect(() => {
-  console.log("✅ AdminDashboard REAL MOUNT");
-  return () => console.log("🧨 AdminDashboard UNMOUNT");
-}, []);
-
-// 🔄 PREVENT remounting when tab regains focus
-useEffect(() => {
-  let wasHidden = false;
-
-  const handleVisibilityChange = () => {
-    if (document.hidden) {
-      wasHidden = true;
-    } else if (wasHidden) {
-      // Tab just became visible - only refresh data, don't remount
-      console.log('🔄 Tab became visible - refreshing data only');
-      realtimeRefresh('all');
-      wasHidden = false;
-    }
-  };
-
-  document.addEventListener('visibilitychange', handleVisibilityChange);
-  
-  return () => {
-    document.removeEventListener('visibilitychange', handleVisibilityChange);
-  };
-}, []);
-
-  const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState(() => {
-  return sessionStorage.getItem("adminActiveTab") || "overview";
-});
-  const [showSignOutConfirm, setShowSignOutConfirm] = useState(false)
-  const dashboardContentRef = useRef(null);
+    return (
+      <button
+        onClick={() => {
+          setActiveTab(id);
+          closeSidebar();
+        }}
+        className={`
+          text-left w-full px-3 py-2 rounded-lg text-sm transition
+          ${
+            isActive
+              ? "bg-aquaBlue text-white"
+              : "text-gray-200 hover:bg-orange-700"
+          }
+        `}
+      >
+        {label}
+      </button>
+    );
+  }
 
 
-  const [userCount, setUserCount] = useState(0)
-  const [courseCount, setCourseCount] = useState(0)
-  const [parentCount, setParentCount] = useState(0);
-  const [staffCount, setStaffCount] = useState(0);
-  const [statsLoaded, setStatsLoaded] = useState(false);
-  const [unpaidInvoices, setUnpaidInvoices] = useState({
-  count: 0,
-  total: 0,
-  rows: [],
-});
 
-  const [attendance, setAttendance] = useState({ percent: 0, total: 0 })
-  const [commissions, setCommissions] = useState(0)
-  const [newUsers, setNewUsers] = useState({
-  current: 0,
-  last: 0,
-  users: [],
-});
-  const [birthdays, setBirthdays] = useState([]);
-  const [sessions, setSessions] = useState([]);
-  const [selectedProfileId, setSelectedProfileId] = useState(null);
-  const [influencerCount, setInfluencerCount] = useState(0);
-  const [activeEnrollmentCount, setActiveEnrollmentCount] = useState(0);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [consentSigned, setConsentSigned] = useState({ count: 0, users: [] });
-  const [openEcole, setOpenEcole] = useState(false);   // default closed
-  const [openClub, setOpenClub] = useState(false);    // default closed
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [activeNonEnrolled, setActiveNonEnrolled] = useState({
+  function SubGroup({
+    title,
+    prefix,
+    defaultTab,
+    activeTab,
+    setActiveTab,
+    closeSidebar,
+    children,
+  }) {
+    const open = activeTab.startsWith(prefix);
+
+    // 🔑 detect mobile sidebar (PWA)
+    const isMobile =
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 767px)").matches;
+
+    const toggle = () => {
+      // If it's open → close it
+      if (open) {
+        setActiveTab("");
+        return;
+      }
+
+      // If closed:
+      // - If defaultTab exists, go there
+      // - Otherwise just set tab to prefix to "open" the group
+      setActiveTab(defaultTab || prefix);
+    };
+
+    return (
+      <div>
+        <button
+          onClick={() => {
+            // 📱 MOBILE / PWA → ONLY expand / collapse
+            if (isMobile) {
+              setActiveTab(open ? "" : prefix);
+              return;
+            }
+
+            // 🖥️ DESKTOP → toggle properly even if defaultTab is missing
+            toggle();
+          }}
+          className={`flex items-center justify-between w-full px-3 py-2 rounded-lg ${
+            open ? "bg-aquaBlue text-white" : "text-gray-100 hover:bg-orange-700"
+          }`}
+        >
+          <span>{title}</span>
+          <span>{open ? "▲" : "▼"}</span>
+        </button>
+
+        {open && <div className="ml-4 mt-1 space-y-1">{children}</div>}
+      </div>
+    );
+  }
+
+
+  function getHaitiNow() {
+    return new Date(
+      new Date().toLocaleString("en-US", { timeZone: "America/Port-au-Prince" })
+    );
+  }
+
+  function getHaitiISOString(date) {
+    const local = new Date(
+      date.toLocaleString("en-US", { timeZone: "America/Port-au-Prince" })
+    );
+    return local.toISOString();
+  }
+
+  function isToday(birthDate) {
+    if (!birthDate) return false;
+    const [y, m, d] = String(birthDate).slice(0, 10).split("-");
+    const bdMonth = Number(m);
+    const bdDay = Number(d);
+
+    const haitiNow = getHaitiNow();
+    return bdMonth === haitiNow.getMonth() + 1 && bdDay === haitiNow.getDate();
+  }
+
+
+  export default function AdminDashboard() {
+    // put this inside AdminDashboard() function
+  useEffect(() => {
+    console.log("✅ AdminDashboard REAL MOUNT");
+    return () => console.log("🧨 AdminDashboard UNMOUNT");
+  }, []);
+
+  // 🔄 PREVENT remounting when tab regains focus
+  useEffect(() => {
+    let wasHidden = false;
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        wasHidden = true;
+      } else if (wasHidden) {
+        // Tab just became visible - only refresh data, don't remount
+        console.log('🔄 Tab became visible - refreshing data only');
+        realtimeRefresh('all');
+        wasHidden = false;
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
+    const navigate = useNavigate()
+    const [activeTab, setActiveTab] = useState(() => {
+    return sessionStorage.getItem("adminActiveTab") || "overview";
+  });
+    const [showSignOutConfirm, setShowSignOutConfirm] = useState(false)
+    const dashboardContentRef = useRef(null);
+
+
+    const [userCount, setUserCount] = useState(0)
+    const [courseCount, setCourseCount] = useState(0)
+    const [parentCount, setParentCount] = useState(0);
+    const [staffCount, setStaffCount] = useState(0);
+    const [statsLoaded, setStatsLoaded] = useState(false);
+    const [unpaidInvoices, setUnpaidInvoices] = useState({
+    count: 0,
+    total: 0,
+    rows: [],
+  });
+
+    const [attendance, setAttendance] = useState({ percent: 0, total: 0 })
+    const [commissions, setCommissions] = useState(0)
+    const [newUsers, setNewUsers] = useState({
+    current: 0,
+    last: 0,
+    users: [],
+  });
+    const [birthdays, setBirthdays] = useState([]);
+    const [sessions, setSessions] = useState([]);
+    const [selectedProfileId, setSelectedProfileId] = useState(null);
+    const [influencerCount, setInfluencerCount] = useState(0);
+    const [activeEnrollmentCount, setActiveEnrollmentCount] = useState(0);
+    const [unreadCount, setUnreadCount] = useState(0);
+    const [consentSigned, setConsentSigned] = useState({ count: 0, users: [] });
+    const [openEcole, setOpenEcole] = useState(false);   // default closed
+    const [openClub, setOpenClub] = useState(false);    // default closed
+    const [openSpa, setOpenSpa] = useState(false);     // default closed
+    const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [activeNonEnrolled, setActiveNonEnrolled] = useState({
+      count: 0,
+      users: [],
+    });
+    const [inactiveUsers, setInactiveUsers] = useState({
     count: 0,
     users: [],
   });
-  const [inactiveUsers, setInactiveUsers] = useState({
-  count: 0,
-  users: [],
-});
-  // Hover – Utilisateurs card
-const userCardRef = useRef(null);
-const [userHovered, setUserHovered] = useState(false);
-// Hover – Factures impayées
-const unpaidCardRef = useRef(null);
-const [unpaidHovered, setUnpaidHovered] = useState(false);
+    // Hover – Utilisateurs card
+  const userCardRef = useRef(null);
+  const [userHovered, setUserHovered] = useState(false);
+  // Hover – Factures impayées
+  const unpaidCardRef = useRef(null);
+  const [unpaidHovered, setUnpaidHovered] = useState(false);
+  const unpaidInvoicesByMonth = Object.entries(
+  (unpaidInvoices.rows || []).reduce((groups, invoice) => {
+    const monthKey = invoice.period
+      ? String(invoice.period).slice(0, 7)
+      : "unknown";
 
-// Hover – Consentements signés
-const consentCardRef = useRef(null);
-const [consentHovered, setConsentHovered] = useState(false);
-
-// Hover – Nouveaux inscrits
-const newUsersCardRef = useRef(null);
-const [newUsersHovered, setNewUsersHovered] = useState(false);
-const fetchStatsRequestRef = useRef(0);
-
-
-const [role, setRole] = useState(null);
-const [myQrUrl, setMyQrUrl] = useState(null);
-const [myId, setMyId] = useState(null);
-const [myName, setMyName] = useState(null);
-
-
-// =============================
-// 🔄 Realtime refresh (debounced)
-// =============================
-const refreshTimeout = useRef(null);
-
-function debounceRefresh(fn, delay = 400) {
-  clearTimeout(refreshTimeout.current);
-  refreshTimeout.current = setTimeout(fn, delay);
-}
-
-const fetchUnread = async () => {
-  const { count, error } = await supabase
-    .from("notifications")
-    .select("*", { count: "exact", head: true })
-    .eq("read", false)
-    .is("user_id", null);
-
-  if (!error) {
-    setUnreadCount(count || 0);
-  }
-};
-
-const applyInvoiceRealtimeToUnpaid = (invoiceRow) => {
-  if (!invoiceRow?.id) return;
-
-  setUnpaidInvoices((prev) => {
-    const prevRows = [...(prev?.rows || [])];
-
-    const remaining = Math.max(
-      0,
-      Number(invoiceRow.total || 0) - Number(invoiceRow.paid_total || 0)
-    );
-
-    const shouldShow =
-      (invoiceRow.status === "pending" || invoiceRow.status === "partial") &&
-      invoiceRow.signup_type !== "children_only" &&
-      remaining > 0;
-
-    const idx = prevRows.findIndex((r) => r.id === invoiceRow.id);
-
-    let nextRows;
-
-    if (!shouldShow) {
-      nextRows = prevRows.filter((r) => r.id !== invoiceRow.id);
-    } else {
-      const nextRow = {
-        id: invoiceRow.id,
-        name: invoiceRow.full_name || "—",
-        period: invoiceRow.month || null,
-        signup_type: invoiceRow.signup_type,
-        status: invoiceRow.status,
-        remaining,
-      };
-
-      if (idx >= 0) {
-        nextRows = [...prevRows];
-        nextRows[idx] = nextRow;
-      } else {
-        nextRows = [...prevRows, nextRow];
-      }
-
-      nextRows.sort((a, b) =>
-        (a.name || "").localeCompare(b.name || "", "fr", {
-          sensitivity: "base",
-        })
-      );
+    if (!groups[monthKey]) {
+      groups[monthKey] = [];
     }
 
-    const nextState = {
-      count: nextRows.length,
-      total: nextRows.reduce((sum, r) => sum + Number(r.remaining || 0), 0),
-      rows: nextRows,
-    };
+    groups[monthKey].push(invoice);
 
-    console.log("⚡ applyInvoiceRealtimeToUnpaid ->", nextState);
+    return groups;
+  }, {})
+)
+  // Newest month first; invoices without a month go last.
+  .sort(([monthA], [monthB]) => {
+    if (monthA === "unknown") return 1;
+    if (monthB === "unknown") return -1;
 
-    return nextState;
-  });
-};
+    return monthB.localeCompare(monthA);
+  })
+  .map(([monthKey, invoices]) => ({
+    monthKey,
 
-const realtimeRefresh = (type) => {
-  // ✅ invoices are handled directly by realtime payload now
-  if (type === "invoices") {
-    return;
-  }
-
-  // 🚫 payments are not source of truth for unpaid invoices card
-  if (type === "payments") {
-    return;
-  }
-
-  debounceRefresh(() => {
-    switch (type) {
-      case "profiles":
-        fetchStats();
-        fetchBirthdays();
-        break;
-
-      case "enrollments":
-        fetchStats();
-        fetchSessions();
-        break;
-
-      case "attendance":
-        fetchStats();
-        break;
-
-      case "consents":
-        fetchStats();
-        break;
-
-      default:
-        fetchStats();
-    }
-  });
-};
-
-
-const fetchStats = async () => {
-  const requestId = ++fetchStatsRequestRef.current;
-  setStatsLoaded(false);
-
-  try {
-    // 1) TOTAL users on platform
-    const { count: profilesTotal } = await supabase
-      .from("profiles")
-      .select("*", { count: "exact", head: true });
-
-    if (requestId !== fetchStatsRequestRef.current) return;
-
-    const { count: infl } = await supabase
-      .from("profiles")
-      .select("*", { count: "exact", head: true })
-      .eq("role", "influencer");
-
-    if (requestId !== fetchStatsRequestRef.current) return;
-
-    const { count: parents } = await supabase
-      .from("profiles")
-      .select("*", { count: "exact", head: true })
-      .eq("signup_type", "children_only");
-
-    if (requestId !== fetchStatsRequestRef.current) return;
-
-    const { count: staff } = await supabase
-      .from("profiles")
-      .select("*", { count: "exact", head: true })
-      .in("role", ["admin", "teacher", "assistant"]);
-
-    if (requestId !== fetchStatsRequestRef.current) return;
-
-    const { count: enrolls } = await supabase
-      .from("enrollments")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "active");
-
-    if (requestId !== fetchStatsRequestRef.current) return;
-
-    const { count: courses } = await supabase
-      .from("courses")
-      .select("*", { count: "exact", head: true });
-
-    if (requestId !== fetchStatsRequestRef.current) return;
-
-    const { data: invs } = await supabase
-      .from("invoices")
-      .select("id,total,full_name,paid_total,status,signup_type,month");
-
-    if (requestId !== fetchStatsRequestRef.current) return;
-
-    const unpaid = (invs || [])
-      .map((r) => {
-        const remaining = Number(r.total || 0) - Number(r.paid_total || 0);
-
-        return {
-          id: r.id,
-          name: r.full_name || "—",
-          period: r.month || null,
-          signup_type: r.signup_type,
-          status: r.status,
-          remaining,
-        };
-      })
-      .filter(
-        (r) =>
-          (r.status === "pending" || r.status === "partial") &&
-          r.signup_type !== "children_only" &&
-          r.remaining > 0
+    // Names remain ascending inside each month.
+    invoices: [...invoices].sort((a, b) =>
+      String(a.name || "").localeCompare(
+        String(b.name || ""),
+        "fr",
+        { sensitivity: "base" }
       )
-      .sort((a, b) =>
-        a.name.localeCompare(b.name, "fr", { sensitivity: "base" })
-      );
+    ),
+  }));
 
-    const unpaidCount = unpaid.length;
-    const unpaidTotal = unpaid.reduce((sum, r) => sum + r.remaining, 0);
+  // Hover – Consentements signés
+  const consentCardRef = useRef(null);
+  const [consentHovered, setConsentHovered] = useState(false);
 
-    const { data: presences } = await supabase
-      .from("attendance")
-      .select("status, created_at");
+  // Hover – Nouveaux inscrits
+  const newUsersCardRef = useRef(null);
+  const [newUsersHovered, setNewUsersHovered] = useState(false);
+  const fetchStatsRequestRef = useRef(0);
 
-    if (requestId !== fetchStatsRequestRef.current) return;
 
-    const now = getHaitiNow();
-    const start = new Date(now.getFullYear(), now.getMonth(), 1);
-    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+  const [role, setRole] = useState(null);
+  const [myQrUrl, setMyQrUrl] = useState(null);
+  const [myId, setMyId] = useState(null);
+  const [myName, setMyName] = useState(null);
 
-    const all = presences || [];
-    const thisMonth = all.filter((p) => {
-      const d = new Date(p.created_at || now);
-      return d >= start && d <= end;
-    });
 
-    const total = thisMonth.length;
-    const presents = thisMonth.filter((p) => p.status === "present").length;
-    const percent = total ? ((presents / total) * 100).toFixed(1) : 0;
+  // =============================
+  // 🔄 Realtime refresh (debounced)
+  // =============================
+  const refreshTimeout = useRef(null);
 
-    const { data: comms, error: commErr } = await supabase
-      .from("commissions")
-      .select("amount, remaining_amount")
-      .gt("remaining_amount", 0);
-
-    if (requestId !== fetchStatsRequestRef.current) return;
-
-    const totalComms = commErr
-      ? 0
-      : (comms || []).reduce(
-          (sum, c) => sum + Number(c.remaining_amount ?? 0),
-          0
-        );
-
-    const firstDayThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const firstDayNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    const firstDayPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-
-    const { data: newUsersRows } = await supabase
-      .from("profiles_with_unpaid")
-      .select("id, full_name, created_at")
-      .gte("created_at", getHaitiISOString(firstDayThisMonth))
-      .lt("created_at", getHaitiISOString(firstDayNextMonth))
-      .neq("signup_type", "children_only")
-      .neq("role", "teacher")
-      .order("created_at", { ascending: false });
-
-    if (requestId !== fetchStatsRequestRef.current) return;
-
-    const { count: prevMonthCount } = await supabase
-      .from("profiles_with_unpaid")
-      .select("*", { count: "exact", head: true })
-      .gte("created_at", getHaitiISOString(firstDayPrevMonth))
-      .lt("created_at", getHaitiISOString(firstDayThisMonth));
-
-    if (requestId !== fetchStatsRequestRef.current) return;
-
-    const { data: consentRows, error: consErr } = await supabase
-      .from("consentements_signed")
-      .select("user_id, full_name")
-      .order("full_name", { ascending: true });
-
-    if (requestId !== fetchStatsRequestRef.current) return;
-
-    const consentUsers = consErr
-      ? []
-      : (consentRows || [])
-          .map((r) => ({
-            id: r.user_id,
-            name: r.full_name,
-          }))
-          .sort((a, b) =>
-            a.name.localeCompare(b.name, "fr", { sensitivity: "base" })
-          );
-
-    const { data: nonEnrolledRows, error: nonEnrErr } = await supabase
-      .from("profiles")
-      .select(`
-        id,
-        full_name,
-        enrollments!left ( id )
-      `)
-      .eq("is_active", true)
-      .neq("signup_type", "children_only")
-      .not("role", "eq", "influencer")
-      .not("role", "eq", "admin")
-      .not("role", "eq", "teacher")
-      .not("role", "eq", "assistant")
-      .not("role", "eq", "owner")
-      .is("enrollments", null)
-      .order("full_name", { ascending: true });
-
-    if (requestId !== fetchStatsRequestRef.current) return;
-
-    const { data: inactiveRows, error: inactiveErr } = await supabase
-      .from("profiles")
-      .select("id, full_name")
-      .eq("is_active", false)
-      .neq("signup_type", "children_only")
-      .not("role", "eq", "influencer")
-      .not("role", "eq", "admin")
-      .not("role", "eq", "teacher")
-      .not("role", "eq", "assistant")
-      .not("role", "eq", "owner")
-      .order("full_name", { ascending: true });
-
-    if (requestId !== fetchStatsRequestRef.current) return;
-
-    // ✅ apply state ONLY for latest request
-    setUserCount(profilesTotal || 0);
-    setInfluencerCount(infl || 0);
-    setParentCount(parents || 0);
-    setStaffCount(staff || 0);
-    setActiveEnrollmentCount(enrolls || 0);
-    setCourseCount(courses || 0);
-
-    setUnpaidInvoices({
-      count: unpaidCount,
-      total: unpaidTotal,
-      rows: unpaid,
-    });
-
-    setAttendance({ percent, total });
-    setCommissions(totalComms);
-
-    setNewUsers({
-      current: newUsersRows?.length || 0,
-      last: prevMonthCount || 0,
-      users: (newUsersRows || []).map((u) => ({
-        id: u.id,
-        name: u.full_name,
-        created_at: u.created_at,
-      })),
-    });
-
-    setConsentSigned({
-      count: consentUsers.length,
-      users: consentUsers,
-    });
-
-    setActiveNonEnrolled(
-      nonEnrErr
-        ? { count: 0, users: [] }
-        : {
-            count: nonEnrolledRows?.length || 0,
-            users: (nonEnrolledRows || []).map((u) => ({
-              id: u.id,
-              name: u.full_name,
-            })),
-          }
-    );
-
-    setInactiveUsers(
-      inactiveErr
-        ? { count: 0, users: [] }
-        : {
-            count: inactiveRows?.length || 0,
-            users: (inactiveRows || []).map((u) => ({
-              id: u.id,
-              name: u.full_name,
-            })),
-          }
-    );
-
-    setStatsLoaded(true);
-  } catch (err) {
-    console.error("❌ fetchStats error:", err);
+  function debounceRefresh(fn, delay = 400) {
+    clearTimeout(refreshTimeout.current);
+    refreshTimeout.current = setTimeout(fn, delay);
   }
-};
 
-const refreshOverviewCards = async (payload = null) => {
-  console.log("📥 refreshOverviewCards CALLED with payload:", payload);
+  const fetchUnread = async () => {
+    const { count, error } = await supabase
+      .from("notifications")
+      .select("*", { count: "exact", head: true })
+      .eq("read", false)
+      .is("user_id", null);
 
-  if (payload?.type === "invoice-updated" && payload.invoice) {
-    const inv = payload.invoice;
+    if (!error) {
+      setUnreadCount(count || 0);
+    }
+  };
 
-    const remaining = Math.max(
-      0,
-      Number(inv.total || 0) - Number(inv.paid_total || 0)
-    );
-
-    const shouldShow =
-      (inv.status === "pending" || inv.status === "partial") &&
-      inv.signup_type !== "children_only" &&
-      remaining > 0;
+  const applyInvoiceRealtimeToUnpaid = (invoiceRow) => {
+    if (!invoiceRow?.id) return;
 
     setUnpaidInvoices((prev) => {
-      console.log("🟡 BEFORE unpaidInvoices:", prev);
-
       const prevRows = [...(prev?.rows || [])];
-      const idx = prevRows.findIndex((r) => r.id === inv.id);
+
+      const remaining = Math.max(
+        0,
+        Number(invoiceRow.total || 0) - Number(invoiceRow.paid_total || 0)
+      );
+
+      const shouldShow =
+        (invoiceRow.status === "pending" || invoiceRow.status === "partial") &&
+        invoiceRow.signup_type !== "children_only" &&
+        remaining > 0;
+
+      const idx = prevRows.findIndex((r) => r.id === invoiceRow.id);
 
       let nextRows;
 
       if (!shouldShow) {
-        nextRows = prevRows.filter((r) => r.id !== inv.id);
+        nextRows = prevRows.filter((r) => r.id !== invoiceRow.id);
       } else {
         const nextRow = {
-          id: inv.id,
-          name: inv.full_name || "—",
-          period: inv.month || null,
-          signup_type: inv.signup_type,
-          status: inv.status,
+          id: invoiceRow.id,
+          name: invoiceRow.full_name || "—",
+          period: invoiceRow.month || null,
+          signup_type: invoiceRow.signup_type,
+          status: invoiceRow.status,
           remaining,
         };
 
@@ -709,1753 +405,2258 @@ const refreshOverviewCards = async (payload = null) => {
         rows: nextRows,
       };
 
-      console.log("🟢 AFTER unpaidInvoices:", nextState);
+      console.log("⚡ applyInvoiceRealtimeToUnpaid ->", nextState);
 
       return nextState;
     });
+  };
 
-    return;
-  }
-
-  console.log("🔄 refreshOverviewCards fallback -> fetchStats()");
-  await fetchStats();
-};
-
-
-  
-
-useEffect(() => {
-  async function fetchRole() {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("role, qr_code_url, id, full_name")
-      .eq("id", user.id)
-      .single();
-
-    if (!error && data) {
-  setRole(data.role);
-  setMyQrUrl(data.qr_code_url || null);
-  setMyId(data.id || user.id);
-  setMyName(data.full_name || null);
-}
-
-  }
-
-  fetchRole();
-}, []);
-
-useEffect(() => {
-  if (activeTab) {
-    sessionStorage.setItem("adminActiveTab", activeTab);
-  }
-}, [activeTab]);
-
-useEffect(() => {
-  dashboardContentRef.current?.scrollTo({
-    top: 0,
-    behavior: "smooth",
-  });
-}, [activeTab]);
-
-
-useEffect(() => {
-  fetchBirthdays();
-  fetchSessions();
-}, []);
-
-useEffect(() => {
-  if (activeTab === "overview") {
-    fetchStats();
-  }
-}, [activeTab]);
-
-useEffect(() => {
-  console.log("📊 unpaidInvoices STATE CHANGED:", unpaidInvoices);
-}, [unpaidInvoices]);
-
-
-async function fetchBirthdays() {
-  const haitiNow = getHaitiNow();
-  const currentMonth = haitiNow.getMonth();
-
-const { data, error } = await supabase
-  .from("profiles_with_unpaid")
-  .select("id, first_name, middle_name, last_name, birth_date")
-  .not("birth_date", "is", null);
-
-if (error || !data) return;
-
-const upcoming = data.filter((u) => {
-  const [y, m] = String(u.birth_date).slice(0, 10).split("-");
-  return Number(m) - 1 === currentMonth;
-});
-
-
-  // Sort by day of month
-  upcoming.sort((a, b) => new Date(a.birth_date).getDate() - new Date(b.birth_date).getDate());
-
-  setBirthdays(upcoming);
-}
-
-
-async function fetchSessions() {
-  const haitiNow = getHaitiNow();
-  const nextWeek = new Date(haitiNow);
-  nextWeek.setDate(nextWeek.getDate() + 7);
-
-  const todayStr = haitiNow.toISOString().slice(0, 10);
-  const nextWeekStr = nextWeek.toISOString().slice(0, 10);
-
-  try {
-    // 1️⃣ Get upcoming sessions (within 7 days)
-    const { data: sessData, error: sessErr } = await supabase
-      .from("sessions")
-      .select(`
-        id,
-        course:course_id ( name ),
-        start_date,
-        start_time,
-        duration_hours,
-        day_of_week,
-        session_group
-      `)
-      .gte("start_date", todayStr)
-      .lte("start_date", nextWeekStr)
-      .order("start_date", { ascending: true });
-
-    if (sessErr) throw sessErr;
-    if (!sessData?.length) return setSessions([]);
-
-    // 2️⃣ Extract all session_group IDs
-    const groupIds = [...new Set(sessData.map(s => s.session_group).filter(Boolean))];
-    if (!groupIds.length) return setSessions([]);
-
-
-    const { data: enrData, error: enrErr } = await supabase
-      .from("enrollments")
-      .select(`
-        id,
-        status,
-        start_date,
-        enrolled_at,
-        profile_id,
-        session_id,
-        session_group,
-        course_id,
-        plan_id,
-        override_price,
-        type,
-        profiles:profile_id ( full_name ),
-        courses:course_id ( name ),
-        plans:plan_id ( id, name, price, duration_hours ),
-        sessions:session_id ( id, day_of_week, start_time )
-      `)
-      .in("session_group", groupIds); // ✅ fixed variable name
-      
-      
-
-    if (enrErr) throw enrErr;
-
-    console.log("✅ Sessions found:", sessData.length);
-    console.log("✅ Enrollments found:", enrData?.length);
-
-    // 4️⃣ Group enrollments by session_group
-    const byGroup = (enrData || []).reduce((acc, row) => {
-      const gid = row.session_group;
-      acc[gid] = acc[gid] || [];
-      acc[gid].push({
-        full_name: row.profiles?.full_name || "Inconnu",
-        duration_hours: row.plans?.duration_hours || 1,
-        profile_status: row.profiles?.status || "active",
-        start_date: row.start_date, // ✅ add this
-      });
-      return acc;
-    }, {});
-
-    // 5️⃣ Attach enrollments + compute times
-    const merged = sessData.map((s) => {
-      const [y, mo, d] = (s.start_date || "").split("-");
-      const [hh, mm] = (s.start_time || "00:00").split(":");
-
-      const startLocal = new Date(Number(y), Number(mo) - 1, Number(d), Number(hh), Number(mm));
-      const endLocal = new Date(startLocal.getTime() + (Number(s.duration_hours || 2) * 60 * 60 * 1000));
-
-      // Filter enrollments for this session
-  const enrolls = (byGroup[s.session_group] || []).filter((e) => {
-    // parse enrollment start_date as a Date
-    const eStart = new Date(e.start_date);
-    // only include if enrollment has started before the session date
-    return eStart <= startLocal;
-  });
-
-      return {
-        ...s,
-        startLocal,
-        endLocal,
-        enrollments: enrolls, // ✅ use the filtered list
-      };
-    });
-
-    // 6️⃣ Sort sessions chronologically by hour & date
-    const sortedSessions = merged.sort((a, b) => {
-      if (a.startLocal < b.startLocal) return -1;
-      if (a.startLocal > b.startLocal) return 1;
-      return 0;
-    });
-
-    setSessions(sortedSessions);
-  } catch (err) {
-    console.error("🔥 fetchSessions() error:", err);
-    setSessions([]);
-  }
-}
-
-
-
-useEffect(() => {
-  const channel = supabase
-    .channel("admin-dashboard-realtime")
-
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "profiles" },
-      () => realtimeRefresh("profiles")
-    )
-
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "enrollments" },
-      () => realtimeRefresh("enrollments")
-    )
-
-    .on(
-  "postgres_changes",
-  { event: "*", schema: "public", table: "invoices" },
-  (payload) => {
-    console.log("📡 invoices realtime payload:", payload);
-
-    // ✅ update unpaid card directly from realtime row
-    if (payload.eventType === "INSERT" || payload.eventType === "UPDATE") {
-      applyInvoiceRealtimeToUnpaid(payload.new);
+  const realtimeRefresh = (type) => {
+    // ✅ invoices are handled directly by realtime payload now
+    if (type === "invoices") {
       return;
     }
 
-    if (payload.eventType === "DELETE") {
-      setUnpaidInvoices((prev) => {
-        const nextRows = (prev?.rows || []).filter((r) => r.id !== payload.old?.id);
+    // 🚫 payments are not source of truth for unpaid invoices card
+    if (type === "payments") {
+      return;
+    }
 
-        return {
+    debounceRefresh(() => {
+      switch (type) {
+        case "profiles":
+          fetchStats();
+          fetchBirthdays();
+          break;
+
+        case "enrollments":
+          fetchStats();
+          fetchSessions();
+          break;
+
+        case "attendance":
+          fetchStats();
+          break;
+
+        case "consents":
+          fetchStats();
+          break;
+
+        default:
+          fetchStats();
+      }
+    });
+  };
+
+
+  const fetchStats = async () => {
+    const requestId = ++fetchStatsRequestRef.current;
+    setStatsLoaded(false);
+
+    try {
+      // 1) TOTAL users on platform
+      const { count: profilesTotal } = await supabase
+        .from("profiles")
+        .select("*", { count: "exact", head: true });
+
+      if (requestId !== fetchStatsRequestRef.current) return;
+
+      const { count: infl } = await supabase
+        .from("profiles")
+        .select("*", { count: "exact", head: true })
+        .eq("role", "influencer");
+
+      if (requestId !== fetchStatsRequestRef.current) return;
+
+      const { count: parents } = await supabase
+        .from("profiles")
+        .select("*", { count: "exact", head: true })
+        .eq("signup_type", "children_only");
+
+      if (requestId !== fetchStatsRequestRef.current) return;
+
+      const { count: staff } = await supabase
+        .from("profiles")
+        .select("*", { count: "exact", head: true })
+        .in("role", ["admin", "teacher", "assistant"]);
+
+      if (requestId !== fetchStatsRequestRef.current) return;
+
+      const { count: enrolls } = await supabase
+        .from("enrollments")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "active");
+
+      if (requestId !== fetchStatsRequestRef.current) return;
+
+      const { count: courses } = await supabase
+        .from("courses")
+        .select("*", { count: "exact", head: true });
+
+      if (requestId !== fetchStatsRequestRef.current) return;
+
+      const { data: invs } = await supabase
+        .from("invoices")
+        .select("id,total,full_name,paid_total,status,signup_type,month");
+
+      if (requestId !== fetchStatsRequestRef.current) return;
+
+      const unpaid = (invs || [])
+        .map((r) => {
+          const remaining = Number(r.total || 0) - Number(r.paid_total || 0);
+
+          return {
+            id: r.id,
+            name: r.full_name || "—",
+            period: r.month || null,
+            signup_type: r.signup_type,
+            status: r.status,
+            remaining,
+          };
+        })
+        .filter(
+          (r) =>
+            (r.status === "pending" || r.status === "partial") &&
+            r.signup_type !== "children_only" &&
+            r.remaining > 0
+        )
+        .sort((a, b) =>
+          a.name.localeCompare(b.name, "fr", { sensitivity: "base" })
+        );
+
+      const unpaidCount = unpaid.length;
+      const unpaidTotal = unpaid.reduce((sum, r) => sum + r.remaining, 0);
+
+      const { data: presences } = await supabase
+        .from("attendance")
+        .select("status, created_at");
+
+      if (requestId !== fetchStatsRequestRef.current) return;
+
+      const now = getHaitiNow();
+      const start = new Date(now.getFullYear(), now.getMonth(), 1);
+      const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+      const all = presences || [];
+      const thisMonth = all.filter((p) => {
+        const d = new Date(p.created_at || now);
+        return d >= start && d <= end;
+      });
+
+      const total = thisMonth.length;
+      const presents = thisMonth.filter((p) => p.status === "present").length;
+      const percent = total ? ((presents / total) * 100).toFixed(1) : 0;
+
+      const { data: comms, error: commErr } = await supabase
+        .from("commissions")
+        .select("amount, remaining_amount")
+        .gt("remaining_amount", 0);
+
+      if (requestId !== fetchStatsRequestRef.current) return;
+
+      const totalComms = commErr
+        ? 0
+        : (comms || []).reduce(
+            (sum, c) => sum + Number(c.remaining_amount ?? 0),
+            0
+          );
+
+      const firstDayThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const firstDayNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      const firstDayPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+      const { data: newUsersRows } = await supabase
+        .from("profiles_with_unpaid")
+        .select("id, full_name, created_at")
+        .gte("created_at", getHaitiISOString(firstDayThisMonth))
+        .lt("created_at", getHaitiISOString(firstDayNextMonth))
+        .neq("signup_type", "children_only")
+        .neq("role", "teacher")
+        .order("created_at", { ascending: false });
+
+      if (requestId !== fetchStatsRequestRef.current) return;
+
+      const { count: prevMonthCount } = await supabase
+        .from("profiles_with_unpaid")
+        .select("*", { count: "exact", head: true })
+        .gte("created_at", getHaitiISOString(firstDayPrevMonth))
+        .lt("created_at", getHaitiISOString(firstDayThisMonth));
+
+      if (requestId !== fetchStatsRequestRef.current) return;
+
+      const { data: consentRows, error: consErr } = await supabase
+        .from("consentements_signed")
+        .select("user_id, full_name")
+        .order("full_name", { ascending: true });
+
+      if (requestId !== fetchStatsRequestRef.current) return;
+
+      const consentUsers = consErr
+        ? []
+        : (consentRows || [])
+            .map((r) => ({
+              id: r.user_id,
+              name: r.full_name,
+            }))
+            .sort((a, b) =>
+              a.name.localeCompare(b.name, "fr", { sensitivity: "base" })
+            );
+
+      const { data: nonEnrolledRows, error: nonEnrErr } = await supabase
+        .from("profiles")
+        .select(`
+          id,
+          full_name,
+          enrollments!left ( id )
+        `)
+        .eq("is_active", true)
+        .neq("signup_type", "children_only")
+        .not("role", "eq", "influencer")
+        .not("role", "eq", "admin")
+        .not("role", "eq", "teacher")
+        .not("role", "eq", "assistant")
+        .not("role", "eq", "owner")
+        .is("enrollments", null)
+        .order("full_name", { ascending: true });
+
+      if (requestId !== fetchStatsRequestRef.current) return;
+
+      const { data: inactiveRows, error: inactiveErr } = await supabase
+        .from("profiles")
+        .select("id, full_name")
+        .eq("is_active", false)
+        .neq("signup_type", "children_only")
+        .not("role", "eq", "influencer")
+        .not("role", "eq", "admin")
+        .not("role", "eq", "teacher")
+        .not("role", "eq", "assistant")
+        .not("role", "eq", "owner")
+        .order("full_name", { ascending: true });
+
+      if (requestId !== fetchStatsRequestRef.current) return;
+
+      // ✅ apply state ONLY for latest request
+      setUserCount(profilesTotal || 0);
+      setInfluencerCount(infl || 0);
+      setParentCount(parents || 0);
+      setStaffCount(staff || 0);
+      setActiveEnrollmentCount(enrolls || 0);
+      setCourseCount(courses || 0);
+
+      setUnpaidInvoices({
+        count: unpaidCount,
+        total: unpaidTotal,
+        rows: unpaid,
+      });
+
+      setAttendance({ percent, total });
+      setCommissions(totalComms);
+
+      setNewUsers({
+        current: newUsersRows?.length || 0,
+        last: prevMonthCount || 0,
+        users: (newUsersRows || []).map((u) => ({
+          id: u.id,
+          name: u.full_name,
+          created_at: u.created_at,
+        })),
+      });
+
+      setConsentSigned({
+        count: consentUsers.length,
+        users: consentUsers,
+      });
+
+      setActiveNonEnrolled(
+        nonEnrErr
+          ? { count: 0, users: [] }
+          : {
+              count: nonEnrolledRows?.length || 0,
+              users: (nonEnrolledRows || []).map((u) => ({
+                id: u.id,
+                name: u.full_name,
+              })),
+            }
+      );
+
+      setInactiveUsers(
+        inactiveErr
+          ? { count: 0, users: [] }
+          : {
+              count: inactiveRows?.length || 0,
+              users: (inactiveRows || []).map((u) => ({
+                id: u.id,
+                name: u.full_name,
+              })),
+            }
+      );
+
+      setStatsLoaded(true);
+    } catch (err) {
+      console.error("❌ fetchStats error:", err);
+    }
+  };
+
+  const refreshOverviewCards = async (payload = null) => {
+    console.log("📥 refreshOverviewCards CALLED with payload:", payload);
+
+    if (payload?.type === "invoice-updated" && payload.invoice) {
+      const inv = payload.invoice;
+
+      const remaining = Math.max(
+        0,
+        Number(inv.total || 0) - Number(inv.paid_total || 0)
+      );
+
+      const shouldShow =
+        (inv.status === "pending" || inv.status === "partial") &&
+        inv.signup_type !== "children_only" &&
+        remaining > 0;
+
+      setUnpaidInvoices((prev) => {
+        console.log("🟡 BEFORE unpaidInvoices:", prev);
+
+        const prevRows = [...(prev?.rows || [])];
+        const idx = prevRows.findIndex((r) => r.id === inv.id);
+
+        let nextRows;
+
+        if (!shouldShow) {
+          nextRows = prevRows.filter((r) => r.id !== inv.id);
+        } else {
+          const nextRow = {
+            id: inv.id,
+            name: inv.full_name || "—",
+            period: inv.month || null,
+            signup_type: inv.signup_type,
+            status: inv.status,
+            remaining,
+          };
+
+          if (idx >= 0) {
+            nextRows = [...prevRows];
+            nextRows[idx] = nextRow;
+          } else {
+            nextRows = [...prevRows, nextRow];
+          }
+
+          nextRows.sort((a, b) =>
+            (a.name || "").localeCompare(b.name || "", "fr", {
+              sensitivity: "base",
+            })
+          );
+        }
+
+        const nextState = {
           count: nextRows.length,
           total: nextRows.reduce((sum, r) => sum + Number(r.remaining || 0), 0),
           rows: nextRows,
         };
+
+        console.log("🟢 AFTER unpaidInvoices:", nextState);
+
+        return nextState;
       });
+
       return;
     }
 
-    // fallback safety
-    realtimeRefresh("invoices");
-  }
-)
-
-        .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "payments" },
-      () => realtimeRefresh("payments")
-    )
-
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "attendance" },
-      () => realtimeRefresh("attendance")
-    )
-
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "consentements_signed" },
-      () => realtimeRefresh("consents")
-    )
-
-    .on(
-  "postgres_changes",
-  {
-    event: "UPDATE",
-    schema: "public",
-    table: "notifications",
-  },
-  (payload) => {
-    // Only global admin notifications
-    if (payload.new?.user_id === null) {
-      // ✅ IMMEDIATE update – NO debounce
-      fetchUnread();
-    }
-  }
-)
-
-.on(
-  "postgres_changes",
-  {
-    event: "INSERT",
-    schema: "public",
-    table: "notifications",
-  },
-  (payload) => {
-    if (payload.new?.user_id === null) {
-      fetchUnread();
-    }
-  }
-)
-
-
-    .subscribe();
-
-  return () => {
-    supabase.removeChannel(channel);
+    console.log("🔄 refreshOverviewCards fallback -> fetchStats()");
+    await fetchStats();
   };
-}, []);
-
-// 🔔 Initial unread notifications count
-useEffect(() => {
-  fetchUnread();
-}, []);
 
 
-useEffect(() => {
-  fetchStats();
-}, []);
+    
+
+  useEffect(() => {
+    async function fetchRole() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("role, qr_code_url, id, full_name")
+        .eq("id", user.id)
+        .single();
+
+      if (!error && data) {
+    setRole(data.role);
+    setMyQrUrl(data.qr_code_url || null);
+    setMyId(data.id || user.id);
+    setMyName(data.full_name || null);
+  }
+
+    }
+
+    fetchRole();
+  }, []);
+
+  useEffect(() => {
+    if (activeTab) {
+      sessionStorage.setItem("adminActiveTab", activeTab);
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    dashboardContentRef.current?.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  }, [activeTab]);
 
 
-const HIDDEN_SECTIONS = [
-  "classes",                 // whole Classes tab
-  "plans",
-  "invoices-templates",
-  "boutique-invoices-templates",
-  "audit-boutique",
-  "emails",
-  "notifications-templates",
-  "commissions",
-  "bulletins-template",
-  "fiches-template",
-  "salary",
-  "reports",
-  "teacher-contracts",
-  "student-certificates",
-];
+  useEffect(() => {
+    fetchBirthdays();
+    fetchSessions();
+  }, []);
 
-function isHidden(tabId) {
-  if (role !== "assistant") return false;
-  return HIDDEN_SECTIONS.some((key) => tabId.startsWith(key));
-}
+  useEffect(() => {
+    if (activeTab === "overview") {
+      fetchStats();
+    }
+  }, [activeTab]);
 
-function isEcoleTabHidden(tabId) {
-  if (role !== "assistant") return false;
-
-  // Hide if a section starts with any of your restricted prefixes
-  return HIDDEN_SECTIONS.some((key) => tabId.startsWith(key));
-}
+  useEffect(() => {
+    console.log("📊 unpaidInvoices STATE CHANGED:", unpaidInvoices);
+  }, [unpaidInvoices]);
 
 
-function isClubTabVisibleToAssistant(tabId) {
-  if (role !== "assistant") return true; // admins see every tab
+  async function fetchBirthdays() {
+    const haitiNow = getHaitiNow();
+    const currentMonth = haitiNow.getMonth();
 
-  // Assistants can ONLY see:
-  const allowed = ["calendar", "club-scan"];
+  const { data, error } = await supabase
+    .from("profiles_with_unpaid")
+    .select("id, first_name, middle_name, last_name, birth_date")
+    .not("birth_date", "is", null);
 
-  return allowed.includes(tabId);
-}
+  if (error || !data) return;
 
-// =============================
-//  ÉCOLE VISIBILITY RULES
-// =============================
+  const upcoming = data.filter((u) => {
+    const [y, m] = String(u.birth_date).slice(0, 10).split("-");
+    return Number(m) - 1 === currentMonth;
+  });
 
-const HIDDEN_ECOLE_TABS = [
-  "users",
-  "classes",
-  "plans",
-  "invoices",
-  "manage-referrals",
-  "emails",
-  "notifications",
-  "commissions",
-  "manage-attendance",
-  "boutique",
-  "bulletins",
-  "reports",
-  "salary",
-  "teacher-contracts",
-  "student-certificates",
-];
 
-function isEcoleTabVisibleToAssistant(tabId) {
-  if (role !== "assistant") return true; // Admin sees everything
+    // Sort by day of month
+    upcoming.sort((a, b) => new Date(a.birth_date).getDate() - new Date(b.birth_date).getDate());
 
-  // Hide entire groups by prefix
-  return !HIDDEN_ECOLE_TABS.some((prefix) => tabId.startsWith(prefix));
-}
+    setBirthdays(upcoming);
+  }
 
-const totalUtilisateursPlateforme =
-  (activeEnrollmentCount || 0) +
-  (activeNonEnrolled.count || 0) +
-  (inactiveUsers.count || 0) +
-  (parentCount || 0) +
-  (staffCount || 0);
 
-  const renderContent = () => {
-    switch (activeTab) {
-      case "overview":
-  return (
-    <div>
-      <div className="flex items-center space-x-3 mb-6">
-  <h2 className="text-2xl font-bold text-aquaBlue">
-    A'QUA D'OR – {role === "assistant" ? "Admin-Assist. Dashboard" : "Admin Dashboard"}
-  </h2>
-</div>
+  async function fetchSessions() {
+    const haitiNow = getHaitiNow();
+    const nextWeek = new Date(haitiNow);
+    nextWeek.setDate(nextWeek.getDate() + 7);
 
-{/* ✅ Assistant QR — MOBILE ONLY */}
-{role === "assistant" && myQrUrl ? (
-  <div className="md:hidden mt-3 flex justify-center">
-    <div className="bg-white rounded-2xl border border-gray-100 shadow p-4 flex flex-col items-center">
-      <div className="flex items-center gap-2 text-gray-700 font-semibold mb-3">
-        <FaQrcode />
-        <span>Mon QR Code</span>
-      </div>
+    const todayStr = haitiNow.toISOString().slice(0, 10);
+    const nextWeekStr = nextWeek.toISOString().slice(0, 10);
 
-      <img
-        src={myQrUrl}
-        alt="QR Code"
-        className="w-40 h-40 border border-gray-200 rounded-xl"
-      />
+    try {
+      // 1️⃣ Get upcoming sessions (within 7 days)
+      const { data: sessData, error: sessErr } = await supabase
+        .from("sessions")
+        .select(`
+          id,
+          course:course_id ( name ),
+          start_date,
+          start_time,
+          duration_hours,
+          day_of_week,
+          session_group
+        `)
+        .gte("start_date", todayStr)
+        .lte("start_date", nextWeekStr)
+        .order("start_date", { ascending: true });
 
-      <div className="text-xs text-gray-500 mt-2 text-center break-all">
+      if (sessErr) throw sessErr;
+      if (!sessData?.length) return setSessions([]);
+
+      // 2️⃣ Extract all session_group IDs
+      const groupIds = [...new Set(sessData.map(s => s.session_group).filter(Boolean))];
+      if (!groupIds.length) return setSessions([]);
+
+
+      const { data: enrData, error: enrErr } = await supabase
+        .from("enrollments")
+        .select(`
+          id,
+          status,
+          start_date,
+          enrolled_at,
+          profile_id,
+          session_id,
+          session_group,
+          course_id,
+          plan_id,
+          override_price,
+          type,
+          profiles:profile_id ( full_name ),
+          courses:course_id ( name ),
+          plans:plan_id ( id, name, price, duration_hours ),
+          sessions:session_id ( id, day_of_week, start_time )
+        `)
+        .in("session_group", groupIds); // ✅ fixed variable name
+        
+        
+
+      if (enrErr) throw enrErr;
+
+      console.log("✅ Sessions found:", sessData.length);
+      console.log("✅ Enrollments found:", enrData?.length);
+
+      // 4️⃣ Group enrollments by session_group
+      const byGroup = (enrData || []).reduce((acc, row) => {
+        const gid = row.session_group;
+        acc[gid] = acc[gid] || [];
+        acc[gid].push({
+          full_name: row.profiles?.full_name || "Inconnu",
+          duration_hours: row.plans?.duration_hours || 1,
+          profile_status: row.profiles?.status || "active",
+          start_date: row.start_date, // ✅ add this
+        });
+        return acc;
+      }, {});
+
+      // 5️⃣ Attach enrollments + compute times
+      const merged = sessData.map((s) => {
+        const [y, mo, d] = (s.start_date || "").split("-");
+        const [hh, mm] = (s.start_time || "00:00").split(":");
+
+        const startLocal = new Date(Number(y), Number(mo) - 1, Number(d), Number(hh), Number(mm));
+        const endLocal = new Date(startLocal.getTime() + (Number(s.duration_hours || 2) * 60 * 60 * 1000));
+
+        // Filter enrollments for this session
+    const enrolls = (byGroup[s.session_group] || []).filter((e) => {
+      // parse enrollment start_date as a Date
+      const eStart = new Date(e.start_date);
+      // only include if enrollment has started before the session date
+      return eStart <= startLocal;
+    });
+
+        return {
+          ...s,
+          startLocal,
+          endLocal,
+          enrollments: enrolls, // ✅ use the filtered list
+        };
+      });
+
+      // 6️⃣ Sort sessions chronologically by hour & date
+      const sortedSessions = merged.sort((a, b) => {
+        if (a.startLocal < b.startLocal) return -1;
+        if (a.startLocal > b.startLocal) return 1;
+        return 0;
+      });
+
+      setSessions(sortedSessions);
+    } catch (err) {
+      console.error("🔥 fetchSessions() error:", err);
+      setSessions([]);
+    }
+  }
+
+
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("admin-dashboard-realtime")
+
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "profiles" },
+        () => realtimeRefresh("profiles")
+      )
+
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "enrollments" },
+        () => realtimeRefresh("enrollments")
+      )
+
+      .on(
+    "postgres_changes",
+    { event: "*", schema: "public", table: "invoices" },
+    (payload) => {
+      console.log("📡 invoices realtime payload:", payload);
+
+      // ✅ update unpaid card directly from realtime row
+      if (payload.eventType === "INSERT" || payload.eventType === "UPDATE") {
+        applyInvoiceRealtimeToUnpaid(payload.new);
+        return;
+      }
+
+      if (payload.eventType === "DELETE") {
+        setUnpaidInvoices((prev) => {
+          const nextRows = (prev?.rows || []).filter((r) => r.id !== payload.old?.id);
+
+          return {
+            count: nextRows.length,
+            total: nextRows.reduce((sum, r) => sum + Number(r.remaining || 0), 0),
+            rows: nextRows,
+          };
+        });
+        return;
+      }
+
+      // fallback safety
+      realtimeRefresh("invoices");
+    }
+  )
+
+          .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "payments" },
+        () => realtimeRefresh("payments")
+      )
+
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "attendance" },
+        () => realtimeRefresh("attendance")
+      )
+
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "consentements_signed" },
+        () => realtimeRefresh("consents")
+      )
+
+      .on(
+    "postgres_changes",
+    {
+      event: "UPDATE",
+      schema: "public",
+      table: "notifications",
+    },
+    (payload) => {
+      // Only global admin notifications
+      if (payload.new?.user_id === null) {
+        // ✅ IMMEDIATE update – NO debounce
+        fetchUnread();
+      }
+    }
+  )
+
+  .on(
+    "postgres_changes",
+    {
+      event: "INSERT",
+      schema: "public",
+      table: "notifications",
+    },
+    (payload) => {
+      if (payload.new?.user_id === null) {
+        fetchUnread();
+      }
+    }
+  )
+
+
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  // 🔔 Initial unread notifications count
+  useEffect(() => {
+    fetchUnread();
+  }, []);
+
+
+  useEffect(() => {
+    fetchStats();
+  }, []);
+
+
+  const HIDDEN_SECTIONS = [
+    "classes",                 // whole Classes tab
+    "plans",
+    "invoices-templates",
+    "boutique-invoices-templates",
+    "audit-boutique",
+    "emails",
+    "notifications-templates",
+    "commissions",
+    "bulletins-template",
+    "fiches-template",
+    "salary",
+    "reports",
+    "teacher-contracts",
+    "student-certificates",
+  ];
+
+  function isHidden(tabId) {
+    if (role !== "assistant") return false;
+    return HIDDEN_SECTIONS.some((key) => tabId.startsWith(key));
+  }
+
+  function isEcoleTabHidden(tabId) {
+    if (role !== "assistant") return false;
+
+    // Hide if a section starts with any of your restricted prefixes
+    return HIDDEN_SECTIONS.some((key) => tabId.startsWith(key));
+  }
+
+
+  function isClubTabVisibleToAssistant(tabId) {
+    if (role !== "assistant") return true; // admins see every tab
+
+    // Assistants can ONLY see:
+    const allowed = ["calendar", "club-scan"];
+
+    return allowed.includes(tabId);
+  }
+
+  // =============================
+  //  ÉCOLE VISIBILITY RULES
+  // =============================
+
+  const HIDDEN_ECOLE_TABS = [
+    "users",
+    "classes",
+    "plans",
+    "invoices",
+    "manage-referrals",
+    "emails",
+    "notifications",
+    "commissions",
+    "manage-attendance",
+    "boutique",
+    "bulletins",
+    "reports",
+    "salary",
+    "teacher-contracts",
+    "student-certificates",
+  ];
+
+  function isEcoleTabVisibleToAssistant(tabId) {
+    if (role !== "assistant") return true; // Admin sees everything
+
+    // Hide entire groups by prefix
+    return !HIDDEN_ECOLE_TABS.some((prefix) => tabId.startsWith(prefix));
+  }
+
+  const totalUtilisateursPlateforme =
+    (activeEnrollmentCount || 0) +
+    (activeNonEnrolled.count || 0) +
+    (inactiveUsers.count || 0) +
+    (parentCount || 0) +
+    (staffCount || 0);
+
+    const renderContent = () => {
+      switch (activeTab) {
+        case "overview":
+    return (
+      <div>
+        <div className="flex items-center space-x-3 mb-6">
+    <h2 className="text-2xl font-bold text-aquaBlue">
+      A'QUA D'OR – {role === "assistant" ? "Admin-Assist. Dashboard" : "Admin Dashboard"}
+    </h2>
+  </div>
+
+  {/* ✅ Assistant QR — MOBILE ONLY */}
+  {role === "assistant" && myQrUrl ? (
+    <div className="md:hidden mt-3 flex justify-center">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow p-4 flex flex-col items-center">
+        <div className="flex items-center gap-2 text-gray-700 font-semibold mb-3">
+          <FaQrcode />
+          <span>Mon QR Code</span>
+        </div>
+
+        <img
+          src={myQrUrl}
+          alt="QR Code"
+          className="w-40 h-40 border border-gray-200 rounded-xl"
+        />
+
+        <div className="text-xs text-gray-500 mt-2 text-center break-all">
+        </div>
       </div>
     </div>
-  </div>
-) : null}
+  ) : null}
 
 
 
-      {/* === Animated Overview Stats === */}
-<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-   {role !== "assistant" && (
-    <>
-  {/* Utilisateurs (total on platform) + centered hover breakdown */}
-  
-  <motion.div
-  ref={userCardRef}
-  className="relative bg-white rounded-2xl p-6 border border-gray-100 shadow-sm cursor-pointer"
-  whileHover={{ scale: 1.03, y: -3 }}
-  onMouseEnter={() => setUserHovered(true)}
-  onMouseLeave={() => setUserHovered(false)}
-  onClick={() => setActiveTab("users")}
->
-    <div className="absolute top-0 left-0 h-1 w-full bg-gradient-to-r from-blue-500 to-teal-400 rounded-t-2xl"></div>
-    <p className="text-gray-500 font-medium">Utilisateurs</p>
-    <h3 className="text-3xl font-bold text-blue-600 mt-1">
-  {userCount}
-</h3>
-  </motion.div>
- 
-  <HoverOverlay
-  anchorRef={userCardRef}
-  visible={userHovered}
-  onMouseEnter={() => setUserHovered(true)}
-  onMouseLeave={() => setUserHovered(false)}
->
-  <div className="px-4 py-3 text-sm">
-    <p className="font-semibold text-gray-800 mb-2 text-center">
-      Répartition
-    </p>
-
-    <ul className="space-y-1">
-      <li className="flex justify-between">
-        <span>👥 Influenceurs</span>
-        <b>{influencerCount || 0}</b>
-      </li>
-      <li className="flex justify-between">
-        <span>👨‍👩‍👧 Parents</span>
-        <b>{parentCount || 0}</b>
-      </li>
-      <li className="flex justify-between">
-        <span>🧑‍🏫 Staff</span>
-        <b>{staffCount || 0}</b>
-      </li>
-      <li className="flex justify-between">
-        <span>🏊 Inscriptions actives</span>
-        <b>{activeEnrollmentCount || 0}</b>
-      </li>
-      <li className="flex justify-between">
-        <span>🏊 Actifs non inscrits</span>
-        <b>{activeNonEnrolled.count || 0}</b>
-      </li>
-      <li className="flex justify-between">
-        <span>🚫 Inactifs</span>
-        <b>{inactiveUsers.count || 0}</b>
-      </li>
-      <li className="flex justify-between border-t pt-2 mt-2 font-semibold">
-        <span>📊 Total</span>
-        <b>{totalUtilisateursPlateforme}</b>
-      </li>
-    </ul>
-    {activeNonEnrolled.count > 0 && (
-  <div className="mt-3 border-t pt-2">
-    <p className="text-xs font-semibold text-red-600 mb-1 text-center">
-      Actifs non inscrits – suivi requis
-    </p>
-
-    <ul className="text-xs text-gray-700 space-y-1 max-h-32 overflow-auto">
-      {activeNonEnrolled.users.map(u => (
-        <li
-          key={u.id}
-          className="bg-red-50 px-2 py-1 rounded-md"
-        >
-          • {u.name}
-        </li>
-      ))}
-    </ul>
-  </div>
-)}
-{inactiveUsers.count > 0 && (
-  <div className="mt-3 border-t pt-2">
-    <p className="text-xs font-semibold text-gray-700 mb-1 text-center">
-      Inactifs
-    </p>
-
-    <ul className="text-xs text-gray-700 space-y-1 max-h-32 overflow-auto">
-      {inactiveUsers.users.map(u => (
-        <li
-          key={u.id}
-          className="bg-gray-50 px-2 py-1 rounded-md"
-        >
-          • {u.name}
-        </li>
-      ))}
-    </ul>
-  </div>
-)}
-
-  </div>
-</HoverOverlay>
-</>
-   )}
-
-  {/* Notifications non lues */}
-<motion.div
-  className="relative bg-white rounded-2xl p-6 border border-gray-100 shadow-sm cursor-pointer"
-  whileHover={{ scale: 1.03, y: -3 }}
-  onClick={() => setActiveTab("notifications-all")}
->
-  <div className="absolute top-0 left-0 h-1 w-full bg-gradient-to-r from-teal-400 to-blue-500 rounded-t-2xl"></div>
-  <p className="text-gray-500 font-medium flex items-center gap-2">
-    <span>🔔 Notifications non lues</span>
-  </p>
-  <h3
-    className={`text-3xl font-bold ${
-      unreadCount > 0 ? "text-red-500" : "text-teal-500"
-    } mt-1`}
+        {/* === Animated Overview Stats === */}
+  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+    {role !== "assistant" && (
+      <>
+    {/* Utilisateurs (total on platform) + centered hover breakdown */}
+    
+    <motion.div
+    ref={userCardRef}
+    className="relative bg-white rounded-2xl p-6 border border-gray-100 shadow-sm cursor-pointer"
+    whileHover={{ scale: 1.03, y: -3 }}
+    onMouseEnter={() => setUserHovered(true)}
+    onMouseLeave={() => setUserHovered(false)}
+    onClick={() => setActiveTab("users")}
   >
-    {unreadCount}
+      <div className="absolute top-0 left-0 h-1 w-full bg-gradient-to-r from-blue-500 to-teal-400 rounded-t-2xl"></div>
+      <p className="text-gray-500 font-medium">Utilisateurs</p>
+      <h3 className="text-3xl font-bold text-blue-600 mt-1">
+    {userCount}
   </h3>
-  <p className="text-sm text-gray-600">
-    {unreadCount === 0
-      ? "Aucune notification en attente"
-      : `${unreadCount} notification${unreadCount > 1 ? "s" : ""} à lire`}
-  </p>
-</motion.div>
-
-  {/* Factures impayées */}
-  <motion.div
-  ref={unpaidCardRef}
-  className="relative bg-white rounded-2xl p-6 border border-gray-100 shadow-sm cursor-pointer"
-  whileHover={{ scale: 1.03, y: -3 }}
-  onMouseEnter={() => setUnpaidHovered(true)}
-  onMouseLeave={() => setUnpaidHovered(false)}
-  onClick={() => setActiveTab("invoices")}
->
-  <div className="absolute top-0 left-0 h-1 w-full bg-gradient-to-r from-red-500 to-pink-400 rounded-t-2xl"></div>
-
-  <p className="text-gray-500 font-medium">Factures impayées</p>
-  <h3 className="text-3xl font-bold text-red-500">
-    {unpaidInvoices.count}
-  </h3>
-
-  {role !== "assistant" && (
-    <p className="text-sm text-gray-600">
-      Total: {formatCurrencyUSD(unpaidInvoices.total)}
-    </p>
-  )}
-</motion.div>
-<HoverOverlay
-  anchorRef={unpaidCardRef}
-  visible={unpaidHovered}
-  width={420}   // 👈 wider just for invoices
-  onMouseEnter={() => setUnpaidHovered(true)}
-  onMouseLeave={() => setUnpaidHovered(false)}
->
-  <div className="px-4 py-3 text-sm">
-    <p className="font-semibold text-gray-800 mb-2 text-center">
-      Factures impayées
-    </p>
-
-    {unpaidInvoices.rows.length === 0 ? (
-      <p className="text-gray-500 italic text-center">
-        Aucune facture en attente 🎉
+    </motion.div>
+  
+    <HoverOverlay
+    anchorRef={userCardRef}
+    visible={userHovered}
+    onMouseEnter={() => setUserHovered(true)}
+    onMouseLeave={() => setUserHovered(false)}
+  >
+    <div className="px-4 py-3 text-sm">
+      <p className="font-semibold text-gray-800 mb-2 text-center">
+        Répartition
       </p>
-    ) : (
+
       <ul className="space-y-1">
-        {unpaidInvoices.rows.map((r) => (
-          <li
-            key={r.id}
-            className="flex justify-between gap-3 bg-red-50 px-2 py-1 rounded-md"
-          >
-            <span className="truncate">
-  {r.name}{" "}
-  <span className="text-xs text-gray-500">
-    - {r.period ? formatMonth(r.period) : "—"}
-  </span>
-</span>
-            {role !== "assistant" && (
-            <b className="text-red-600 whitespace-nowrap">
-              {formatCurrencyUSD(r.remaining)}
-            </b>
-            )}
-          </li>
-        ))}
+        <li className="flex justify-between">
+          <span>👥 Influenceurs</span>
+          <b>{influencerCount || 0}</b>
+        </li>
+        <li className="flex justify-between">
+          <span>👨‍👩‍👧 Parents</span>
+          <b>{parentCount || 0}</b>
+        </li>
+        <li className="flex justify-between">
+          <span>🧑‍🏫 Staff</span>
+          <b>{staffCount || 0}</b>
+        </li>
+        <li className="flex justify-between">
+          <span>🏊 Inscriptions actives</span>
+          <b>{activeEnrollmentCount || 0}</b>
+        </li>
+        <li className="flex justify-between">
+          <span>🏊 Actifs non inscrits</span>
+          <b>{activeNonEnrolled.count || 0}</b>
+        </li>
+        <li className="flex justify-between">
+          <span>🚫 Inactifs</span>
+          <b>{inactiveUsers.count || 0}</b>
+        </li>
+        <li className="flex justify-between border-t pt-2 mt-2 font-semibold">
+          <span>📊 Total</span>
+          <b>{totalUtilisateursPlateforme}</b>
+        </li>
       </ul>
-    )}
-  </div>
-</HoverOverlay>
-
-
-  {/* Forme de Consentement Signée */}
-<motion.div
-  ref={consentCardRef}
-  className="relative bg-white rounded-2xl p-6 border border-gray-100 shadow-sm cursor-pointer"
-  whileHover={{ scale: 1.03, y: -3 }}
-  onMouseEnter={() => setConsentHovered(true)}
-  onMouseLeave={() => setConsentHovered(false)}
->
-  <div className="absolute top-0 left-0 h-1 w-full bg-gradient-to-r from-green-500 to-teal-400 rounded-t-2xl"></div>
-
-  <p className="text-gray-500 font-medium">Formes de Consentements Signées</p>
-  <h3 className="text-3xl font-bold text-green-600 mt-1">
-    {consentSigned.count}
-  </h3>
-</motion.div>
-<HoverOverlay
-  anchorRef={consentCardRef}
-  visible={consentHovered}
-  onMouseEnter={() => setConsentHovered(true)}
-  onMouseLeave={() => setConsentHovered(false)}
->
-  <div className="px-4 py-3 text-sm">
-    <p className="font-semibold text-gray-800 mb-2 text-center">
-      Consentements signés
-    </p>
-
-    {consentSigned.users.length === 0 ? (
-      <p className="text-gray-500 italic text-center">
-        Aucun consentement
+      {activeNonEnrolled.count > 0 && (
+    <div className="mt-3 border-t pt-2">
+      <p className="text-xs font-semibold text-red-600 mb-1 text-center">
+        Actifs non inscrits – suivi requis
       </p>
-    ) : (
-      <ul className="space-y-1">
-        {consentSigned.users.map((u) => (
+
+      <ul className="text-xs text-gray-700 space-y-1 max-h-32 overflow-auto">
+        {activeNonEnrolled.users.map(u => (
           <li
             key={u.id}
-            className="bg-green-50 px-2 py-1 rounded-md"
+            className="bg-red-50 px-2 py-1 rounded-md"
           >
             • {u.name}
           </li>
         ))}
       </ul>
+    </div>
+  )}
+  {inactiveUsers.count > 0 && (
+    <div className="mt-3 border-t pt-2">
+      <p className="text-xs font-semibold text-gray-700 mb-1 text-center">
+        Inactifs
+      </p>
+
+      <ul className="text-xs text-gray-700 space-y-1 max-h-32 overflow-auto">
+        {inactiveUsers.users.map(u => (
+          <li
+            key={u.id}
+            className="bg-gray-50 px-2 py-1 rounded-md"
+          >
+            • {u.name}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )}
+
+    </div>
+  </HoverOverlay>
+  </>
     )}
-  </div>
-</HoverOverlay>
 
-
-
-  {/* Commissions en attente */}
-  {role !== "assistant" && (
+    {/* Notifications non lues */}
   <motion.div
     className="relative bg-white rounded-2xl p-6 border border-gray-100 shadow-sm cursor-pointer"
     whileHover={{ scale: 1.03, y: -3 }}
-    onClick={() => setActiveTab("commissions")}
+    onClick={() => setActiveTab("notifications-all")}
   >
-    <div className="absolute top-0 left-0 h-1 w-full bg-gradient-to-r from-orange-400 to-yellow-400 rounded-t-2xl"></div>
-    <p className="text-gray-500 font-medium">Commissions en attente</p>
-    <h3 className="text-3xl font-bold text-orange-500">{formatCurrencyUSD(commissions)}</h3>
-  </motion.div>
-  )}
-
-  {/* Nouveaux inscrits (mois en cours) */}
-<motion.div
-  ref={newUsersCardRef}
-  className="relative bg-white rounded-2xl p-6 border border-gray-100 shadow-sm cursor-pointer"
-  whileHover={{ scale: 1.03, y: -3 }}
-  onMouseEnter={() => setNewUsersHovered(true)}
-  onMouseLeave={() => setNewUsersHovered(false)}
->
-  <div className="absolute top-0 left-0 h-1 w-full bg-gradient-to-r from-purple-500 to-indigo-400 rounded-t-2xl"></div>
-
-  <p className="text-gray-500 font-medium">Nouveaux inscrits (mois en cours)</p>
-  <h3 className="text-3xl font-bold text-purple-600">
-    {newUsers.current}
-  </h3>
-  <p className="text-sm text-gray-500 mt-1">
-    Mois précédent : <b>{newUsers.last}</b>
-  </p>
-</motion.div>
-<HoverOverlay
-  anchorRef={newUsersCardRef}
-  visible={newUsersHovered}
-  onMouseEnter={() => setNewUsersHovered(true)}
-  onMouseLeave={() => setNewUsersHovered(false)}
->
-  <div className="px-4 py-3 text-sm">
-    <p className="font-semibold text-gray-800 mb-2 text-center">
-      Nouveaux inscrits – mois en cours
+    <div className="absolute top-0 left-0 h-1 w-full bg-gradient-to-r from-teal-400 to-blue-500 rounded-t-2xl"></div>
+    <p className="text-gray-500 font-medium flex items-center gap-2">
+      <span>🔔 Notifications non lues</span>
     </p>
-
-    {newUsers.users.length === 0 ? (
-      <p className="text-gray-500 italic text-center">
-        Aucun nouvel inscrit
-      </p>
-    ) : (
-      <ul className="space-y-1">
-  {newUsers.users.map((u) => (
-    <li
-      key={u.id}
-      className="bg-purple-50 px-2 py-1 rounded-md flex justify-between gap-2"
+    <h3
+      className={`text-3xl font-bold ${
+        unreadCount > 0 ? "text-red-500" : "text-teal-500"
+      } mt-1`}
     >
-      <span className="font-medium truncate">• {u.name}</span>
-      <span className="text-xs text-gray-500 whitespace-nowrap">
-        {formatDateFrSafe(u.created_at)}
-      </span>
-    </li>
-  ))}
-</ul>
+      {unreadCount}
+    </h3>
+    <p className="text-sm text-gray-600">
+      {unreadCount === 0
+        ? "Aucune notification en attente"
+        : `${unreadCount} notification${unreadCount > 1 ? "s" : ""} à lire`}
+    </p>
+  </motion.div>
 
+    {/* Factures impayées */}
+    <motion.div
+    ref={unpaidCardRef}
+    className="relative bg-white rounded-2xl p-6 border border-gray-100 shadow-sm cursor-pointer"
+    whileHover={{ scale: 1.03, y: -3 }}
+    onMouseEnter={() => setUnpaidHovered(true)}
+    onMouseLeave={() => setUnpaidHovered(false)}
+    onClick={() => setActiveTab("invoices")}
+  >
+    <div className="absolute top-0 left-0 h-1 w-full bg-gradient-to-r from-red-500 to-pink-400 rounded-t-2xl"></div>
+
+    <p className="text-gray-500 font-medium">Factures impayées</p>
+    <h3 className="text-3xl font-bold text-red-500">
+      {unpaidInvoices.count}
+    </h3>
+
+    {role !== "assistant" && (
+      <p className="text-sm text-gray-600">
+        Total: {formatCurrencyUSD(unpaidInvoices.total)}
+      </p>
     )}
-  </div>
-</HoverOverlay>
+  </motion.div>
+  <HoverOverlay
+    anchorRef={unpaidCardRef}
+    visible={unpaidHovered}
+    width={420}   // 👈 wider just for invoices
+    onMouseEnter={() => setUnpaidHovered(true)}
+    onMouseLeave={() => setUnpaidHovered(false)}
+  >
+    <div className="px-4 py-3 text-sm">
+      <p className="font-semibold text-gray-800 mb-2 text-center">
+        Factures impayées
+      </p>
 
+      {unpaidInvoices.rows.length === 0 ? (
+        <p className="text-gray-500 italic text-center">
+          Aucune facture en attente 🎉
+        </p>
+      ) : (
+        <div className="space-y-4 max-h-96 overflow-y-auto pr-1">
+  {unpaidInvoicesByMonth.map(({ monthKey, invoices }) => (
+    <section key={monthKey}>
+      <div className="sticky top-0 z-10 bg-white border-b border-red-200 py-1 mb-2">
+        <h4 className="font-semibold text-red-700">
+          {monthKey === "unknown"
+            ? "Mois inconnu"
+            : formatMonth(`${monthKey}-01`)}
+        </h4>
 
+        <p className="text-xs text-gray-500">
+          {invoices.length} facture
+          {invoices.length > 1 ? "s" : ""}
+        </p>
       </div>
-      <br />
-      <div className="bg-white shadow rounded-lg p-6">
-  <h3 className="font-bold mb-4 text-aquaBlue text-lg flex items-center gap-2">
-    🎂 Anniversaires du mois
-  </h3>
 
-  {birthdays.length === 0 ? (
-    <p className="text-gray-500 italic">Aucun anniversaire ce mois</p>
-  ) : (
-    <ul className="space-y-3">
-      {birthdays.map((b) => {
-        const isBdayToday = isToday(b.birth_date);
-        return (
+      <ul className="space-y-1">
+        {invoices.map((r) => (
           <li
-  key={b.id}
-  className={`flex items-center justify-between border-b pb-2 transition-all ${
-    isToday(b.birth_date)
-      ? "animate-birthdayFlash font-semibold"
-      : ""
-  }`}
->
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">{isBdayToday ? "🎉" : "🎈"}</span>
-              <span>
-                <span className="text-gray-800">
-                  {b.first_name} {b.middle_name} {b.last_name}
-                </span>
-                <span className="text-gray-500 ml-2 text-sm">
-                  — {formatDateFrSafe(b.birth_date)}
-                </span>
-              </span>
-            </div>
-            {isBdayToday && (
-              <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-medium shadow-sm">
-                🎊 Aujourd’hui !
-              </span>
+            key={r.id}
+            className="flex justify-between gap-3 bg-red-50 px-2 py-1 rounded-md"
+          >
+            <span className="truncate">{r.name}</span>
+
+            {role !== "assistant" && (
+              <b className="text-red-600 whitespace-nowrap">
+                {formatCurrencyUSD(r.remaining)}
+              </b>
             )}
           </li>
-        );
-      })}
-    </ul>
-  )}
+        ))}
+      </ul>
+    </section>
+  ))}
 </div>
-       
-      <div className="bg-white shadow rounded-2xl p-6 mt-6 border border-gray-100">
-  <h3 className="font-bold mb-4 text-aquaBlue text-lg flex items-center gap-2">
-    📅 Prochaines sessions (7 jours)
-  </h3>
+      )}
+    </div>
+  </HoverOverlay>
 
-  {sessions.length === 0 ? (
-    <p className="text-gray-500 italic">Aucune session prévue cette semaine</p>
-  ) : (
-    <ul className="divide-y divide-gray-100">
-      {sessions.map((s) => {
-  const start = s.startLocal;
-  const end = s.endLocal;
 
-  const dayLabel = start
-    ? start.toLocaleDateString("fr-FR", { weekday: "long" })
-    : s.day_of_week || "Jour inconnu";
+    {/* Forme de Consentement Signée */}
+  <motion.div
+    ref={consentCardRef}
+    className="relative bg-white rounded-2xl p-6 border border-gray-100 shadow-sm cursor-pointer"
+    whileHover={{ scale: 1.03, y: -3 }}
+    onMouseEnter={() => setConsentHovered(true)}
+    onMouseLeave={() => setConsentHovered(false)}
+  >
+    <div className="absolute top-0 left-0 h-1 w-full bg-gradient-to-r from-green-500 to-teal-400 rounded-t-2xl"></div>
 
-  const dateStr = start
-    ? start.toLocaleDateString("fr-FR", {
-        day: "2-digit",
-        month: "long",
-        year: "numeric",
-      })
-    : "Date inconnue";
-
-  const startTime = start
-    ? start.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })
-    : "Heure inconnue";
-
-  const endTime = end
-    ? end.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })
-    : "—";
-
-  return (
-    <motion.div
-      key={s.id}
-      whileHover={{ scale: 1.02, y: -2 }}
-      className="bg-gradient-to-r from-white to-blue-50 border border-gray-100 shadow-sm hover:shadow-md transition-all rounded-xl p-4 mb-3"
-    >
-      <div>
-        <p className="font-semibold text-aquaBlue text-lg flex items-center gap-2">
-          🏊 {s.course?.name || "Cours inconnu"}
-        </p>
-        <p className="text-sm text-gray-600">
-          📅 {dayLabel.charAt(0).toUpperCase() + dayLabel.slice(1)} — {dateStr}
-        </p>
-        <p className="text-sm text-gray-500">
-          🕗 {startTime} → {endTime}
-        </p>
-      </div>
-
-      {/* 👥 Participants */}
-<div className="mt-3">
-  {s.enrollments?.length > 0 ? (
-    <div className="mt-1 bg-blue-50 border border-blue-100 rounded-xl p-3 shadow-inner">
-      <p className="text-sm font-semibold text-blue-600 mb-3 flex items-center gap-1">
-        👥 Participants ({s.enrollments.length})
+    <p className="text-gray-500 font-medium">Formes de Consentements Signées</p>
+    <h3 className="text-3xl font-bold text-green-600 mt-1">
+      {consentSigned.count}
+    </h3>
+  </motion.div>
+  <HoverOverlay
+    anchorRef={consentCardRef}
+    visible={consentHovered}
+    onMouseEnter={() => setConsentHovered(true)}
+    onMouseLeave={() => setConsentHovered(false)}
+  >
+    <div className="px-4 py-3 text-sm">
+      <p className="font-semibold text-gray-800 mb-2 text-center">
+        Consentements signés
       </p>
 
-      {(() => {
-        const oneHour = s.enrollments
-          .filter(e => (e.duration_hours ?? s.duration_hours ?? 1) === 1)
-          .sort((a, b) => (a.full_name || "").localeCompare(b.full_name || ""));
-
-        const twoHour = s.enrollments
-          .filter(e => (e.duration_hours ?? s.duration_hours ?? 1) === 2)
-          .sort((a, b) => (a.full_name || "").localeCompare(b.full_name || ""));
-
-        return (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* 1h column */}
-            <div>
-              <p className="text-xs font-semibold text-yellow-600 mb-2">🕐 1 Heure</p>
-              {oneHour.length > 0 ? (
-                <ul className="space-y-1">
-                  {oneHour.map((e, idx) => (
-                    <li
-                      key={`${s.id}-1h-${idx}`}
-                      className="w-full flex flex-wrap items-center gap-2 bg-white border border-gray-200 px-3 py-2 rounded-lg shadow-sm"
-                    >
-                      <span className="text-gray-800 font-medium">
-                        {e.full_name}
-                      </span>
-                      <span className="bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full text-xs font-medium">
-                        (1h)
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-gray-400 text-sm italic">—</p>
-              )}
-            </div>
-
-            {/* 2h column */}
-            <div>
-              <p className="text-xs font-semibold text-green-600 mb-2">🕑 2 Heures</p>
-              {twoHour.length > 0 ? (
-                <ul className="space-y-1">
-                  {twoHour.map((e, idx) => (
-                    <li
-                      key={`${s.id}-2h-${idx}`}
-                      className="w-full flex flex-wrap items-center gap-2 bg-white border border-gray-200 px-3 py-2 rounded-lg shadow-sm"
-                    >
-                      <span className="text-gray-800 font-medium break-words">
-                        {e.full_name}
-                      </span>
-                      <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-xs font-medium">
-                        (2h)
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-gray-400 text-sm italic">—</p>
-              )}
-            </div>
-          </div>
-        );
-      })()}
+      {consentSigned.users.length === 0 ? (
+        <p className="text-gray-500 italic text-center">
+          Aucun consentement
+        </p>
+      ) : (
+        <ul className="space-y-1">
+          {consentSigned.users.map((u) => (
+            <li
+              key={u.id}
+              className="bg-green-50 px-2 py-1 rounded-md"
+            >
+              • {u.name}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
-  ) : (
-    <p className="text-gray-400 italic text-sm">Aucun participant</p>
-  )}
-</div>
+  </HoverOverlay>
 
+
+
+    {/* Commissions en attente */}
+    {role !== "assistant" && (
+    <motion.div
+      className="relative bg-white rounded-2xl p-6 border border-gray-100 shadow-sm cursor-pointer"
+      whileHover={{ scale: 1.03, y: -3 }}
+      onClick={() => setActiveTab("commissions")}
+    >
+      <div className="absolute top-0 left-0 h-1 w-full bg-gradient-to-r from-orange-400 to-yellow-400 rounded-t-2xl"></div>
+      <p className="text-gray-500 font-medium">Commissions en attente</p>
+      <h3 className="text-3xl font-bold text-orange-500">{formatCurrencyUSD(commissions)}</h3>
     </motion.div>
-  );
-})}
+    )}
 
+    {/* Nouveaux inscrits (mois en cours) */}
+  <motion.div
+    ref={newUsersCardRef}
+    className="relative bg-white rounded-2xl p-6 border border-gray-100 shadow-sm cursor-pointer"
+    whileHover={{ scale: 1.03, y: -3 }}
+    onMouseEnter={() => setNewUsersHovered(true)}
+    onMouseLeave={() => setNewUsersHovered(false)}
+  >
+    <div className="absolute top-0 left-0 h-1 w-full bg-gradient-to-r from-purple-500 to-indigo-400 rounded-t-2xl"></div>
 
+    <p className="text-gray-500 font-medium">Nouveaux inscrits (mois en cours)</p>
+    <h3 className="text-3xl font-bold text-purple-600">
+      {newUsers.current}
+    </h3>
+    <p className="text-sm text-gray-500 mt-1">
+      Mois précédent : <b>{newUsers.last}</b>
+    </p>
+  </motion.div>
+  <HoverOverlay
+    anchorRef={newUsersCardRef}
+    visible={newUsersHovered}
+    onMouseEnter={() => setNewUsersHovered(true)}
+    onMouseLeave={() => setNewUsersHovered(false)}
+  >
+    <div className="px-4 py-3 text-sm">
+      <p className="font-semibold text-gray-800 mb-2 text-center">
+        Nouveaux inscrits – mois en cours
+      </p>
 
-    </ul>
-  )}
-</div>
+      {newUsers.users.length === 0 ? (
+        <p className="text-gray-500 italic text-center">
+          Aucun nouvel inscrit
+        </p>
+      ) : (
+        <ul className="space-y-1">
+    {newUsers.users.map((u) => (
+      <li
+        key={u.id}
+        className="bg-purple-50 px-2 py-1 rounded-md flex justify-between gap-2"
+      >
+        <span className="font-medium truncate">• {u.name}</span>
+        <span className="text-xs text-gray-500 whitespace-nowrap">
+          {formatDateFrSafe(u.created_at)}
+        </span>
+      </li>
+    ))}
+  </ul>
+
+      )}
     </div>
-  )
+  </HoverOverlay>
 
-      case "users":
-        return <AdminUsers />
-      case "courses":
-        return <AdminCourses />      
-      case "classes-courses":
-        return <AdminCourses />
-      case "classes-sessions":
-        return <AdminSessions />
-      case "classes-enrollments":
-        return <AdminEnrollments />
-      case "plans": 
-        return <AdminPlans />
-      case "invoices":
-        return <AdminInvoices />
-      case "factures-invoices":
-        return <AdminInvoices />
-      case "invoicespayment":
-  return (
-    <AdminInvoicePayment
-      key="admin-invoice-payment"
-      onPaymentChange={refreshOverviewCards}
-    />
-  )
-      case "invoices-templates":
-        return <AdminInvoiceTemplates/>
-      case "boutique-invoices-templates":
-        return <AdminBoutiqueInvoiceTemplates/>
-      case "emails-templates":
-        return <AdminEmailTemplates />
-      case "notifications-all":
-        return <AdminNotificationsAll onUnreadCountChange={setUnreadCount} />;
-      case "notifications-templates":
-        return <AdminNotificationTemplates />;
-      case "emails-queue":
-        return <AdminEmailQueue />
-      case "emails-send":
-        return <AdminSendEmails />  // new component for manual sending
-      case "calendar":
-        return <AdminCalendarManager />
-      case "bulletinsetfiches":
-        return <AdminBulletinsetFiches />;
-      case "bulletins-template":
-        return <AdminBulletinTemplates />;
-      case "bulletins-form":
-        return <AdminBulletinForm />;
-      case "bulletins-fiches-techniques":
-        return <AdminFicheTechniques />;
-      case "fiches-template":
-        return <AdminFicheTechniqueTemplates />;
-      case "boutique-products":
-        return <AdminProducts />;
-      case "boutique-invoices":
-        return <AdminBoutiqueInvoices />;
-      case "audit-boutique":
-        return <AdminAuditBoutique />;
-      case "reports-general":
-        return <AdminReports />
-      case "reports-bulletins":
-        return <AdminReportsBulletinetFiche />
-      case "reports-commissions":
-        return <AdminCommissions />
-      case "reports-p&l":
-        return <AdminProfitandLoss />
-      case "reports-commission-requests":
-        return <AdminCommissionRequests />
-      case "reports-attendance":
-        return <AdminAttendanceReports />
-      {/* --- Update case in renderContent() --- */}
-      case "commissions-manage":
-        return <AdminCommissions />
-      case "commissions":
-        return <AdminCommissions />
-      case "commissions-payments":
-        return <AdminCommissionRequests />
-      case "club-bookings":
-        return <AdminClubBookings />
-      case "club-invoices":
-        return <AdminClubInvoices />;
-      case "club-invoices-payment":
-        return <AdminClubInvoicePayment />;
-      case "club-invoices-templates":
-        return <AdminClubInvoiceTemplates />;
-      case "club-membership-plans":
-        return <AdminClubMembership />;
-      case "club-users-members":
-        return <AdminMembershipUsers />;
-      case "club-users-approval":
-        return <AdminMembershipApproval />;
-      case "club-membership-invoices":
-        return <AdminClubMembershipInvoices />;
-      case "club-membership-invoices-templates":
-        return <AdminClubMembershipInvoiceTemplates />;
-      case "club-membership-payments":
-        return <AdminClubMembershipPayments />;
-      case "club-overview":
-        return <AdminClubOverview />;
-      case "club-scan":
-        return <ClubQRScanner />;
-      case "salary":
-        return <AdminSalary />
-      case "manage-referrals":
-        return <AdminReferrals />
-      case "manage-attendance":
-        return <AdminAttendance />
-      case "teacher-contracts":
-        return <AdminTeacherContract />; // fallback (optional)
-      case "teacher-contracts-templates":
-        return <AdminTeacherContract />;
-      case "teacher-contracts-signed":
-        return <AdminTeacherSignedContracts />;
-      case "student-certificates":
-        return <AdminStudentCertificates />;
-      case "achievements":
-        return <AdminAchievements />;
-      case "reports-cards":
-        return <AdminCardImpressions />;
-      default:
-        return <h2 className="text-xl">Sélectionnez une section</h2>
+
+        </div>
+        <br />
+        <div className="bg-white shadow rounded-lg p-6">
+    <h3 className="font-bold mb-4 text-aquaBlue text-lg flex items-center gap-2">
+      🎂 Anniversaires du mois
+    </h3>
+
+    {birthdays.length === 0 ? (
+      <p className="text-gray-500 italic">Aucun anniversaire ce mois</p>
+    ) : (
+      <ul className="space-y-3">
+        {birthdays.map((b) => {
+          const isBdayToday = isToday(b.birth_date);
+          return (
+            <li
+    key={b.id}
+    className={`flex items-center justify-between border-b pb-2 transition-all ${
+      isToday(b.birth_date)
+        ? "animate-birthdayFlash font-semibold"
+        : ""
+    }`}
+  >
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">{isBdayToday ? "🎉" : "🎈"}</span>
+                <span>
+                  <span className="text-gray-800">
+                    {b.first_name} {b.middle_name} {b.last_name}
+                  </span>
+                  <span className="text-gray-500 ml-2 text-sm">
+                    — {formatDateFrSafe(b.birth_date)}
+                  </span>
+                </span>
+              </div>
+              {isBdayToday && (
+                <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-medium shadow-sm">
+                  🎊 Aujourd’hui !
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    )}
+  </div>
+        
+        <div className="bg-white shadow rounded-2xl p-6 mt-6 border border-gray-100">
+    <h3 className="font-bold mb-4 text-aquaBlue text-lg flex items-center gap-2">
+      📅 Prochaines sessions (7 jours)
+    </h3>
+
+    {sessions.length === 0 ? (
+      <p className="text-gray-500 italic">Aucune session prévue cette semaine</p>
+    ) : (
+      <ul className="divide-y divide-gray-100">
+        {sessions.map((s) => {
+    const start = s.startLocal;
+    const end = s.endLocal;
+
+    const dayLabel = start
+      ? start.toLocaleDateString("fr-FR", { weekday: "long" })
+      : s.day_of_week || "Jour inconnu";
+
+    const dateStr = start
+      ? start.toLocaleDateString("fr-FR", {
+          day: "2-digit",
+          month: "long",
+          year: "numeric",
+        })
+      : "Date inconnue";
+
+    const startTime = start
+      ? start.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })
+      : "Heure inconnue";
+
+    const endTime = end
+      ? end.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })
+      : "—";
+
+    return (
+      <motion.div
+        key={s.id}
+        whileHover={{ scale: 1.02, y: -2 }}
+        className="bg-gradient-to-r from-white to-blue-50 border border-gray-100 shadow-sm hover:shadow-md transition-all rounded-xl p-4 mb-3"
+      >
+        <div>
+          <p className="font-semibold text-aquaBlue text-lg flex items-center gap-2">
+            🏊 {s.course?.name || "Cours inconnu"}
+          </p>
+          <p className="text-sm text-gray-600">
+            📅 {dayLabel.charAt(0).toUpperCase() + dayLabel.slice(1)} — {dateStr}
+          </p>
+          <p className="text-sm text-gray-500">
+            🕗 {startTime} → {endTime}
+          </p>
+        </div>
+
+        {/* 👥 Participants */}
+  <div className="mt-3">
+    {s.enrollments?.length > 0 ? (
+      <div className="mt-1 bg-blue-50 border border-blue-100 rounded-xl p-3 shadow-inner">
+        <p className="text-sm font-semibold text-blue-600 mb-3 flex items-center gap-1">
+          👥 Participants ({s.enrollments.length})
+        </p>
+
+        {(() => {
+          const oneHour = s.enrollments
+            .filter(e => (e.duration_hours ?? s.duration_hours ?? 1) === 1)
+            .sort((a, b) => (a.full_name || "").localeCompare(b.full_name || ""));
+
+          const twoHour = s.enrollments
+            .filter(e => (e.duration_hours ?? s.duration_hours ?? 1) === 2)
+            .sort((a, b) => (a.full_name || "").localeCompare(b.full_name || ""));
+
+          return (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* 1h column */}
+              <div>
+                <p className="text-xs font-semibold text-yellow-600 mb-2">🕐 1 Heure</p>
+                {oneHour.length > 0 ? (
+                  <ul className="space-y-1">
+                    {oneHour.map((e, idx) => (
+                      <li
+                        key={`${s.id}-1h-${idx}`}
+                        className="w-full flex flex-wrap items-center gap-2 bg-white border border-gray-200 px-3 py-2 rounded-lg shadow-sm"
+                      >
+                        <span className="text-gray-800 font-medium">
+                          {e.full_name}
+                        </span>
+                        <span className="bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full text-xs font-medium">
+                          (1h)
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-gray-400 text-sm italic">—</p>
+                )}
+              </div>
+
+              {/* 2h column */}
+              <div>
+                <p className="text-xs font-semibold text-green-600 mb-2">🕑 2 Heures</p>
+                {twoHour.length > 0 ? (
+                  <ul className="space-y-1">
+                    {twoHour.map((e, idx) => (
+                      <li
+                        key={`${s.id}-2h-${idx}`}
+                        className="w-full flex flex-wrap items-center gap-2 bg-white border border-gray-200 px-3 py-2 rounded-lg shadow-sm"
+                      >
+                        <span className="text-gray-800 font-medium break-words">
+                          {e.full_name}
+                        </span>
+                        <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-xs font-medium">
+                          (2h)
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-gray-400 text-sm italic">—</p>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+    ) : (
+      <p className="text-gray-400 italic text-sm">Aucun participant</p>
+    )}
+  </div>
+
+      </motion.div>
+    );
+  })}
+
+
+
+      </ul>
+    )}
+  </div>
+      </div>
+    )
+
+        case "users":
+          return <AdminUsers />
+        case "courses":
+          return <AdminCourses />      
+        case "classes-courses":
+          return <AdminCourses />
+        case "classes-sessions":
+          return <AdminSessions />
+        case "classes-enrollments":
+          return <AdminEnrollments />
+        case "plans": 
+          return <AdminPlans />
+        case "invoices":
+          return <AdminInvoices />
+        case "factures-invoices":
+          return <AdminInvoices />
+        case "invoicespayment":
+    return (
+      <AdminInvoicePayment
+        key="admin-invoice-payment"
+        onPaymentChange={refreshOverviewCards}
+      />
+    )
+        case "invoices-templates":
+          return <AdminInvoiceTemplates/>
+        case "boutique-invoices-templates":
+          return <AdminBoutiqueInvoiceTemplates/>
+        case "emails-templates":
+          return <AdminEmailTemplates />
+        case "notifications-all":
+          return <AdminNotificationsAll onUnreadCountChange={setUnreadCount} />;
+        case "notifications-templates":
+          return <AdminNotificationTemplates />;
+        case "emails-queue":
+          return <AdminEmailQueue />
+        case "emails-send":
+          return <AdminSendEmails />  // new component for manual sending
+        case "calendar":
+          return <AdminCalendarManager />
+        case "bulletinsetfiches":
+          return <AdminBulletinsetFiches />;
+        case "bulletins-template":
+          return <AdminBulletinTemplates />;
+        case "bulletins-form":
+          return <AdminBulletinForm />;
+        case "bulletins-fiches-techniques":
+          return <AdminFicheTechniques />;
+        case "fiches-template":
+          return <AdminFicheTechniqueTemplates />;
+        case "boutique-products":
+          return <AdminProducts />;
+        case "boutique-invoices":
+          return <AdminBoutiqueInvoices />;
+        case "audit-boutique":
+          return <AdminAuditBoutique />;
+        case "reports-general":
+          return <AdminReports />
+        case "reports-bulletins":
+          return <AdminReportsBulletinetFiche />
+        case "reports-commissions":
+          return <AdminCommissions />
+        case "reports-p&l":
+          return <AdminProfitandLoss />
+        case "reports-commission-requests":
+          return <AdminCommissionRequests />
+        case "reports-attendance":
+          return <AdminAttendanceReports />
+        {/* --- Update case in renderContent() --- */}
+        case "commissions-manage":
+          return <AdminCommissions />
+        case "commissions":
+          return <AdminCommissions />
+        case "commissions-payments":
+          return <AdminCommissionRequests />
+        case "club-bookings":
+          return <AdminClubBookings />
+        case "club-invoices":
+          return <AdminClubInvoices />;
+        case "club-invoices-payment":
+          return <AdminClubInvoicePayment />;
+        case "club-invoices-templates":
+          return <AdminClubInvoiceTemplates />;
+        case "club-membership-plans":
+          return <AdminClubMembership />;
+        case "club-users-members":
+          return <AdminMembershipUsers />;
+        case "club-users-approval":
+          return <AdminMembershipApproval />;
+        case "club-membership-invoices":
+          return <AdminClubMembershipInvoices />;
+        case "club-membership-invoices-templates":
+          return <AdminClubMembershipInvoiceTemplates />;
+        case "club-membership-payments":
+          return <AdminClubMembershipPayments />;
+        case "club-overview":
+          return <AdminClubOverview />;
+        case "club-scan":
+          return <ClubQRScanner />;
+        case "salary":
+          return <AdminSalary />
+        case "manage-referrals":
+          return <AdminReferrals />
+        case "manage-attendance":
+          return <AdminAttendance />
+        case "teacher-contracts":
+          return <AdminTeacherContract />; // fallback (optional)
+        case "teacher-contracts-templates":
+          return <AdminTeacherContract />;
+        case "teacher-contracts-signed":
+          return <AdminTeacherSignedContracts />;
+        case "student-certificates":
+          return <AdminStudentCertificates />;
+        case "achievements":
+          return <AdminAchievements />;
+        case "reports-cards":
+          return <AdminCardImpressions />;
+        case "spa-overview":
+          return <AdminSpa />;
+        case "spa-reservations":
+          return <AdminSpaReservations />;
+        case "spa-invoices":
+          return <AdminSpaInvoices />;
+        case "spa-clients":
+          return <AdminSpaClients />;
+        case "spa-services":
+          return <AdminSpaServices />;
+        case "spa-rooms":
+          return <AdminSpaRooms />;
+        case "spa-reports":
+          return <AdminSpaReports />;
+        case "spa-invoices-payment":
+          return <AdminSpaInvoicesPayments />;
+        case "spa-invoices-templates":
+          return <AdminSpaInvoiceTemplates />;
+        default:
+          return <h2 className="text-xl">Sélectionnez une section</h2>
+      }
     }
+
+    const handleSignOut = async () => {
+    setShowSignOutConfirm(false);
+
+    // 🧹 Clear persisted admin UI state
+    sessionStorage.removeItem("adminActiveTab");
+
+    // 🔐 Kill Supabase session
+    await supabase.auth.signOut();
+
+    // 🔁 Hard redirect (no history)
+    window.location.replace("/login");
+  };
+
+
+
+    return (
+      <div className="flex h-screen bg-gray-100">
+        {/* Sidebar */}
+        {/* Mobile header */}
+  <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-gray-900 text-white flex items-center justify-between px-4 py-3">
+    <button
+      onClick={() => setSidebarOpen(true)}
+      className="text-2xl"
+    >
+      ☰
+    </button>
+
+    <img
+    src="/logo/aquador.png"
+    alt="A'QUA D'OR"
+    className="h-12 w-auto cursor-pointer"
+    onClick={() => {
+      setActiveTab("overview");
+
+      dashboardContentRef.current?.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
+    }}
+  />
+
+    <div className="w-6" />
+  </div>
+  {sidebarOpen && (
+    <div
+      className="fixed inset-0 bg-black/50 z-40 md:hidden"
+      onClick={() => setSidebarOpen(false)}
+    />
+  )}
+        <aside
+    className={`
+      fixed md:static inset-y-0 left-0 z-50
+      w-64 bg-gray-900 shadow-lg flex flex-col
+      transform transition-transform duration-300
+      ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
+      md:translate-x-0
+    `}
+  >
+          <div className="p-4 border-gray-100 border-b flex flex-col items-center">
+    <img src="/logo/aquador.png" alt="Logo A'QUA D'OR" className="h-10 w-10" />
+    <h1 className="text-2xl font-bold text-aquaBlue">A'QUA D'OR</h1>
+    <p className="text-gray-500 text-sm">
+      {role === "assistant" ? "Admin-Assist. Dashboard" : "Admin Dashboard"}
+    </p>
+  </div>
+
+
+          <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+
+  {/* ========================= */}
+  {/*      ÉCOLE SECTION        */}
+  {/* ========================= */}
+
+  <button
+    onClick={() => {
+      setOpenEcole((prev) => {
+        const next = !prev;
+
+        // ✅ set default ONLY the first time it opens
+        if (next && !activeTab.startsWith("overview")) {
+    setActiveTab("overview");
   }
 
-  const handleSignOut = async () => {
-  setShowSignOutConfirm(false);
-
-  // 🧹 Clear persisted admin UI state
-  sessionStorage.removeItem("adminActiveTab");
-
-  // 🔐 Kill Supabase session
-  await supabase.auth.signOut();
-
-  // 🔁 Hard redirect (no history)
-  window.location.replace("/login");
-};
 
 
-
-  return (
-    <div className="flex h-screen bg-gray-100">
-      {/* Sidebar */}
-      {/* Mobile header */}
-<div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-gray-900 text-white flex items-center justify-between px-4 py-3">
-  <button
-    onClick={() => setSidebarOpen(true)}
-    className="text-2xl"
+        return next;
+      });
+    }}
+    className={`flex items-center justify-between w-full px-3 py-2 rounded-lg 
+      ${openEcole ? "bg-aquaBlue text-white" : "text-gray-100 hover:bg-orange-700"}`}
   >
-    ☰
+    <span className="flex items-center gap-2">🏫 École</span>
+    <span>{openEcole ? "▲" : "▼"}</span>
   </button>
 
-  <img
-  src="/logo/aquador.png"
-  alt="A'QUA D'OR"
-  className="h-12 w-auto cursor-pointer"
-  onClick={() => {
-    setActiveTab("overview");
 
-    dashboardContentRef.current?.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    });
-  }}
-/>
+  {openEcole && (
+    <div className="ml-4 mt-2 flex flex-col space-y-2">
 
-  <div className="w-6" />
-</div>
-{sidebarOpen && (
-  <div
-    className="fixed inset-0 bg-black/50 z-40 md:hidden"
-    onClick={() => setSidebarOpen(false)}
-  />
-)}
-      <aside
-  className={`
-    fixed md:static inset-y-0 left-0 z-50
-    w-64 bg-gray-900 shadow-lg flex flex-col
-    transform transition-transform duration-300
-    ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
-    md:translate-x-0
-  `}
->
-        <div className="p-4 border-gray-100 border-b flex flex-col items-center">
-  <img src="/logo/aquador.png" alt="Logo A'QUA D'OR" className="h-10 w-10" />
-  <h1 className="text-2xl font-bold text-aquaBlue">A'QUA D'OR</h1>
-  <p className="text-gray-500 text-sm">
-    {role === "assistant" ? "Admin-Assist. Dashboard" : "Admin Dashboard"}
-  </p>
-</div>
-
-
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-
-{/* ========================= */}
-{/*      ÉCOLE SECTION        */}
-{/* ========================= */}
-
-<button
-  onClick={() => {
-    setOpenEcole((prev) => {
-      const next = !prev;
-
-      // ✅ set default ONLY the first time it opens
-      if (next && !activeTab.startsWith("overview")) {
-  setActiveTab("overview");
-}
-
-
-
-      return next;
-    });
-  }}
-  className={`flex items-center justify-between w-full px-3 py-2 rounded-lg 
-    ${openEcole ? "bg-aquaBlue text-white" : "text-gray-100 hover:bg-orange-700"}`}
->
-  <span className="flex items-center gap-2">🏫 École</span>
-  <span>{openEcole ? "▲" : "▼"}</span>
-</button>
-
-
-{openEcole && (
-  <div className="ml-4 mt-2 flex flex-col space-y-2">
-
-    {/* Aperçu */}
-    <SidebarBtn
-  id="overview"
-  icon={<FaChartBar />}
-  label="Aperçu"
-  activeTab={activeTab}
-  setActiveTab={setActiveTab}
-  closeSidebar={() => setSidebarOpen(false)}
-/>
-
-    {/* Users */}
-    {!isHidden("users") && (
+      {/* Aperçu */}
       <SidebarBtn
-  id="users"
-  icon={<FaUsers />}
-  label="Utilisateurs"
-  activeTab={activeTab}
-  setActiveTab={setActiveTab}
-  closeSidebar={() => setSidebarOpen(false)}
-/>
-
-    )}
-
-    {/* Classes */}
-    {!isHidden("classes") && (
-      <SubGroup
-        title="Classes"
-        prefix="classes"
-        defaultTab="classes-courses"
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        closeSidebar={() => setSidebarOpen(false)}
-      >
-        <SidebarSub id="classes-courses" label="Cours" {...{ activeTab, setActiveTab }} closeSidebar={() => setSidebarOpen(false)} />
-        <SidebarSub id="classes-sessions" label="Sessions" {...{ activeTab, setActiveTab }} closeSidebar={() => setSidebarOpen(false)} />
-        <SidebarSub id="classes-enrollments" label="Inscriptions" {...{ activeTab, setActiveTab }} closeSidebar={() => setSidebarOpen(false)} />
-      </SubGroup>
-    )}
-
-    {/* Plans */}
-    {!isHidden("plans") && (
-      <SidebarBtn
-        id="plans"
-        icon={<FaClipboardList />}
-        label="Plans"
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        closeSidebar={() => setSidebarOpen(false)}
-      />
-    )}
-
-    {!isHidden("invoices") && (
-      <SubGroup
-        title="Facturation"
-        prefix="invoices"
-        defaultTab="invoices"
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        closeSidebar={() => setSidebarOpen(false)}
-      >
-        <SidebarSub id="invoices" label="Factures" {...{ activeTab, setActiveTab }} closeSidebar={() => setSidebarOpen(false)} />
-        <SidebarSub id="invoicespayment" label="Paiements" {...{ activeTab, setActiveTab }} closeSidebar={() => setSidebarOpen(false)} />
-        {!isHidden("invoices-templates") && (
-          <SidebarSub id="invoices-templates" label="Templates Factures" {...{ activeTab, setActiveTab }} closeSidebar={() => setSidebarOpen(false)} />
-        )}
-      </SubGroup>
-    )}
-
-    {/* Parrainage */}
-    {!isHidden("manage-referrals") && (
-      <SidebarBtn
-        id="manage-referrals"
-        icon={<FaUserFriends />}
-        label="Parrainage"
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        closeSidebar={() => setSidebarOpen(false)}
-      />
-    )}
-
-    {/* Emails */}
-    {!isHidden("emails") && (
-      <SubGroup
-        title="Emails"
-        prefix="emails"
-        defaultTab="emails-send"
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        closeSidebar={() => setSidebarOpen(false)}
-      >
-        <SidebarSub id="emails-templates" label="Templates" {...{ activeTab, setActiveTab }} closeSidebar={() => setSidebarOpen(false)} />
-        <SidebarSub id="emails-queue" label="Queue" {...{ activeTab, setActiveTab }} closeSidebar={() => setSidebarOpen(false)} />
-        <SidebarSub id="emails-send" label="Envoyer Email" {...{ activeTab, setActiveTab }} closeSidebar={() => setSidebarOpen(false)} />
-      </SubGroup>
-    )}
-
-    {/* === Notifications === */}
-    {!isHidden("notifications") && (
-  <SubGroup
-    title={
-      <span className="flex items-center gap-2">
-        <FaBell />
-        Notifications
-        {unreadCount > 0 && (
-          <span className="bg-red-600 text-white text-xs px-2 py-0.5 rounded-full">
-            {unreadCount}
-          </span>
-        )}
-      </span>
-    }
-    prefix="notifications"
-    defaultTab="notifications-all"
-    activeTab={activeTab}
-    setActiveTab={setActiveTab}
-    closeSidebar={() => setSidebarOpen(false)}
-  >
-    <SidebarSub
-      id="notifications-all"
-      label="Toutes"
-      activeTab={activeTab}
-      setActiveTab={setActiveTab}
-      closeSidebar={() => setSidebarOpen(false)}
-    />
-
-    {!isHidden("notifications-templates") && (
-      <SidebarSub
-        id="notifications-templates"
-        label="Templates"
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        closeSidebar={() => setSidebarOpen(false)}
-      />
-    )}
-  </SubGroup>
-)}
-
-
-    {/* Commissions */}
-    {!isHidden("commissions") && (
-      <SubGroup
-        title="Commissions"
-        prefix="commissions"
-        defaultTab="commissions-manage"
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        closeSidebar={() => setSidebarOpen(false)}
-      >
-        <SidebarSub id="commissions-manage" label="Gérer" {...{ activeTab, setActiveTab }} closeSidebar={() => setSidebarOpen(false)} />
-        <SidebarSub id="commissions-payments" label="Paiements" {...{ activeTab, setActiveTab }} closeSidebar={() => setSidebarOpen(false)} />
-      </SubGroup>
-    )}
-
-    {/* Présences */}
-    {!isHidden("manage-attendance") && (
-  <SidebarBtn
-    id="manage-attendance"
-    icon={<FaCheckToSlot />}
-    label="Présences"
+    id="overview"
+    icon={<FaChartBar />}
+    label="Aperçu"
     activeTab={activeTab}
     setActiveTab={setActiveTab}
     closeSidebar={() => setSidebarOpen(false)}
   />
-)}
 
-
-    {/* Boutique */}
-    {!isHidden("boutique") && (
-  <SubGroup
-    title="Boutique"
-    prefix="boutique"
-    defaultTab="boutique-products"
-    activeTab={activeTab}
-    setActiveTab={setActiveTab}
-    closeSidebar={() => setSidebarOpen(false)}
-  >
-    <SidebarSub
-      id="boutique-products"
-      label="Produits"
-      activeTab={activeTab}
-      setActiveTab={setActiveTab}
-      closeSidebar={() => setSidebarOpen(false)}
-    />
-
-    <SidebarSub
-      id="boutique-invoices"
-      label="Factures"
-      activeTab={activeTab}
-      setActiveTab={setActiveTab}
-      closeSidebar={() => setSidebarOpen(false)}
-    />
-{role !== "assistant" && (
-    <SidebarSub
-      id="boutique-invoices-templates"
-      label="Template"
-      activeTab={activeTab}
-      setActiveTab={setActiveTab}
-      closeSidebar={() => setSidebarOpen(false)}
-    />
-)}
-{role !== "assistant" && (
-    <SidebarSub
-      id="audit-boutique"
-      label="Audit"
-      activeTab={activeTab}
-      setActiveTab={setActiveTab}
-      closeSidebar={() => setSidebarOpen(false)}
-    />
-)}
-  </SubGroup>
-)}
-    {/* Bulletins */}
-    {!isHidden("bulletins") && (
-  <SubGroup
-    title="Bulletins"
-    prefix="bulletins"
-    defaultTab="bulletins-form"
-    activeTab={activeTab}
-    setActiveTab={setActiveTab}
-    closeSidebar={() => setSidebarOpen(false)}
-  >
-    <SidebarSub
-      id="bulletins-form"
-      label="Bulletins"
-      activeTab={activeTab}
-      setActiveTab={setActiveTab}
-      closeSidebar={() => setSidebarOpen(false)}
-    />
-
-    <SidebarSub
-      id="bulletins-fiches-techniques"
-      label="Fiches Techniques"
-      activeTab={activeTab}
-      setActiveTab={setActiveTab}
-      closeSidebar={() => setSidebarOpen(false)}
-    />
-
-    <SidebarSub
-      id="bulletinsetfiches"
-      label="Bulletins + Fiches"
-      activeTab={activeTab}
-      setActiveTab={setActiveTab}
-      closeSidebar={() => setSidebarOpen(false)}
-    />
-
-    {!isHidden("bulletins-template") && (
-      <SidebarSub
-        id="bulletins-template"
-        label="Template Bulletin"
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        closeSidebar={() => setSidebarOpen(false)}
-      />
-    )}
-
-    {!isHidden("fiches-template") && (
-      <SidebarSub
-        id="fiches-template"
-        label="Template Fiche"
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        closeSidebar={() => setSidebarOpen(false)}
-      />
-    )}
-  </SubGroup>
-)}
-
-
-    {/* Rapports */}
-    {!isHidden("reports") && (
-  <SubGroup
-    title="Rapports"
-    prefix="reports"
-    defaultTab="reports-general"
-    activeTab={activeTab}
-    setActiveTab={setActiveTab}
-    closeSidebar={() => setSidebarOpen(false)}
-  >
-    <SidebarSub
-      id="reports-general"
-      label="CSV + PDF"
-      activeTab={activeTab}
-      setActiveTab={setActiveTab}
-      closeSidebar={() => setSidebarOpen(false)}
-    />
-
-    <SidebarSub
-      id="reports-attendance"
-      label="Présences"
-      activeTab={activeTab}
-      setActiveTab={setActiveTab}
-      closeSidebar={() => setSidebarOpen(false)}
-    />
-
-    <SidebarSub
-      id="reports-p&l"
-      label="Entrées / Dépenses"
-      activeTab={activeTab}
-      setActiveTab={setActiveTab}
-      closeSidebar={() => setSidebarOpen(false)}
-    />
-    <SidebarSub
-      id="reports-cards"
-      label="Cartes (Impressions)"
-      activeTab={activeTab}
-      setActiveTab={setActiveTab}
-      closeSidebar={() => setSidebarOpen(false)}
-    />
-  </SubGroup>
-)}
-
-
-    {/* Salaires */}
-    {!isHidden("salary") && (
-      <SidebarBtn
-        id="salary"
-        icon={<FaMoneyBill1Wave />}
-        label="Salaires"
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        closeSidebar={() => setSidebarOpen(false)}
-      />
-    )}
-    {!isHidden("teacher-contracts") && (
-  <SubGroup
-    title={
-      <span className="flex items-center gap-2">
-        <FaFileAlt />
-        Contrats Professeurs
-      </span>
-    }
-    prefix="teacher-contracts"
-    defaultTab="teacher-contracts-templates"
-    activeTab={activeTab}
-    setActiveTab={setActiveTab}
-    closeSidebar={() => setSidebarOpen(false)}
-  >
-    <SidebarSub
-      id="teacher-contracts-templates"
-      label="Templates"
-      activeTab={activeTab}
-      setActiveTab={setActiveTab}
-      closeSidebar={() => setSidebarOpen(false)}
-    />
-
-    <SidebarSub
-      id="teacher-contracts-signed"
-      label="Contrats Signés"
-      activeTab={activeTab}
-      setActiveTab={setActiveTab}
-      closeSidebar={() => setSidebarOpen(false)}
-    />
-  </SubGroup>
-)}
-{!isHidden("student-certificates") && (
-<SidebarBtn
-  id="student-certificates"
-  icon={<FaFileAlt />}
-  label="Certificats Élèves"
-  activeTab={activeTab}
-  setActiveTab={setActiveTab}
-  closeSidebar={() => setSidebarOpen(false)}
-/>
-)}
-<SidebarBtn
-  id="achievements"
-  icon={<FaPuzzlePiece />}
-  label="Réussites / Notes"
-  activeTab={activeTab}
-  setActiveTab={setActiveTab}
-  closeSidebar={() => setSidebarOpen(false)}
-/>
-
-
-  </div>
-)}
-
-
- {/* ========================= */}
-{/*        CLUB SECTION       */}
-{/* ========================= */}
-
-<button
-  onClick={() => {
-    setOpenClub((prev) => {
-      const next = !prev;
-
-      // ✅ set default ONLY the first time it opens
-      if (next && !activeTab.startsWith("club-")) {
-  setActiveTab("club-overview");
-}
-
-
-
-      return next;
-    });
-  }}
-  className={`flex items-center justify-between w-full px-3 py-2 rounded-lg 
-    ${openClub ? "bg-aquaBlue text-white" : "text-gray-100 hover:bg-orange-700"}`}
->
-  <span className="flex items-center gap-2">🏝️ Club</span>
-  <span>{openClub ? "▲" : "▼"}</span>
-</button>
-
-
-{openClub && (
-  <div className="ml-4 mt-2 flex flex-col space-y-2">
-
-    <SidebarBtn
-  id="club-overview"
-  icon={<FaChartBar />}
-  label="Aperçu Club"
-  activeTab={activeTab}
-  setActiveTab={setActiveTab}
-  closeSidebar={() => setSidebarOpen(false)}
-/>
-    <SubGroup
-  title="Users"
-  prefix="club-users"
-  activeTab={activeTab}
-  setActiveTab={setActiveTab}
-  closeSidebar={() => setSidebarOpen(false)}
->
-  <SidebarSub
-    id="club-users-members"
+      {/* Users */}
+      {!isHidden("users") && (
+        <SidebarBtn
+    id="users"
+    icon={<FaUsers />}
     label="Utilisateurs"
     activeTab={activeTab}
     setActiveTab={setActiveTab}
     closeSidebar={() => setSidebarOpen(false)}
   />
 
-  {role !== "assistant" && (
-    <SidebarSub
-      id="club-users-approval"
-      label="Approbation"
+      )}
+
+      {/* Classes */}
+      {!isHidden("classes") && (
+        <SubGroup
+          title="Classes"
+          prefix="classes"
+          defaultTab="classes-courses"
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          closeSidebar={() => setSidebarOpen(false)}
+        >
+          <SidebarSub id="classes-courses" label="Cours" {...{ activeTab, setActiveTab }} closeSidebar={() => setSidebarOpen(false)} />
+          <SidebarSub id="classes-sessions" label="Sessions" {...{ activeTab, setActiveTab }} closeSidebar={() => setSidebarOpen(false)} />
+          <SidebarSub id="classes-enrollments" label="Inscriptions" {...{ activeTab, setActiveTab }} closeSidebar={() => setSidebarOpen(false)} />
+        </SubGroup>
+      )}
+
+      {/* Plans */}
+      {!isHidden("plans") && (
+        <SidebarBtn
+          id="plans"
+          icon={<FaClipboardList />}
+          label="Plans"
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          closeSidebar={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {!isHidden("invoices") && (
+        <SubGroup
+          title="Facturation"
+          prefix="invoices"
+          defaultTab="invoices"
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          closeSidebar={() => setSidebarOpen(false)}
+        >
+          <SidebarSub id="invoices" label="Factures" {...{ activeTab, setActiveTab }} closeSidebar={() => setSidebarOpen(false)} />
+          <SidebarSub id="invoicespayment" label="Paiements" {...{ activeTab, setActiveTab }} closeSidebar={() => setSidebarOpen(false)} />
+          {!isHidden("invoices-templates") && (
+            <SidebarSub id="invoices-templates" label="Templates Factures" {...{ activeTab, setActiveTab }} closeSidebar={() => setSidebarOpen(false)} />
+          )}
+        </SubGroup>
+      )}
+
+      {/* Parrainage */}
+      {!isHidden("manage-referrals") && (
+        <SidebarBtn
+          id="manage-referrals"
+          icon={<FaUserFriends />}
+          label="Parrainage"
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          closeSidebar={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Emails */}
+      {!isHidden("emails") && (
+        <SubGroup
+          title="Emails"
+          prefix="emails"
+          defaultTab="emails-send"
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          closeSidebar={() => setSidebarOpen(false)}
+        >
+          <SidebarSub id="emails-templates" label="Templates" {...{ activeTab, setActiveTab }} closeSidebar={() => setSidebarOpen(false)} />
+          <SidebarSub id="emails-queue" label="Queue" {...{ activeTab, setActiveTab }} closeSidebar={() => setSidebarOpen(false)} />
+          <SidebarSub id="emails-send" label="Envoyer Email" {...{ activeTab, setActiveTab }} closeSidebar={() => setSidebarOpen(false)} />
+        </SubGroup>
+      )}
+
+      {/* === Notifications === */}
+      {!isHidden("notifications") && (
+    <SubGroup
+      title={
+        <span className="flex items-center gap-2">
+          <FaBell />
+          Notifications
+          {unreadCount > 0 && (
+            <span className="bg-red-600 text-white text-xs px-2 py-0.5 rounded-full">
+              {unreadCount}
+            </span>
+          )}
+        </span>
+      }
+      prefix="notifications"
+      defaultTab="notifications-all"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    >
+      <SidebarSub
+        id="notifications-all"
+        label="Toutes"
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        closeSidebar={() => setSidebarOpen(false)}
+      />
+
+      {!isHidden("notifications-templates") && (
+        <SidebarSub
+          id="notifications-templates"
+          label="Templates"
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          closeSidebar={() => setSidebarOpen(false)}
+        />
+      )}
+    </SubGroup>
+  )}
+
+
+      {/* Commissions */}
+      {!isHidden("commissions") && (
+        <SubGroup
+          title="Commissions"
+          prefix="commissions"
+          defaultTab="commissions-manage"
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          closeSidebar={() => setSidebarOpen(false)}
+        >
+          <SidebarSub id="commissions-manage" label="Gérer" {...{ activeTab, setActiveTab }} closeSidebar={() => setSidebarOpen(false)} />
+          <SidebarSub id="commissions-payments" label="Paiements" {...{ activeTab, setActiveTab }} closeSidebar={() => setSidebarOpen(false)} />
+        </SubGroup>
+      )}
+
+      {/* Présences */}
+      {!isHidden("manage-attendance") && (
+    <SidebarBtn
+      id="manage-attendance"
+      icon={<FaCheckToSlot />}
+      label="Présences"
       activeTab={activeTab}
       setActiveTab={setActiveTab}
       closeSidebar={() => setSidebarOpen(false)}
     />
   )}
-</SubGroup>
 
 
-    
-    {/* Calendrier Club — assistants can see it */}
-    {isClubTabVisibleToAssistant("calendar") && (
+      {/* Boutique */}
+      {!isHidden("boutique") && (
+    <SubGroup
+      title="Boutique"
+      prefix="boutique"
+      defaultTab="boutique-products"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    >
+      <SidebarSub
+        id="boutique-products"
+        label="Produits"
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        closeSidebar={() => setSidebarOpen(false)}
+      />
+
+      <SidebarSub
+        id="boutique-invoices"
+        label="Factures"
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        closeSidebar={() => setSidebarOpen(false)}
+      />
+  {role !== "assistant" && (
+      <SidebarSub
+        id="boutique-invoices-templates"
+        label="Template"
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        closeSidebar={() => setSidebarOpen(false)}
+      />
+  )}
+  {role !== "assistant" && (
+      <SidebarSub
+        id="audit-boutique"
+        label="Audit"
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        closeSidebar={() => setSidebarOpen(false)}
+      />
+  )}
+    </SubGroup>
+  )}
+      {/* Bulletins */}
+      {!isHidden("bulletins") && (
+    <SubGroup
+      title="Bulletins"
+      prefix="bulletins"
+      defaultTab="bulletins-form"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    >
+      <SidebarSub
+        id="bulletins-form"
+        label="Bulletins"
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        closeSidebar={() => setSidebarOpen(false)}
+      />
+
+      <SidebarSub
+        id="bulletins-fiches-techniques"
+        label="Fiches Techniques"
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        closeSidebar={() => setSidebarOpen(false)}
+      />
+
+      <SidebarSub
+        id="bulletinsetfiches"
+        label="Bulletins + Fiches"
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        closeSidebar={() => setSidebarOpen(false)}
+      />
+
+      {!isHidden("bulletins-template") && (
+        <SidebarSub
+          id="bulletins-template"
+          label="Template Bulletin"
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          closeSidebar={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {!isHidden("fiches-template") && (
+        <SidebarSub
+          id="fiches-template"
+          label="Template Fiche"
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          closeSidebar={() => setSidebarOpen(false)}
+        />
+      )}
+    </SubGroup>
+  )}
+
+
+      {/* Rapports */}
+      {!isHidden("reports") && (
+    <SubGroup
+      title="Rapports"
+      prefix="reports"
+      defaultTab="reports-general"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    >
+      <SidebarSub
+        id="reports-general"
+        label="CSV + PDF"
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        closeSidebar={() => setSidebarOpen(false)}
+      />
+
+      <SidebarSub
+        id="reports-attendance"
+        label="Présences"
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        closeSidebar={() => setSidebarOpen(false)}
+      />
+
+      <SidebarSub
+        id="reports-p&l"
+        label="Entrées / Dépenses"
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        closeSidebar={() => setSidebarOpen(false)}
+      />
+      <SidebarSub
+        id="reports-cards"
+        label="Cartes (Impressions)"
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        closeSidebar={() => setSidebarOpen(false)}
+      />
+    </SubGroup>
+  )}
+
+
+      {/* Salaires */}
+      {!isHidden("salary") && (
+        <SidebarBtn
+          id="salary"
+          icon={<FaMoneyBill1Wave />}
+          label="Salaires"
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          closeSidebar={() => setSidebarOpen(false)}
+        />
+      )}
+      {!isHidden("teacher-contracts") && (
+    <SubGroup
+      title={
+        <span className="flex items-center gap-2">
+          <FaFileAlt />
+          Contrats Professeurs
+        </span>
+      }
+      prefix="teacher-contracts"
+      defaultTab="teacher-contracts-templates"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    >
+      <SidebarSub
+        id="teacher-contracts-templates"
+        label="Templates"
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        closeSidebar={() => setSidebarOpen(false)}
+      />
+
+      <SidebarSub
+        id="teacher-contracts-signed"
+        label="Contrats Signés"
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        closeSidebar={() => setSidebarOpen(false)}
+      />
+    </SubGroup>
+  )}
+  {!isHidden("student-certificates") && (
+  <SidebarBtn
+    id="student-certificates"
+    icon={<FaFileAlt />}
+    label="Certificats Élèves"
+    activeTab={activeTab}
+    setActiveTab={setActiveTab}
+    closeSidebar={() => setSidebarOpen(false)}
+  />
+  )}
+  <SidebarBtn
+    id="achievements"
+    icon={<FaPuzzlePiece />}
+    label="Réussites / Notes"
+    activeTab={activeTab}
+    setActiveTab={setActiveTab}
+    closeSidebar={() => setSidebarOpen(false)}
+  />
+
+
+    </div>
+  )}
+
+
+  {/* ========================= */}
+  {/*        CLUB SECTION       */}
+  {/* ========================= */}
+
+  <button
+    onClick={() => {
+      setOpenClub((prev) => {
+        const next = !prev;
+
+        // ✅ set default ONLY the first time it opens
+        if (next && !activeTab.startsWith("club-")) {
+    setActiveTab("club-overview");
+  }
+
+
+
+        return next;
+      });
+    }}
+    className={`flex items-center justify-between w-full px-3 py-2 rounded-lg 
+      ${openClub ? "bg-aquaBlue text-white" : "text-gray-100 hover:bg-orange-700"}`}
+  >
+    <span className="flex items-center gap-2">🏝️ Club</span>
+    <span>{openClub ? "▲" : "▼"}</span>
+  </button>
+
+
+  {openClub && (
+    <div className="ml-4 mt-2 flex flex-col space-y-2">
+
       <SidebarBtn
-  id="calendar"
-  icon={<FaCalendarAlt />}
-  label="Calendrier Club"
-  activeTab={activeTab}
-  setActiveTab={setActiveTab}
-  closeSidebar={() => setSidebarOpen(false)}
-/>
-    )}
+    id="club-overview"
+    icon={<FaChartBar />}
+    label="Aperçu Club"
+    activeTab={activeTab}
+    setActiveTab={setActiveTab}
+    closeSidebar={() => setSidebarOpen(false)}
+  />
+      <SubGroup
+    title="Users"
+    prefix="club-users"
+    activeTab={activeTab}
+    setActiveTab={setActiveTab}
+    closeSidebar={() => setSidebarOpen(false)}
+  >
+    <SidebarSub
+      id="club-users-members"
+      label="Utilisateurs"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    />
 
-    {/* Réservations */}
     {role !== "assistant" && (
-      <SidebarBtn
-  id="club-bookings"
-  icon={<FaMoneyBillTransfer />}
-  label="Réservations"
-  activeTab={activeTab}
-  setActiveTab={setActiveTab}
-  closeSidebar={() => setSidebarOpen(false)}
-/>
+      <SidebarSub
+        id="club-users-approval"
+        label="Approbation"
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        closeSidebar={() => setSidebarOpen(false)}
+      />
     )}
+  </SubGroup>
 
-    {/* ===== MEMBERSHIP GROUP ===== */}
-{role !== "assistant" && (
-  <SubGroup
-  title="Membership"
-  prefix="club-membership"
-  activeTab={activeTab}
-  setActiveTab={setActiveTab}
-  closeSidebar={() => setSidebarOpen(false)}
->
-  <SidebarSub
-    id="club-membership-plans"
-    label="Plans Membership"
+
+      
+      {/* Calendrier Club — assistants can see it */}
+      {isClubTabVisibleToAssistant("calendar") && (
+        <SidebarBtn
+    id="calendar"
+    icon={<FaCalendarAlt />}
+    label="Calendrier Club"
     activeTab={activeTab}
     setActiveTab={setActiveTab}
     closeSidebar={() => setSidebarOpen(false)}
   />
+      )}
 
-  <SidebarSub
-    id="club-membership-invoices"
-    label="Factures Membership"
+      {/* Réservations */}
+      {role !== "assistant" && (
+        <SidebarBtn
+    id="club-bookings"
+    icon={<FaMoneyBillTransfer />}
+    label="Réservations"
     activeTab={activeTab}
     setActiveTab={setActiveTab}
     closeSidebar={() => setSidebarOpen(false)}
   />
+      )}
 
-  <SidebarSub
-    id="club-membership-payments"
-    label="Paiements Membership"
+      {/* ===== MEMBERSHIP GROUP ===== */}
+  {role !== "assistant" && (
+    <SubGroup
+    title="Membership"
+    prefix="club-membership"
+    activeTab={activeTab}
+    setActiveTab={setActiveTab}
+    closeSidebar={() => setSidebarOpen(false)}
+  >
+    <SidebarSub
+      id="club-membership-plans"
+      label="Plans Membership"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    />
+
+    <SidebarSub
+      id="club-membership-invoices"
+      label="Factures Membership"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    />
+
+    <SidebarSub
+      id="club-membership-payments"
+      label="Paiements Membership"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    />
+
+    <SidebarSub
+      id="club-membership-invoices-templates"
+      label="Templates Facture Membership"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    />
+  </SubGroup>
+
+  )}
+
+
+
+      {/* ========================= */}
+  {/*  BOOKINGS (Club) Group    */}
+  {/* ========================= */}
+  {role !== "assistant" && (
+    <SubGroup
+    title="Bookings"
+    prefix="club-invoices"
+    activeTab={activeTab}
+    setActiveTab={setActiveTab}
+    closeSidebar={() => setSidebarOpen(false)}
+  >
+    <SidebarSub
+      id="club-invoices"
+      label="Factures Club"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    />
+
+    <SidebarSub
+      id="club-invoices-payment"
+      label="Paiements Club"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    />
+
+    <SidebarSub
+      id="club-invoices-templates"
+      label="Templates Factures Club"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    />
+  </SubGroup>
+
+  )}
+
+
+      {/* Scanner QR — assistants can see it */}
+      {isClubTabVisibleToAssistant("club-scan") && (
+        <SidebarBtn
+    id="club-scan"
+    icon={<FaCheckToSlot />}
+    label="Scanner QR"
     activeTab={activeTab}
     setActiveTab={setActiveTab}
     closeSidebar={() => setSidebarOpen(false)}
   />
+      )}
 
-  <SidebarSub
-    id="club-membership-invoices-templates"
-    label="Templates Facture Membership"
-    activeTab={activeTab}
-    setActiveTab={setActiveTab}
-    closeSidebar={() => setSidebarOpen(false)}
-  />
-</SubGroup>
+    </div>
+  )}
 
-)}
+  {/* ========================= */}
+  {/*         SPA SECTION       */}
+  {/* ========================= */}
 
+  {role !== "assistant" && (
+    <>
+      <button
+        onClick={() => {
+          setOpenSpa((prev) => {
+            const next = !prev;
 
+            if (next && !activeTab.startsWith("spa-")) {
+              setActiveTab("spa-overview");
+            }
 
-    {/* ========================= */}
-{/*  BOOKINGS (Club) Group    */}
-{/* ========================= */}
-{role !== "assistant" && (
-  <SubGroup
-  title="Bookings"
-  prefix="club-invoices"
-  activeTab={activeTab}
-  setActiveTab={setActiveTab}
-  closeSidebar={() => setSidebarOpen(false)}
->
-  <SidebarSub
-    id="club-invoices"
-    label="Factures Club"
-    activeTab={activeTab}
-    setActiveTab={setActiveTab}
-    closeSidebar={() => setSidebarOpen(false)}
-  />
+            return next;
+          });
+        }}
+        className={`flex items-center justify-between w-full px-3 py-2 rounded-lg ${
+          openSpa
+            ? "bg-aquaBlue text-white"
+            : "text-gray-100 hover:bg-orange-700"
+        }`}
+      >
+        <span className="flex items-center gap-2">
+          💆 Spa
+        </span>
 
-  <SidebarSub
-    id="club-invoices-payment"
-    label="Paiements Club"
-    activeTab={activeTab}
-    setActiveTab={setActiveTab}
-    closeSidebar={() => setSidebarOpen(false)}
-  />
+        <span>{openSpa ? "▲" : "▼"}</span>
+      </button>
 
-  <SidebarSub
-    id="club-invoices-templates"
-    label="Templates Factures Club"
-    activeTab={activeTab}
-    setActiveTab={setActiveTab}
-    closeSidebar={() => setSidebarOpen(false)}
-  />
-</SubGroup>
-
-)}
-
-
-    {/* Scanner QR — assistants can see it */}
-    {isClubTabVisibleToAssistant("club-scan") && (
+      {openSpa && (
+    <div className="ml-4 mt-2 flex flex-col space-y-2">
       <SidebarBtn
-  id="club-scan"
-  icon={<FaCheckToSlot />}
-  label="Scanner QR"
-  activeTab={activeTab}
-  setActiveTab={setActiveTab}
-  closeSidebar={() => setSidebarOpen(false)}
-/>
-    )}
+        id="spa-overview"
+        icon={<FaChartBar />}
+        label="Spa Overview"
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        closeSidebar={() => setSidebarOpen(false)}
+      />
 
-  </div>
-)}
+      <SidebarBtn
+        id="spa-reservations"
+        icon={<FaCalendarAlt />}
+        label="Réservations"
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        closeSidebar={() => setSidebarOpen(false)}
+      />
+
+      <SubGroup
+    title="Facturation"
+    prefix="spa-invoices"
+    defaultTab="spa-invoices"
+    activeTab={activeTab}
+    setActiveTab={setActiveTab}
+    closeSidebar={() => setSidebarOpen(false)}
+  >
+    <SidebarSub
+      id="spa-invoices"
+      label="Factures"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    />
+
+    <SidebarSub
+      id="spa-invoices-payment"
+      label="Paiements"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    />
+
+    <SidebarSub
+      id="spa-invoices-templates"
+      label="Templates"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    />
+  </SubGroup>
+
+      <SidebarBtn
+        id="spa-clients"
+        icon={<FaUsers />}
+        label="Clients"
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        closeSidebar={() => setSidebarOpen(false)}
+      />
+
+      <SidebarBtn
+        id="spa-services"
+        icon={<FaPrayingHands />}
+        label="Services"
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        closeSidebar={() => setSidebarOpen(false)}
+      />
+
+      <SidebarBtn
+        id="spa-rooms"
+        icon={<FaBox />}
+        label="Salles"
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        closeSidebar={() => setSidebarOpen(false)}
+      />
+
+      <SidebarBtn
+        id="spa-reports"
+        icon={<FaChartBar />}
+        label="Rapports"
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        closeSidebar={() => setSidebarOpen(false)}
+      />
+    </div>
+  )}
+    </>
+  )}
 
 
-</nav>
+  </nav>
 
 
-        {/* Sign Out */}
-        <div className="p-4 border-t">
-          <button
-            onClick={() => setShowSignOutConfirm(true)}
-            className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-red-600 hover:bg-red-100"
-          >
-            <FaSignOutAlt /> Déconnexion
-          </button>
-        </div>
-      </aside>
+          {/* Sign Out */}
+          <div className="p-4 border-t">
+            <button
+              onClick={() => setShowSignOutConfirm(true)}
+              className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-red-600 hover:bg-red-100"
+            >
+              <FaSignOutAlt /> Déconnexion
+            </button>
+          </div>
+        </aside>
 
-      {/* Main content */}
-      <main 
-      ref={dashboardContentRef}
-      className="flex-1 pt-20 md:pt-6 px-4 md:p-6 overflow-y-auto">{renderContent()}</main>
+        {/* Main content */}
+        <main 
+        ref={dashboardContentRef}
+        className="flex-1 pt-20 md:pt-6 px-4 md:p-6 overflow-y-auto">{renderContent()}</main>
 
-      {/* Confirmation Modal */}
-      {showSignOutConfirm && (
-        <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/40">
-          <div className="bg-white p-6 rounded-lg shadow-lg max-w-sm z-[9999] relative">
-            <h2 className="text-lg font-bold mb-4">Êtes-vous sûr de vouloir vous déconnecter ?</h2>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => {
-                  setShowSignOutConfirm(false);
-                }}                
-                className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300"
-              >
-                Annuler
-              </button>
-              <button
-                onClick={handleSignOut}
-                className="px-3 py-1 rounded bg-red-600 text-white hover:bg-red-700"
-              >
-                Oui, déconnecter
-              </button>
+        {/* Confirmation Modal */}
+        {showSignOutConfirm && (
+          <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/40">
+            <div className="bg-white p-6 rounded-lg shadow-lg max-w-sm z-[9999] relative">
+              <h2 className="text-lg font-bold mb-4">Êtes-vous sûr de vouloir vous déconnecter ?</h2>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => {
+                    setShowSignOutConfirm(false);
+                  }}                
+                  className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={handleSignOut}
+                  className="px-3 py-1 rounded bg-red-600 text-white hover:bg-red-700"
+                >
+                  Oui, déconnecter
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
-  )
-}
+        )}
+      </div>
+    )
+  }

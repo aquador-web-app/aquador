@@ -620,3 +620,63 @@
   pointer-events: auto;
 }
 
+/* ==================================================
+   MASSAGE CALENDAR — TWO PERMANENT ROOM LANES
+   ================================================== */
+
+/* Salle 1 — left section */
+.fc-timegrid-event-harness:has(.aq-room-1-event) {
+  left: 4px !important;
+  right: auto !important;
+  width: calc(50% - 10px) !important;
+  max-width: calc(50% - 10px) !important;
+}
+
+/* Salle 2 — right section */
+.fc-timegrid-event-harness:has(.aq-room-2-event) {
+  left: calc(50% + 25px) !important;
+  right: auto !important;
+  width: calc(50% - 10px) !important;
+  max-width: calc(50% - 10px) !important;
+}
+
+/* Make the actual event fill only its assigned half */
+.fc-timegrid-event-harness:has(.aq-room-1-event)
+  .fc-timegrid-event,
+.fc-timegrid-event-harness:has(.aq-room-2-event)
+  .fc-timegrid-event {
+  left: 0 !important;
+  right: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+}
+
+/* Visible line separating the two rooms */
+.fc-timegrid-col-frame {
+  position: relative;
+}
+
+.fc-timegrid-col-frame::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  z-index: 1;
+  width: 1px;
+  background: #d6d3d1;
+  pointer-events: none;
+}
+
+
+/* Keep event content inside its room */
+.aq-massage-room-event {
+  z-index: 2;
+}
+
+.aq-massage-room-event .fc-event-main,
+.aq-massage-room-event .aq-event-chip {
+  width: 100%;
+  overflow: hidden;
+}

@@ -65,14 +65,25 @@ function minTime(a, b) {
   return a < b ? a : b;
 }
 
+const MASSAGE_MINIMUM_DURATION_MINUTES = 45;
+const MASSAGE_PREPARATION_MINUTES = 15;
+const MASSAGE_LATEST_END_MINUTES = 16 * 60 + 30;
+
 export default function CalendarView({
   mode = "ecole",
   onSlotSelect,
+  onMassageSlotSelect,
   closingTime,
   overtimeCutoff,
   extraTimePricePer30,
   overtimePricePer30,
 }) {
+  const isSchoolMode = mode === "ecole";
+const isClubMode = mode === "club";
+const isAdminMode = mode === "admin";
+const isMassageMode = mode === "massage";
+
+const isVenueBookingMode = isClubMode || isAdminMode;
 
     // ===============================
   // Admin-safe pricing (Option A)
@@ -130,7 +141,6 @@ useEffect(() => {
   const isMobile = useIsMobile();
   const [currentView, setCurrentView] = useState("dayGridMonth");
   const [rulesAccepted, setRulesAccepted] = useState(false);
-
 
 
   const [useOvertime, setUseOvertime] = useState(false);
@@ -360,11 +370,22 @@ useEffect(() => {
   // ---------------- Load events
   useEffect(() => {
   if (!visibleRange) return;
+
+  if (isMassageMode) {
+    loadMassageEvents(visibleRange.start, visibleRange.end);
+    return;
+  }
+
   loadEvents(visibleRange.start, visibleRange.end);
-}, [visibleRange]);
+}, [visibleRange, mode]);
 
 
   async function loadEvents(rangeStart, rangeEnd) {
+  if (isMassageMode) {
+    setEvents([]);
+    return;
+  }
+
   setLoading(true);
   try {
     const startISO = toISODate(rangeStart);
@@ -529,6 +550,83 @@ useEffect(() => {
   }
 }
 
+async function loadMassageEvents(rangeStart, rangeEnd) {
+  setLoading(true);
+
+  try {
+    const { data, error } = await supabase.rpc(
+      "get_public_massage_calendar_events",
+      {
+        p_start: rangeStart.toISOString(),
+        p_end: rangeEnd.toISOString(),
+      }
+    );
+
+    if (error) throw error;
+
+    console.log("Loaded massage calendar events:", data);
+
+    const massageEvents = (data || []).map((appointment) => {
+  const isConfirmed =
+    appointment.availability_status === "confirmed";
+
+  const normalizedRoomName = String(
+    appointment.room_name || ""
+  )
+    .trim()
+    .toLowerCase();
+
+  /*
+   * Use the actual room name instead of room_sort_order.
+   * Salle 2 must always appear in the right section.
+   */
+  const roomPosition =
+    normalizedRoomName.includes("2") ? 2 : 1;
+
+  return {
+    id: `massage-${appointment.appointment_id}`,
+
+    title: isConfirmed
+      ? "Massage réservé"
+      : "Réservation temporaire",
+
+    start: appointment.appointment_start,
+    end: appointment.occupied_until,
+
+    classNames: [
+      "aq-massage-room-event",
+      roomPosition === 1
+        ? "aq-room-1-event"
+        : "aq-room-2-event",
+      isConfirmed
+        ? "aq-massage-appointment"
+        : "aq-massage-unavailable",
+    ],
+
+    extendedProps: {
+      roomId: appointment.room_id,
+      roomName: appointment.room_name,
+      roomPosition,
+    },
+  };
+});
+
+console.table(
+  (data || []).map((appointment) => ({
+    appointment: appointment.appointment_id,
+    room_name: appointment.room_name,
+    room_sort_order: appointment.room_sort_order,
+  }))
+);
+
+    setEvents(massageEvents);
+  } catch (err) {
+    console.error("Error loading massage events:", err);
+    setEvents([]);
+  } finally {
+    setLoading(false);
+  }
+}
 
   // ---------- Enrollment names
   // ---------- Enrollment names
@@ -591,123 +689,322 @@ async function loadStudents(sessionId) {
   }
 }
 
+function buildMassageSelection(startDate) {
+  /*
+   * The calendar now selects only the common starting time.
+   *
+   * The actual massage and duration are selected separately
+   * for each person in MassageLanding.
+   *
+   * For the preliminary room check, use the shortest possible
+   * reservation:
+   *
+   * 45-minute massage + 15-minute preparation = 60 minutes.
+   *
+   * The create_massage_reservation RPC performs the final
+   * availability check using each person's real duration.
+   */
+  const preliminaryEnd = new Date(
+    startDate.getTime() +
+      MASSAGE_MINIMUM_DURATION_MINUTES * 60 * 1000
+  );
+
+  const occupiedUntil = new Date(
+    preliminaryEnd.getTime() +
+      MASSAGE_PREPARATION_MINUTES * 60 * 1000
+  );
+
+  return {
+    date: toISODate(startDate),
+
+    start: startDate,
+
+    // Preliminary values only.
+    end: preliminaryEnd,
+    occupiedUntil,
+
+    startISO: startDate.toISOString(),
+    endISO: preliminaryEnd.toISOString(),
+    occupiedUntilISO: occupiedUntil.toISOString(),
+
+    preparationMinutes: MASSAGE_PREPARATION_MINUTES,
+  };
+}
 
   // ---------- Click on a day
   const handleDateClick = (info) => {
-    const calendarApi = calendarRef.current?.getApi();
-    if (mode === "ecole") return;
+  const calendarApi = calendarRef.current?.getApi();
 
-    // 🔒 CLUB MODE: block past dates + Sundays
-    if (mode === "club" || mode === "admin") {
-      const clicked = info.date;
-      if (!(clicked instanceof Date) || isNaN(clicked)) return;
+  if (!calendarApi) return;
 
-      const d = new Date(clicked);
-      d.setHours(0, 0, 0, 0);
+  // School calendar is display-only
+  if (isSchoolMode) return;
 
-      const today0 = new Date();
-      today0.setHours(0, 0, 0, 0);
+  const clicked =
+    info?.date instanceof Date && !isNaN(info.date)
+      ? info.date
+      : new Date(info?.dateStr || Date.now());
 
-      // Past day OR Sunday => no action
-      if (d < today0 || d.getDay() === 0) {
+  if (!(clicked instanceof Date) || isNaN(clicked)) return;
+
+  const clickedDay = new Date(clicked);
+  clickedDay.setHours(0, 0, 0, 0);
+
+  const today0 = new Date();
+  today0.setHours(0, 0, 0, 0);
+
+  // Block past dates in booking modes
+  if (clickedDay < today0) return;
+
+  /*
+   * MASSAGE MODE
+   *
+   * A click on a month date opens the daily schedule.
+   * It does not open the venue-booking form.
+   */
+  if (isMassageMode) {
+  const currentViewType = calendarApi.view.type;
+
+  // Clicking a date from the month opens that day's schedule
+  if (currentViewType === "dayGridMonth") {
+    calendarApi.changeView("timeGridDay", clicked);
+    return;
+  }
+
+  // Clicking an exact time selects the appointment start
+  if (
+  currentViewType === "timeGridDay" ||
+  currentViewType === "timeGridWeek"
+) {
+  // Block a time that has already passed today
+if (clicked < new Date()) {
+  showAlert(
+    "Vous ne pouvez pas sélectionner une heure déjà passée."
+  );
+  return;
+}
+
+const localStartMinutes =
+  clicked.getHours() * 60 + clicked.getMinutes();
+
+const latestSelectableStart =
+  MASSAGE_LATEST_END_MINUTES -
+  MASSAGE_MINIMUM_DURATION_MINUTES;
+
+// A 45-minute massage must still be able to finish by 16:30.
+if (localStartMinutes > latestSelectableStart) {
+  showAlert(
+    "Aucun massage ne peut commencer après 15h45."
+  );
+  return;
+}
+
+const massageSelection =
+  buildMassageSelection(clicked);
+
+onMassageSlotSelect?.(massageSelection);
+return;
+}
+
+  calendarApi.changeView("timeGridDay", clicked);
+  return;
+}
+
+  /*
+   * CLUB / ADMIN VENUE MODE
+   */
+  if (isVenueBookingMode) {
+    // Club is currently closed on Sundays
+    if (clickedDay.getDay() === 0) return;
+
+    const dayHasEvents = events.some(
+      (event) =>
+        event.start &&
+        new Date(event.start).toDateString() === clicked.toDateString()
+    );
+
+    if (dayHasEvents) {
+      calendarApi.changeView("timeGridDay", clicked);
+      return;
+    }
+
+    const safeDate = clicked;
+
+    onSlotSelect?.({
+      date: toISODate(safeDate),
+      start: `${toISODate(safeDate)}T10:00:00`,
+      end: `${toISODate(safeDate)}T12:00:00`,
+    });
+
+    setSelectedSlot({ date: safeDate });
+    setShowModal(true);
+  }
+};
+
+  // ---------- Drag select on time grid
+  const handleSelect = (info) => {
+  try {
+    if (isSchoolMode) return;
+
+    const viewType = info.view.type;
+
+    if (!["timeGridDay", "timeGridWeek"].includes(viewType)) {
+      return;
+    }
+
+    if (!info.start || !info.end) return;
+
+    const selectedDate = new Date(info.start);
+    const selectedDay = new Date(selectedDate);
+    selectedDay.setHours(0, 0, 0, 0);
+
+    const today0 = new Date();
+    today0.setHours(0, 0, 0, 0);
+
+    if (selectedDay < today0) {
+      calendarRef.current?.getApi()?.unselect();
+      return;
+    }
+
+    /*
+     * MASSAGE MODE
+     */
+    if (isMassageMode) {
+  const massageStart = new Date(info.start);
+
+  if (massageStart < new Date()) {
+    showAlert(
+      "Vous ne pouvez pas sélectionner une heure déjà passée."
+    );
+
+    calendarRef.current?.getApi()?.unselect();
+    return;
+  }
+
+  const localStartMinutes =
+    massageStart.getHours() * 60 +
+    massageStart.getMinutes();
+
+  const latestSelectableStart =
+    MASSAGE_LATEST_END_MINUTES -
+    MASSAGE_MINIMUM_DURATION_MINUTES;
+
+  if (localStartMinutes > latestSelectableStart) {
+    showAlert(
+      "Aucun massage ne peut commencer après 15h45."
+    );
+
+    calendarRef.current?.getApi()?.unselect();
+    return;
+  }
+
+  const massageSelection =
+    buildMassageSelection(massageStart);
+
+  onMassageSlotSelect?.(massageSelection);
+
+  calendarRef.current?.getApi()?.unselect();
+  return;
+}
+
+    /*
+     * CLUB / ADMIN VENUE MODE
+     */
+    if (!isVenueBookingMode) return;
+
+    if (effectiveOvertimeCutoff) {
+      const endTime = info.endStr.slice(11, 16);
+      const endMinutes = toMinutes(endTime);
+      const maximumMinutes = toMinutes(effectiveOvertimeCutoff);
+
+      if (endMinutes > maximumMinutes) {
+        showAlert(
+          `Impossible de réserver après ${effectiveOvertimeCutoff}`
+        );
+
+        calendarRef.current?.getApi()?.unselect();
         return;
       }
     }
 
-    const dayHasEvents = events.some(
-      (e) => e.start && new Date(e.start).toDateString() === info.date.toDateString()
-    );
-    if (dayHasEvents) {
-      calendarApi.changeView("timeGridDay", info.date);
-      return;
-    }
+    onSlotSelect?.({
+      date: toISODate(info.start),
+      start: info.startStr,
+      end: info.endStr,
+    });
 
-    if (["admin", "club"].includes(mode)) {
-      const safeDate =
-        info?.date instanceof Date && !isNaN(info.date)
-          ? info.date
-          : new Date(info?.dateStr || Date.now());
+    setSelectedSlot({
+      date: info.start,
+      start: info.start,
+      end: info.end,
+    });
 
-      onSlotSelect?.({
-        date: toISODate(safeDate),
-        start: `${toISODate(safeDate)}T10:00:00`,
-        end: `${toISODate(safeDate)}T12:00:00`,
-      });
-
-      setSelectedSlot({ date: safeDate });
-      setShowModal(true);
-    }
-  };
-
-  // ---------- Drag select on time grid
-  const handleSelect = (info) => {
-    try {
-      if (mode === "ecole") return;
-      const viewType = info.view.type;
-      if (!["timeGridDay", "timeGridWeek"].includes(viewType)) return;
-      if (!info.start || !info.end) return;
-
-      const date = info.start;
-      const startDate = info.startStr;
-      const endDate = info.endStr;
-
-      // Block if selection ends past closingTime
-      // Block if selection ends past overtime cutoff
-      if (effectiveOvertimeCutoff) {
-  const endStr = info.endStr.slice(11, 16);
-  const endM = toMinutes(endStr);
-  const maxM = toMinutes(effectiveOvertimeCutoff);
-
-  if (endM > maxM) {
-    showAlert(`Impossible de réserver après ${effectiveOvertimeCutoff}`);
-    return;
+    setShowModal(true);
+  } catch (err) {
+    console.error("❌ Error in select handler:", err);
   }
-}
-
-
-      onSlotSelect?.({
-        date: date.toISOString().slice(0, 10),
-        start: startDate,
-        end: endDate,
-      });
-
-      setSelectedSlot({ date, start: info.start, end: info.end });
-      setShowModal(true);
-    } catch (err) {
-      console.error("❌ Error in select handler:", err);
-    }
-  };
+};
 
   // ---------- Event click
   const handleEventClick = (info) => {
-    const start = info.event.start
-  ? cleanTime(info.event.start.toTimeString().slice(0, 5))
-  : "";
+  const start = info.event.start
+    ? cleanTime(info.event.start.toTimeString().slice(0, 5))
+    : "";
 
-const end = info.event.end
-  ? cleanTime(info.event.end.toTimeString().slice(0, 5))
-  : "";
+  const end = info.event.end
+    ? cleanTime(info.event.end.toTimeString().slice(0, 5))
+    : "";
 
-    const classes = info.event.classNames || [];
-    let label = "Événement";
+  const classes = info.event.classNames || [];
+  let label = "Événement";
 
-    if (classes.includes("aq-ferme")) label = "Jour fermé";
-    else if (classes.includes("aq-booking-full")) label = "Réservation Exclusive";
-    else if (classes.includes("aq-booking-daypass")) label = "Réservation Non Exclusive (Day Pass)";
-    else if (classes.includes("aq-session")) label = "Cours";
+  if (classes.includes("aq-massage-appointment")) {
+    label = "Créneau indisponible";
+  } else if (classes.includes("aq-massage-unavailable")) {
+    label = "Indisponible";
+  } else if (classes.includes("aq-ferme")) {
+    label = "Jour fermé";
+  } else if (classes.includes("aq-booking-full")) {
+    label = "Réservation Exclusive";
+  } else if (classes.includes("aq-booking-daypass")) {
+    label = "Réservation Non Exclusive (Day Pass)";
+  } else if (classes.includes("aq-session")) {
+    label = "Cours";
+  }
 
-    showAlert(`${label}: ${info.event.title}\n${start} – ${end}`);
-  };
+  /*
+   * On the public massage page, do not reveal client names,
+   * service details or therapist-private information.
+   */
+  if (isMassageMode) {
+    showAlert(
+      `${label}\n${start && end ? `${start} – ${end}` : ""}`
+    );
+    return;
+  }
+
+  showAlert(
+    `${label}: ${info.event.title}\n${start} – ${end}`
+  );
+};
 
   const MAX_VISIBLE = 15;
 
   const eventContent = (arg) => {
     if (!arg?.event) return;
     const start = arg.timeText ? `${arg.timeText} ` : "";
+
+const roomName =
+  arg.event.extendedProps?.roomName || "";
+
+const displayedTitle =
+  isMassageMode && roomName
+    ? `${roomName} · ${arg.event.title}`
+    : arg.event.title;
     const htmlMain = `
       <div class="aq-event-chip ${arg.event.classNames?.join(" ") || ""}">
         <span class="aq-event-time">${start}</span>
-        <span class="aq-event-title">${arg.event.title}</span>
+        <span class="aq-event-title">${displayedTitle}</span>
       </div>
     `;
 
@@ -1025,6 +1322,7 @@ if (useOvertime && cutoffM != null && endM != null && endM > cutoffM) {
   setShowModal(false);
 };
 
+
   const calendarProps = {
   ref: calendarRef,
   plugins: [dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin],
@@ -1035,9 +1333,64 @@ if (useOvertime && cutoffM != null && endM != null && endM > cutoffM) {
   expandRows: true,
   headerToolbar: false,
   events,
-  selectable: true,
-  selectMirror: true,
-  select: handleSelect,
+selectable: !isSchoolMode,
+selectMirror: true,
+
+selectAllow: (selectInfo) => {
+  if (isSchoolMode) return false;
+
+  const selectedStart = new Date(selectInfo.start);
+  const selectedDay = new Date(selectedStart);
+
+  selectedDay.setHours(0, 0, 0, 0);
+
+  const today0 = new Date();
+  today0.setHours(0, 0, 0, 0);
+
+  // No reservations in the past
+  if (selectedDay < today0) {
+    return false;
+  }
+
+  if (
+  isMassageMode &&
+  selectedStart < new Date()
+) {
+  return false;
+}
+
+  // Venue reservations remain unavailable on Sunday
+  if (
+    isVenueBookingMode &&
+    selectedDay.getDay() === 0
+  ) {
+    return false;
+  }
+
+  if (isMassageMode) {
+  const localStartMinutes =
+    selectedStart.getHours() * 60 +
+    selectedStart.getMinutes();
+
+  const latestSelectableStart =
+    MASSAGE_LATEST_END_MINUTES -
+    MASSAGE_MINIMUM_DURATION_MINUTES;
+
+  /*
+   * The shortest massage is 45 minutes.
+   * It must finish no later than 16:30.
+   *
+   * Therefore, the latest possible start is 15:45.
+   */
+  if (localStartMinutes > latestSelectableStart) {
+    return false;
+  }
+}
+
+  return true;
+},
+
+select: handleSelect,
   dateClick: handleDateClick,
   eventClick: handleEventClick,
   eventContent,
@@ -1067,18 +1420,56 @@ if (useOvertime && cutoffM != null && endM != null && endM > cutoffM) {
   });
 },
   firstDay: 0,
-  slotMinTime: "07:00:00",
-  slotMaxTime: "21:00:00",
+  slotMinTime: isMassageMode
+  ? "08:00:00"
+  : "07:00:00",
+
+slotMaxTime: isMassageMode
+  ? "16:30:00"
+  : "21:00:00",
+
+slotDuration: isMassageMode
+  ? "00:15:00"
+  : "00:30:00",
+
+slotLabelInterval: isMassageMode
+  ? "00:15:00"
+  : "00:30:00",
+
+slotLabelFormat: {
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+},
+
+snapDuration: isMassageMode
+  ? "00:15:00"
+  : "00:30:00",
   allDaySlot: false,
   dayMaxEvents: isMobile ? 1 : 2,
   moreLinkClick: isMobile ? "day" : "popover",
   moreLinkContent: (args) => `+${args.num} autres`,
   eventDidMount: async (info) => {
-    const eventId = info.event.id || "";
-    if (!eventId.startsWith("legacy-") && !eventId.startsWith("seance-")) return;
-    const sessionId = eventId.replace(/^legacy-|^seance-/, "");
-    await loadStudents(sessionId);
-  },
+  const eventId = info.event.id || "";
+
+  if (isMassageMode) return;
+
+  if (!isAdminMode) return;
+
+  if (
+    !eventId.startsWith("legacy-") &&
+    !eventId.startsWith("seance-")
+  ) {
+    return;
+  }
+
+  const sessionId = eventId.replace(
+    /^legacy-|^seance-/,
+    ""
+  );
+
+  await loadStudents(sessionId);
+},
 };
 
 
@@ -1087,6 +1478,19 @@ if (useOvertime && cutoffM != null && endM != null && endM > cutoffM) {
     return (
       <div className="flex justify-center px-3 md:px-6">
         <div className="aq-card w-full max-w-7xl">
+          {isMassageMode && (
+  <div className="mb-5 rounded-xl border border-gray-200 bg-gray-50 p-4">
+    <p className="font-semibold text-gray-800">
+      Choisissez la date et l’heure de début
+    </p>
+
+    <p className="mt-1 text-sm text-gray-500">
+      Vous pourrez ensuite choisir un massage et une durée différente
+      pour chaque personne. Une période de 15 minutes est
+      automatiquement prévue après chaque séance pour préparer la salle.
+    </p>
+  </div>
+)}
           {/* Toolbar */}
           <div className="mb-4 grid grid-cols-1 md:grid-cols-[auto_1fr_auto] gap-3 items-center">
             <div className="flex items-center gap-2 justify-center md:justify-start">
@@ -1157,6 +1561,7 @@ if (useOvertime && cutoffM != null && endM != null && endM > cutoffM) {
                     : "min-w-0"
                 }
               >
+                
                 <FullCalendar {...calendarProps} />
               </div>
             </div>
@@ -1164,7 +1569,10 @@ if (useOvertime && cutoffM != null && endM != null && endM > cutoffM) {
         </div>
 
         {/* Booking Modal */}
-        {showModal && selectedSlot?.date instanceof Date && !isNaN(selectedSlot.date) && (
+        {isVenueBookingMode &&
+  showModal &&
+  selectedSlot?.date instanceof Date &&
+  !isNaN(selectedSlot.date) && (
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[999]">
 
             <div

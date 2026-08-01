@@ -6,14 +6,28 @@ import { FaDollarSign } from "react-icons/fa";
 import { useAuth } from "../../context/AuthContext";
 
 
-// Haiti = UTC-5
+
+const HAITI_TIME_ZONE = "America/Port-au-Prince";
+
 function getHaitiDateISO(dateString) {
-  const d = new Date(dateString + "T00:00:00");
-  const haiti = new Date(
-    d.toLocaleString("en-US", { timeZone: "America/Port-au-Prince" })
+  return dateString || null;
+}
+
+function getTodayInHaiti() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: HAITI_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+
+  const values = Object.fromEntries(
+    parts
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value])
   );
-  // Return YYYY-MM-DD corrected for Haiti timezone
-  return haiti.toISOString().split("T")[0];
+
+  return `${values.year}-${values.month}-${values.day}`;
 }
 
 
@@ -21,14 +35,7 @@ function getHaitiDateISO(dateString) {
 export default function AdminAttendance() {
   const [cours, setCours] = useState([]);
   const [coursSelectionne, setCoursSelectionne] = useState("");
-  const [date, setDate] = useState(() => {
-  const today = new Date();
-  return new Date(
-    today.toLocaleString("en-US", { timeZone: "America/Port-au-Prince" })
-  )
-    .toISOString()
-    .split("T")[0];
-});
+  const [date, setDate] = useState(getTodayInHaiti);
   const [sessions, setSessions] = useState([]);
   const [resumeMensuel, setResumeMensuel] = useState([]);
   const [chargement, setChargement] = useState(false);
@@ -41,7 +48,8 @@ export default function AdminAttendance() {
   const [globalResult, setGlobalResult] = useState("");
   const [modalErreur, setModalErreur] = useState("");
   const [modalResult, setModalResult] = useState("");
-  const lastScanTime = useRef(0);
+  const lastStudentScanTime = useRef(0);
+  const lastStaffScanTime = useRef(0);
   const [nameFilter, setNameFilter] = useState("");
   const { user, profile } = useAuth();
   const [role, setRole] = useState(null);
@@ -92,8 +100,16 @@ const canSeeStaffMonthly = isAdmin;
 
 
 
-  const fmtHeure = (t) =>
-    t ? new Date(t).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "—";
+  const fmtHeure = (timestamp) => {
+  if (!timestamp) return "—";
+
+  return new Intl.DateTimeFormat("fr-FR", {
+    timeZone: HAITI_TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(timestamp));
+};
 
   const fmtJour = (d) =>
   d ? new Date(d + "T00:00:00").toLocaleDateString("fr-FR") : "—";
@@ -111,6 +127,21 @@ const canSeeStaffMonthly = isAdmin;
     base.setHours(base.getHours() + Number(duree || 0));
     return base.toTimeString().slice(0, 5);
   };
+
+  const getEffectiveStartTime = (groupStartTime, enrollment) => {
+  if (!groupStartTime) return null;
+
+  // One-hour students assigned to the second slot begin
+  // one hour after the group begins.
+  if (
+    enrollment?.selected_slot === "second" &&
+    Number(enrollment?.selected_hours) === 1
+  ) {
+    return ajouterHeures(groupStartTime, 1);
+  }
+
+  return groupStartTime;
+};
 
   const toSessionStartISO = (start_time_hhmm) => {
     if (!start_time_hhmm) return null;
@@ -339,6 +370,8 @@ const fetchStaffMonthlySummary = async () => {
           plan_id,
           start_date,
           end_date,
+          selected_slot,
+          selected_hours,
           profiles_with_unpaid!inner (
             id,
             full_name,
@@ -369,6 +402,8 @@ const fetchStaffMonthlySummary = async () => {
           has_unpaid: row.profiles_with_unpaid?.has_unpaid || false,
           cours: row.courses?.name,
           duree: row.plans?.duration_hours || 1,
+          selected_slot: row.selected_slot,
+          selected_hours: row.selected_hours,
           presence: mapPresences[row.id] || null,
         });
         return acc;
@@ -502,8 +537,10 @@ const fetchStaffMonthlySummary = async () => {
   if (typeof text !== "string" || !text.trim()) return;
 
   const nowMs = Date.now();
-  if (nowMs - lastScanTime.current < 3000) return;
-  lastScanTime.current = nowMs;
+
+if (nowMs - lastStaffScanTime.current < 3000) return;
+
+lastStaffScanTime.current = nowMs;
 
   setModalErreur("");
   setModalResult("");
@@ -571,8 +608,10 @@ const handleScan = async (text) => {
   if (typeof text !== "string" || !text.trim()) return;
 
   const nowMs = Date.now();
-  if (nowMs - lastScanTime.current < 3000) return;
-  lastScanTime.current = nowMs;
+
+if (nowMs - lastStudentScanTime.current < 3000) return;
+
+lastStudentScanTime.current = nowMs;
 
   setGlobalErreur("");
   setGlobalResult("");
@@ -1040,7 +1079,11 @@ const scanned_profile_id = m[0];
                               {!e.presence?.check_in_time ? (
                                 <button
                                   className="px-3 py-1 rounded bg-green-600 text-white hover:bg-green-700"
-                                  onClick={() => openModal("check-in", e.enrollment_id, s.start_time)}
+                                  onClick={() => openModal(
+                                    "check-in",
+                                    e.enrollment_id,
+                                    getEffectiveStartTime(s.start_time, e)
+                                  )}
                                 >
                                   Check-in
                                 </button>
@@ -1055,7 +1098,11 @@ const scanned_profile_id = m[0];
                               {!e.presence?.check_out_time ? (
                                 <button
                                   className="px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
-                                  onClick={() => openModal("check-out", e.enrollment_id, s.start_time)}
+                                  onClick={() => openModal(
+                                    "check-out",
+                                    e.enrollment_id,
+                                    getEffectiveStartTime(s.start_time, e)
+                                  )}
                                 >
                                   Check-out
                                 </button>
@@ -1150,7 +1197,13 @@ const scanned_profile_id = m[0];
   {!e.presence?.check_in_time ? (
     <button
       className="bg-green-600 text-white py-2 rounded"
-      onClick={() => openModal("check-in", e.enrollment_id, s.start_time)}
+      onClick={() =>
+  openModal(
+    "check-in",
+    e.enrollment_id,
+    getEffectiveStartTime(s.start_time, e)
+  )
+}
     >
       Check-in
     </button>
@@ -1173,7 +1226,7 @@ const scanned_profile_id = m[0];
   {!e.presence?.check_out_time ? (
     <button
       className="bg-blue-600 text-white py-2 rounded"
-      onClick={() => openModal("check-out", e.enrollment_id, s.start_time)}
+      onClick={() => openModal("check-out", e.enrollment_id, getEffectiveStartTime(s.start_time, e))}
     >
       Check-out
     </button>
@@ -1184,7 +1237,7 @@ const scanned_profile_id = m[0];
         saveAttendanceWithRules(
           e.enrollment_id,
           "undo-checkout",
-          s.start_time
+          getEffectiveStartTime(s.start_time, e)
         )
       }
     >

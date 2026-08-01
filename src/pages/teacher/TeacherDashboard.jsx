@@ -193,21 +193,32 @@
   useEffect(() => {
     if (!profile?.id) return;
     (async () => {
-      // Compute the current month label EXACTLY like SQL: "Month YYYY" (English, capitalized)
       const now = new Date();
-      const formattedPeriod = now.toLocaleString("en-US", {
+
+      const dateParts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "America/Port-au-Prince",
+        year: "numeric",
+        month: "2-digit",
+      }).formatToParts(now);
+
+      const values = Object.fromEntries(
+        dateParts
+          .filter((part) => part.type !== "literal")
+          .map((part) => [part.type, part.value])
+      );
+
+      const currentMonthKey = `${values.year}-${values.month}`;
+
+      const formattedPeriod = new Intl.DateTimeFormat("fr-FR", {
+        timeZone: "America/Port-au-Prince",
         month: "long",
         year: "numeric",
-      });
+      }).format(now);
+
       setSalaryMonth(formattedPeriod);
 
-      // Fetch the salary for this month
-      const { data, error } = await supabase
-        .from("admin_salaries")
-        .select("net_salary")
-        .eq("profile_id", profile.id)
-        .eq("period", formattedPeriod) // exact match instead of ilike
-        .maybeSingle();
+      // Use the same normalized salary source as the salary-history page.
+      const { data, error } = await supabase.rpc("teacher_salary_months");
 
       if (error) {
         console.error("Erreur lors du chargement du salaire:", error);
@@ -215,7 +226,11 @@
         return;
       }
 
-      setSalaryDue(data?.net_salary || 0);
+      const currentSalary = (data || []).find((row) =>
+        String(row?.period || "").startsWith(currentMonthKey)
+      );
+
+      setSalaryDue(Number(currentSalary?.net_salary || 0));
     })();
   }, [profile?.id]);
 

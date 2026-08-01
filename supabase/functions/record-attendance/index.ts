@@ -15,8 +15,85 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const HAITI_TIME_ZONE = "America/Port-au-Prince";
+
+function getHaitiDateTimeParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: HAITI_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+
+  return Object.fromEntries(
+    parts
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value])
+  );
+}
+
 function todayHaiti() {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Port-au-Prince" }).format(new Date());
+  const parts = getHaitiDateTimeParts();
+
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function getHaitiLocalTimestamp(date = new Date()) {
+  const parts = getHaitiDateTimeParts(date);
+
+  return Date.UTC(
+    Number(parts.year),
+    Number(parts.month) - 1,
+    Number(parts.day),
+    Number(parts.hour),
+    Number(parts.minute),
+    Number(parts.second)
+  );
+}
+
+function getSessionLocalTimestamp(
+  dateString: string,
+  startTime: string
+) {
+  const [year, month, day] = dateString.split("-").map(Number);
+  const [hour, minute] = (startTime || "00:00").split(":").map(Number);
+
+  return Date.UTC(
+    year,
+    month - 1,
+    day,
+    hour || 0,
+    minute || 0,
+    0
+  );
+}
+
+function addMinutesToTime(
+  startTime: string,
+  minutesToAdd: number
+) {
+  const [hours, minutes] = (startTime || "00:00")
+    .split(":")
+    .map(Number);
+
+  const totalMinutes =
+    (hours || 0) * 60 +
+    (minutes || 0) +
+    minutesToAdd;
+
+  const adjustedHours =
+    Math.floor(totalMinutes / 60) % 24;
+
+  const adjustedMinutes =
+    totalMinutes % 60;
+
+  return `${String(adjustedHours).padStart(2, "0")}:${String(
+    adjustedMinutes
+  ).padStart(2, "0")}`;
 }
 
 serve(async (req) => {
@@ -35,16 +112,12 @@ serve(async (req) => {
         ? selected_date
         : todayHaiti();
 
-    const now = new Date(
-  new Date().toLocaleString("en-US", {
-    timeZone: "America/Port-au-Prince",
-  })
-);
+    const now = new Date();
 
     // 1) Active enrollments for this profile
     const { data: enrollments, error: enrollErr } = await supabase
       .from("enrollments")
-      .select("id, session_group")
+      .select("id, session_group, selected_slot, selected_hours")
       .eq("profile_id", profile_id)
       .eq("status", "active");
 
@@ -56,10 +129,8 @@ serve(async (req) => {
     }
 
 // --- NEW RULE: Attendance blocked based on invoice status + Haiti date ---
-const haitiNow = new Date(
-  new Date().toLocaleString("en-US", { timeZone: "America/Port-au-Prince" })
-);
-const day = haitiNow.getDate();
+const haitiParts = getHaitiDateTimeParts(now);
+const day = Number(haitiParts.day);
 
 // Find PARENT (invoices belong to parent, not child)
 const { data: prof } = await supabase
@@ -73,9 +144,7 @@ const invoiceOwnerId = prof?.parent_id ?? profile_id;
 // Only enforce after the 7th
 if (day >= 8) {
   // Current month boundaries (Haiti)
-  const currentMonth = `${haitiNow.getFullYear()}-${String(
-  haitiNow.getMonth() + 1
-).padStart(2, "0")}-01`;
+  const currentMonth = `${haitiParts.year}-${haitiParts.month}-01`;
 
 const { data: invoices, error: invErr } = await supabase
   .from("invoices")
@@ -127,7 +196,12 @@ if (day >= 16) {
 
 
     // 2) Find an ACTIVE session on attended_on among those enrollments
-    let chosen: null | { enrollment_id: string; start_time: string } = null;
+    let chosen: null | {
+  enrollment_id: string;
+  start_time: string;
+  group_start_time: string;
+  selected_slot: string | null;
+} = null;
 
     for (const enr of enrollments) {
       const { data: s, error: sErr } = await supabase
@@ -139,9 +213,25 @@ if (day >= 16) {
         .maybeSingle();
       if (sErr) throw sErr;
       if (s) {
-        chosen = { enrollment_id: enr.id, start_time: s.start_time ?? "00:00" };
-        break;
-      }
+  const groupStartTime = s.start_time ?? "00:00";
+
+  // A one-hour student in the second slot begins
+  // one hour after the group begins.
+  const effectiveStartTime =
+    enr.selected_slot === "second" &&
+    Number(enr.selected_hours) === 1
+      ? addMinutesToTime(groupStartTime, 60)
+      : groupStartTime;
+
+  chosen = {
+    enrollment_id: enr.id,
+    start_time: effectiveStartTime,
+    group_start_time: groupStartTime,
+    selected_slot: enr.selected_slot ?? null,
+  };
+
+  break;
+}
     }
 
     if (!chosen) {
@@ -154,9 +244,19 @@ if (day >= 16) {
     const { enrollment_id, start_time } = chosen;
 
     // 3) Compute punctuality
-    const [hh, mm] = (start_time || "00:00").split(":").map(Number);
-    const sessionStart = new Date(`${attended_on}T${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:00`);
-    const decideStatus = () => (Math.floor((now.getTime() - sessionStart.getTime()) / 60000) <= 15 ? "present" : "late");
+    const sessionStartTimestamp = getSessionLocalTimestamp(
+  attended_on,
+  start_time
+);
+
+const decideStatus = () => {
+  const nowHaitiTimestamp = getHaitiLocalTimestamp(now);
+
+  const differenceMinutes =
+    (nowHaitiTimestamp - sessionStartTimestamp) / 60000;
+
+  return differenceMinutes < 16 ? "present" : "late";
+};
 
     // 4) Profile name (optional backfill)
     const { data: profile } = await supabase.from("profiles_with_unpaid").select("full_name").eq("id", profile_id).maybeSingle();

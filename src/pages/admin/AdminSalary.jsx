@@ -36,7 +36,7 @@ export default function AdminSalary() {
 });
 const [deductions, setDeductions] = useState({
   monthKey: "",
-  doc: { pct: 0, missingCount: 0, expectedCount: 0, missingStudents: [] },
+  bulletin: { pct: 0, missingCount: 0, missingBulletins: [] },
   lateByTeacher: {}, // { [teacherId]: { lateDays, lateDaysCapped, pct } }
 });
 
@@ -216,22 +216,21 @@ const nextStartYMD = toYMD(nextMonthStart);
   });
 }
 
-async function fetchDocDeduction(monthKey) {
-  const { data, error } = await supabase.rpc("global_docs_deduction_mtd", {
+async function fetchBulletinDeduction(monthKey) {
+  const { data, error } = await supabase.rpc("global_bulletin_deduction_mtd", {
     p_month: monthKey, // 'YYYY-MM-01'
   });
 
   if (error) {
-    console.error("global_docs_deduction_mtd error:", error);
-    return { pct: 0, missingCount: 0, expectedCount: 0, missingStudents: [] };
+    console.error("global_bulletin_deduction_mtd error:", error);
+    return { pct: 0, missingCount: 0, missingBulletins: [] };
   }
 
   const row = Array.isArray(data) ? data[0] : data;
   return {
-    pct: Number(row?.doc_deduction_pct || 0),
-    missingCount: Number(row?.missing_students_count || 0),
-    expectedCount: Number(row?.expected_count || 0),
-    missingStudents: row?.missing_students || [],
+    pct: Number(row?.bulletin_deduction_pct || 0),
+    missingCount: Number(row?.missing_bulletins_count || 0),
+    missingBulletins: row?.missing_bulletins || [],
   };
 }
 
@@ -266,12 +265,12 @@ async function fetchLateByTeacher(monthKey, teacherList) {
 async function fetchDeductionsLive(teacherList) {
   const monthKey = monthKeyNow();
 
-  const [doc, lateByTeacher] = await Promise.all([
-    fetchDocDeduction(monthKey),
+  const [bulletin, lateByTeacher] = await Promise.all([
+    fetchBulletinDeduction(monthKey),
     fetchLateByTeacher(monthKey, teacherList),
   ]);
 
-  setDeductions({ monthKey, doc, lateByTeacher });
+  setDeductions({ monthKey, bulletin, lateByTeacher });
 }
 
 
@@ -371,13 +370,6 @@ async function fetchDeductionsLive(teacherList) {
 };
 
 
-
-  const generateSalary = async () => {
-    const { error } = await supabase.rpc("generate_salary");
-    if (error) alert("Erreur: " + error.message);
-    else alert("Salaires enseignants générés avec succès !");
-    load();
-  };
 
   /** ---------------------------
    * RENDER
@@ -493,7 +485,7 @@ async function fetchDeductionsLive(teacherList) {
       <th className="p-2 border">Salaire de base (HTG)</th>
       <th className="p-2 border">Expectation / Paid (live)</th>
       <th className="p-2 border">Late deduction</th>
-      <th className="p-2 border">Missing docs deduction</th>
+      <th className="p-2 border">Missing session bulletins deduction</th>
       <th className="p-2 border">Total (Paid - deductions)</th>
     </tr>
   </thead>
@@ -509,9 +501,8 @@ async function fetchDeductionsLive(teacherList) {
   const paidSalary = Math.round(base * paidMult * 100) / 100;
 
   const LATE_PCT_PER_DAY = 0.05;
-const DOC_PCT_PER_MISSING_STUDENT = 0.05;
-const missingCount = Number(deductions.doc.missingCount || 0);
-const docPct = Math.min(1, DOC_PCT_PER_MISSING_STUDENT * missingCount);
+const missingCount = Number(deductions.bulletin.missingCount || 0);
+const bulletinPct = Math.min(1, Number(deductions.bulletin.pct || 0));
 
 
 
@@ -539,16 +530,16 @@ const teachersInCat = teacherIds.length;
 const paidSalaryTotal = Math.round(paidSalary * teachersInCat * 100) / 100;
 const expectedSalaryTotal = Math.round(expectedSalary * teachersInCat * 100) / 100;
 
-// Paid-side docs deduction (category total)
-const docDedPaidHTG = Math.round(
-  paidSalaryTotal * DOC_PCT_PER_MISSING_STUDENT * missingCount * 100
+// Paid-side missing-bulletin deduction (category total)
+const bulletinDedPaidHTG = Math.round(
+  paidSalaryTotal * bulletinPct * 100
 ) / 100;
 
 
 
 const totalAfterPaid = Math.max(
   0,
-  Math.round((paidSalaryTotal - lateDedHTG - docDedPaidHTG) * 100) / 100
+  Math.round((paidSalaryTotal - lateDedHTG - bulletinDedPaidHTG) * 100) / 100
 );
 
 
@@ -565,14 +556,14 @@ for (const tid of teacherIds) {
 
 lateDedExpectedHTG = Math.round(lateDedExpectedHTG * 100) / 100;
 
-const docDedExpectedHTG = Math.round(
-  expectedSalaryTotal * DOC_PCT_PER_MISSING_STUDENT * missingCount * 100
+const bulletinDedExpectedHTG = Math.round(
+  expectedSalaryTotal * bulletinPct * 100
 ) / 100;
 
 
 const totalAfterExpected = Math.max(
   0,
-  Math.round((expectedSalaryTotal - lateDedExpectedHTG - docDedExpectedHTG) * 100) / 100
+  Math.round((expectedSalaryTotal - lateDedExpectedHTG - bulletinDedExpectedHTG) * 100) / 100
 );
 
 
@@ -632,11 +623,11 @@ const totalAfterExpected = Math.max(
 
       <td className="p-2 border text-center">
   <div className="text-xs leading-5">
-    <div><b>Expected:</b> {formatCurrencyHTG(docDedExpectedHTG)}</div>
-    <div><b>Deducted:</b> {formatCurrencyHTG(docDedPaidHTG)}</div>
+    <div><b>Expected:</b> {formatCurrencyHTG(bulletinDedExpectedHTG)}</div>
+    <div><b>Deducted:</b> {formatCurrencyHTG(bulletinDedPaidHTG)}</div>
     <div className="text-gray-500">
-      {liveCounts.expectedCount || 0} expected / {deductions.doc.missingCount || 0} missing
-      {" "}({Math.round(docPct * 100)}%)
+      {missingCount} missing session bulletin(s)
+      {" "}({Math.round(bulletinPct * 10000) / 100}%)
     </div>
   </div>
 </td>
@@ -656,13 +647,11 @@ const totalAfterExpected = Math.max(
         {/* ✅ TOTAL (all teachers) */}
     {categories.length > 0 && (() => {
   const LATE_PCT_PER_DAY = 0.05;
-const DOC_PCT_PER_MISSING_STUDENT = 0.05;
-const missingCountAll = Number(deductions.doc.missingCount || 0);
+const bulletinPctAll = Math.min(1, Number(deductions.bulletin.pct || 0));
 
-const totalDocDed = Math.round(
+const totalBulletinDed = Math.round(
   liveTotalsAllTeachers.paidTotal *
-    DOC_PCT_PER_MISSING_STUDENT *
-    missingCountAll *
+    bulletinPctAll *
     100
 ) / 100;
 
@@ -684,7 +673,7 @@ totalLateDed = Math.round(totalLateDed * 100) / 100;
 
   const totalAfterAll = Math.max(
     0,
-    Math.round((liveTotalsAllTeachers.paidTotal - totalLateDed - totalDocDed) * 100) / 100
+    Math.round((liveTotalsAllTeachers.paidTotal - totalLateDed - totalBulletinDed) * 100) / 100
   );
 
   return (
@@ -719,7 +708,7 @@ totalLateDed = Math.round(totalLateDed * 100) / 100;
       </td>
 
       <td className="p-2 border text-center">
-        {formatCurrencyHTG(totalDocDed)}
+        {formatCurrencyHTG(totalBulletinDed)}
       </td>
 
       <td className="p-2 border text-center">
@@ -801,16 +790,32 @@ totalLateDed = Math.round(totalLateDed * 100) / 100;
       // 'YYYY-MM' -> 'YYYY-MM-01'
       const selectedDate = `${monthValue}-01`;
 
-      const { data, error } = await supabase.rpc("generate_salary", {
+      const { data: generatedCount, error: generateError } = await supabase.rpc("generate_salary", {
         selected_month: selectedDate,
       });
 
-      if (error) {
-        alert("Erreur: " + error.message);
-      } else {
-        alert(`Salaires générés: ${data || 0} ligne(s).`);
-        await load();
+      if (generateError) {
+        alert("Erreur lors de la génération: " + generateError.message);
+        return;
       }
+
+      const { data: updatedCount, error: deductionError } = await supabase.rpc(
+        "apply_salary_deductions",
+        { selected_month: selectedDate }
+      );
+
+      if (deductionError) {
+        alert(
+          `Salaires générés (${generatedCount || 0}), mais erreur lors des déductions: ${deductionError.message}`
+        );
+        await load();
+        return;
+      }
+
+      alert(
+        `Salaires générés: ${generatedCount || 0} ligne(s). Déductions appliquées: ${updatedCount || 0} salaire(s).`
+      );
+      await load();
     }}
     className="bg-green-600 text-white px-6 py-2 rounded-lg shadow hover:bg-green-700 transition"
   >
@@ -848,7 +853,7 @@ totalLateDed = Math.round(totalLateDed * 100) / 100;
                 </td>
                 <td className="border p-2 text-center">{r.period}</td>
                 <td className="border p-2 text-center font-semibold text-gray-800">
-                  {formatCurrencyHTG(r.base_salary)}
+                  {formatCurrencyHTG(r.net_salary)}
                 </td>
                 <td className="border p-2 text-center">{r.notes || "—"}</td>
                 <td className="border p-2 text-center">

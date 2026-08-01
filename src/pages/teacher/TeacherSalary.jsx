@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { formatCurrencyHTG, formatDateFrSafe, formatMonth } from "../../lib/dateUtils";
 
@@ -28,11 +28,9 @@ function asMonthDate(period) {
 export default function TeacherSalary() {
   const [months, setMonths] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [assignedCategoryBaseSalary, setAssignedCategoryBaseSalary] = useState(0);
-
   // expanded monthKey => details
   const [open, setOpen] = useState({}); // { "YYYY-MM": true }
-  const [detailsByMonth, setDetailsByMonth] = useState({}); // { "YYYY-MM": {salary, late_events, missing_docs} }
+  const [detailsByMonth, setDetailsByMonth] = useState({}); // { "YYYY-MM": {salary, late_events, missing_bulletins, deduction_breakdown} }
   const [loadingMonth, setLoadingMonth] = useState({}); // { "YYYY-MM": true }
 
   const loadMonths = async () => {
@@ -46,42 +44,7 @@ export default function TeacherSalary() {
     setMonths(data || []);
   }
 
-  await loadAssignedCategoryBaseSalary();
-
   setLoading(false);
-};
-
-  const loadAssignedCategoryBaseSalary = async () => {
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError || !user) {
-    console.error("getUser error:", userError);
-    setAssignedCategoryBaseSalary(0);
-    return;
-  }
-
-  const { data, error } = await supabase
-    .from("teacher_salary_assignments")
-    .select(`
-      category_id,
-      teacher_salary_categories (
-        base_salary
-      )
-    `)
-    .eq("profile_id", user.id)
-    .maybeSingle();
-
-  if (error) {
-    console.error("teacher_salary_assignments error:", error);
-    setAssignedCategoryBaseSalary(0);
-  } else {
-    setAssignedCategoryBaseSalary(
-      Number(data?.teacher_salary_categories?.base_salary || 0)
-    );
-  }
 };
 
   const loadMonthDetails = async (period) => {
@@ -100,7 +63,15 @@ export default function TeacherSalary() {
 
     if (error) {
       console.error("teacher_salary_month_details error:", error);
-      setDetailsByMonth((p) => ({ ...p, [key]: { salary: null, late_events: [], missing_docs: [] } }));
+      setDetailsByMonth((p) => ({
+        ...p,
+        [key]: {
+          salary: null,
+          late_events: [],
+          missing_bulletins: [],
+          deduction_breakdown: null,
+        },
+      }));
     } else {
       setDetailsByMonth((p) => ({ ...p, [key]: data }));
     }
@@ -111,22 +82,6 @@ export default function TeacherSalary() {
   useEffect(() => {
     loadMonths();
   }, []);
-
-  const totals = useMemo(() => {
-  let deductions = 0;
-  let net = 0;
-
-  for (const r of months || []) {
-    deductions += num(r.deductions);
-    net += num(r.net_salary);
-  }
-
-  return {
-    gross: num(assignedCategoryBaseSalary),
-    deductions,
-    net,
-  };
-}, [months, assignedCategoryBaseSalary]);
 
   const toggleMonth = async (r) => {
     const key = ymLabel(r.period);
@@ -146,19 +101,8 @@ export default function TeacherSalary() {
       <div>
         <h1 className="text-2xl font-bold">Mes salaires</h1>
         <p className="text-sm text-gray-600">
-          Cliquez sur un mois pour voir le détail des pertes (retards + dossiers manquants).
+          Cliquez sur un mois pour voir séparément les déductions pour retards et bulletins de séance manquants.
         </p>
-      </div>
-
-      <div className="grid sm:grid-cols-3 gap-3">
-        <div className="border rounded p-3">
-          <div className="text-xs text-gray-500">Total brut</div>
-          <div className="text-lg font-bold">{formatCurrencyHTG(totals.gross)}</div>
-        </div>
-        <div className="border rounded p-3">
-          <div className="text-xs text-gray-500">Total déductions</div>
-          <div className="text-lg font-bold">{formatCurrencyHTG(totals.deductions)}</div>
-        </div>
       </div>
 
       <div className="border rounded overflow-hidden">
@@ -175,6 +119,9 @@ export default function TeacherSalary() {
 
           const details = detailsByMonth[key];
           const isMonthLoading = !!loadingMonth[key];
+          const breakdown = details?.deduction_breakdown;
+          const lateDeductionAmount = num(breakdown?.late_amount);
+          const bulletinDeductionAmount = num(breakdown?.bulletin_amount);
 
           return (
             <div key={r.id} className="border-t">
@@ -207,13 +154,12 @@ export default function TeacherSalary() {
 
                         <div className="text-sm text-gray-700 mb-2">
                           Déduction retards:{" "}
-                          <b>
-                            {formatCurrencyHTG(
-                              // If you later store the split in admin_salaries.deductions as JSON, you can show exact late amount.
-                              // For now: teacher sees the list; amount can be computed by your salary generator and stored in admin_salaries.
-                              0
-                            )}
-                          </b>
+                          <b>{formatCurrencyHTG(lateDeductionAmount)}</b>
+                          {breakdown ? (
+                            <span className="text-gray-500">
+                              {" "}({Number(breakdown.late_pct || 0) * 100}%)
+                            </span>
+                          ) : null}
                         </div>
 
                         {(details?.late_events || []).length ? (
@@ -244,35 +190,44 @@ export default function TeacherSalary() {
                         )}
                       </div>
 
-                      {/* MISSING DOCS */}
+                      {/* MISSING SESSION BULLETINS */}
                       <div className="border rounded p-3">
-                        <div className="font-semibold mb-2">Dossiers manquants (liste)</div>
+                        <div className="font-semibold mb-2">Bulletins de séance manquants</div>
 
                         <div className="text-sm text-gray-700 mb-2">
-                          Déduction dossiers: <b>{formatCurrencyHTG(0)}</b>
+                          Déduction bulletins: <b>{formatCurrencyHTG(bulletinDeductionAmount)}</b>
+                          {breakdown ? (
+                            <span className="text-gray-500">
+                              {" "}({Number(breakdown.bulletin_pct || 0) * 100}%)
+                            </span>
+                          ) : null}
                         </div>
 
-                        {(details?.missing_docs || []).length ? (
+                        {(details?.missing_bulletins || []).length ? (
                           <div className="overflow-x-auto">
                             <table className="w-full text-xs border">
                               <thead className="bg-gray-50">
                                 <tr>
                                   <th className="p-2 border text-left">Élève</th>
-                                  <th className="p-2 border text-left">Document manquant</th>
+                                  <th className="p-2 border text-left">Séance</th>
+                                  <th className="p-2 border text-right">Déduction</th>
                                 </tr>
                               </thead>
                               <tbody>
-                                {details.missing_docs.map((d, idx) => (
+                                {details.missing_bulletins.map((d, idx) => (
                                   <tr key={idx} className="border-t">
                                     <td className="p-2 border">{d.student_name || "—"}</td>
-                                    <td className="p-2 border">{d.doc_label || "—"}</td>
+                                    <td className="p-2 border">{formatDateFrSafe(d.session_date)}</td>
+                                    <td className="p-2 border text-right">
+                                      {Number(d.deduction_pct || 0) * 100}%
+                                    </td>
                                   </tr>
                                 ))}
                               </tbody>
                             </table>
                           </div>
                         ) : (
-                          <div className="text-sm text-gray-500 italic">Aucun dossier manquant enregistré.</div>
+                          <div className="text-sm text-gray-500 italic">Aucun bulletin de séance manquant.</div>
                         )}
                       </div>
 
@@ -280,8 +235,6 @@ export default function TeacherSalary() {
                       <div className="md:col-span-2 border rounded p-3">
                         <div className="font-semibold mb-2">Résumé</div>
                         <div className="text-sm text-gray-700 flex flex-wrap gap-6">
-                          <div>Brut: <b>{formatCurrencyHTG(gross)}</b></div>
-                          <div>Déductions totales: <b>{formatCurrencyHTG(ded)}</b></div>
                           <div>Net: <b>{formatCurrencyHTG(net)}</b></div>
                           <div className="text-gray-500">
                             Généré le: {formatDateFrSafe(r.created_at)}
