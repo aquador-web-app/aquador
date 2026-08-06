@@ -13,6 +13,55 @@ function buildBaseCode({ first_name, middle_name, last_name, birth_date }) {
   return `${init(first_name)}${init(middle_name)}${init(last_name)}${y2}`;
 }
 
+const MINIMUM_MAIN_ACCOUNT_AGE = 18;
+const MINOR_ACCOUNT_MESSAGE =
+  "Le titulaire du compte doit avoir au moins 18 ans. Si vous êtes le parent ou le tuteur, veuillez créer le compte à votre nom, puis sélectionner « Moi + enfants » ou « Enfants seulement » pour ajouter l’enfant. Si vous êtes mineur, demandez à votre parent ou tuteur d’effectuer l’inscription.";
+
+function getTodayInHaitiParts() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Port-au-Prince",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+
+  const values = Object.fromEntries(
+    parts
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, Number(part.value)])
+  );
+
+  return {
+    year: values.year,
+    month: values.month,
+    day: values.day,
+  };
+}
+
+function calculateAgeInHaiti(birthDate) {
+  if (!birthDate) return null;
+
+  const [birthYear, birthMonth, birthDay] = birthDate
+    .split("-")
+    .map(Number);
+
+  if (!birthYear || !birthMonth || !birthDay) return null;
+
+  const today = getTodayInHaitiParts();
+
+  let age = today.year - birthYear;
+
+  const birthdayHasNotOccurred =
+    today.month < birthMonth ||
+    (today.month === birthMonth && today.day < birthDay);
+
+  if (birthdayHasNotOccurred) {
+    age -= 1;
+  }
+
+  return age;
+}
+
 export default function Signup() {
   const [sp] = useSearchParams()
   const refPrefill = sp.get('ref') || '' // referral from invite link
@@ -58,6 +107,15 @@ useEffect(() => {
 
   const baseCode = useMemo(() => buildBaseCode(form), [form])
 
+  const mainUserAge = useMemo(
+  () => calculateAgeInHaiti(form.birth_date),
+  [form.birth_date]
+);
+
+const mainUserIsMinor =
+  mainUserAge !== null &&
+  mainUserAge < MINIMUM_MAIN_ACCOUNT_AGE;
+
   const onChange = (k, v) => setForm((s) => ({ ...s, [k]: v }))
 
   const addChild = () => {
@@ -88,6 +146,11 @@ const removeChild = (index) => {
   const submit = async (e) => {
   e.preventDefault()
   setErr('')
+
+  if (mainUserIsMinor) {
+  setErr(MINOR_ACCOUNT_MESSAGE);
+  return;
+}
 
   if (signedDocs.length < 2) {
     setErr("Veuillez signer les documents requis avant de continuer.");
@@ -271,18 +334,38 @@ if (!session?.access_token) {
             </select>
           </div>
           <div>
-            <label className="label">Date de naissance</label>
-            <input
-              type="date"
-              className="input"
-              value={form.birth_date}
-              onChange={(e) => onChange('birth_date', e.target.value)}
-              required
-            />
-            <div className="text-xs text-gray-500 mt-1">
-              Code de Parrainage automatique: <strong>{baseCode}</strong>
-            </div>
-          </div>
+  <label className="label">Date de naissance</label>
+
+  <input
+    type="date"
+    className={`input ${
+      mainUserIsMinor ? "border-red-500 focus:border-red-500" : ""
+    }`}
+    value={form.birth_date}
+    onChange={(e) => {
+      onChange("birth_date", e.target.value);
+
+      // Previously signed documents may contain the old birth date
+      if (signedDocs.length > 0) {
+        setSignedDocs([]);
+      }
+    }}
+    required
+  />
+
+  {mainUserIsMinor && (
+    <div className="mt-2 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">
+      <strong>Inscription impossible :</strong>{" "}
+      {MINOR_ACCOUNT_MESSAGE}
+    </div>
+  )}
+
+  {!mainUserIsMinor && (
+    <div className="text-xs text-gray-500 mt-1">
+      Code de Parrainage automatique: <strong>{baseCode}</strong>
+    </div>
+  )}
+</div>
           <div>
   <label className="label">Téléphone</label>
   <PhoneInput
@@ -468,6 +551,11 @@ if (!session?.access_token) {
       if (signedDocs.length < 2) {
         setErr("");
 
+        if (mainUserIsMinor) {
+  setErr(MINOR_ACCOUNT_MESSAGE);
+  return;
+}
+
         // Optional but recommended validation before opening docs
         if (!form.first_name || !form.last_name || !form.birth_date || !form.email) {
           setErr("Veuillez remplir tous les champs requis.");
@@ -525,7 +613,7 @@ if (!session?.access_token) {
             onDone={(results) => {
               setSignedDocs(results);
               setShowDocsModal(false);
-            }}
+            }}  
           />
         )}
       </div>

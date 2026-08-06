@@ -45,6 +45,69 @@ function sanitizeEmailPart(input: string) {
     .toLowerCase();
 }
 
+const MINIMUM_MAIN_ACCOUNT_AGE = 18;
+
+function getTodayInHaitiParts() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Port-au-Prince",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+
+  const values = Object.fromEntries(
+    parts
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, Number(part.value)])
+  );
+
+  return {
+    year: values.year,
+    month: values.month,
+    day: values.day,
+  };
+}
+
+function calculateAgeInHaiti(birthDate: string | null): number | null {
+  if (
+    typeof birthDate !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(birthDate)
+  ) {
+    return null;
+  }
+
+  const [birthYear, birthMonth, birthDay] = birthDate
+    .split("-")
+    .map(Number);
+
+  const parsedDate = new Date(
+    Date.UTC(birthYear, birthMonth - 1, birthDay)
+  );
+
+  // Reject impossible dates such as 2026-02-31
+  if (
+    parsedDate.getUTCFullYear() !== birthYear ||
+    parsedDate.getUTCMonth() + 1 !== birthMonth ||
+    parsedDate.getUTCDate() !== birthDay
+  ) {
+    return null;
+  }
+
+  const today = getTodayInHaitiParts();
+
+  let age = today.year - birthYear;
+
+  const birthdayHasNotOccurred =
+    today.month < birthMonth ||
+    (today.month === birthMonth && today.day < birthDay);
+
+  if (birthdayHasNotOccurred) {
+    age -= 1;
+  }
+
+  return age;
+}
+
 async function generateUniqueChildEmail(first: string, last: string) {
   const base = `${first}${last}`.replace(/\s+/g, "").toLowerCase();
   let candidate = `${base}@child.local`;
@@ -374,6 +437,50 @@ return new Response(
   { status: 200, headers: corsHeaders }
 );
     }
+
+    // ===============================================================
+// 🔞 MAIN ACCOUNT HOLDER MUST BE AT LEAST 18
+// Children created through createChild() are not affected.
+// ===============================================================
+const mainUserAge = calculateAgeInHaiti(birth_date);
+
+if (mainUserAge === null) {
+  return new Response(
+    JSON.stringify({
+      error: "La date de naissance du titulaire est invalide.",
+    }),
+    {
+      status: 400,
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+}
+
+if (mainUserAge < MINIMUM_MAIN_ACCOUNT_AGE) {
+  console.warn("🚫 Minor attempted to create a main account:", {
+    user_id,
+    email,
+    birth_date,
+    calculated_age: mainUserAge,
+  });
+
+  return new Response(
+    JSON.stringify({
+      error:
+        "Le titulaire du compte doit avoir au moins 18 ans. Si vous êtes le parent ou le tuteur, veuillez créer le compte à votre nom, puis sélectionner « Moi + enfants » ou « Enfants seulement » pour ajouter l’enfant. Si vous êtes mineur, demandez à votre parent ou tuteur d’effectuer l’inscription.",
+    }),
+    {
+      status: 403,
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+}
 
     // ===============================================================
     // 2️⃣ MAIN USER FLOW (self / admin / referral)
