@@ -163,7 +163,8 @@ useEffect(() => {
       <Route path="/ecole" element={<EcoleLanding />} />
       <Route path="/club/signup" element={<ClubSignup />} />
       <Route path="/club" element={<ClubLanding />} />
-      {/* TEMPORARILY DISABLED — Massage/Spa not deployed yet
+    
+ {/* TEMPORARILY DISABLED — Massage/Spa not deployed yet
 <Route path="/massage" element={<MassageLanding />} />
 <Route
   path="/massage/mes-reservations"

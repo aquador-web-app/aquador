@@ -58,6 +58,7 @@
   import AdminStudentCertificates from "./AdminStudentCertificates";
   import AdminAchievements from "./AdminAchievements";
   import AdminCardImpressions from "./AdminCardImpressions";
+  import AdminEventPresence from "./AdminEventPresence";
   // import AdminSpa from "./AdminSpa";
   // import AdminSpaInvoices from "./Spa/AdminSpaInvoices";
   // import AdminSpaClients from "./Spa/AdminSpaClients";
@@ -1800,6 +1801,8 @@
           return <AdminAchievements />;
         case "reports-cards":
           return <AdminCardImpressions />;
+        case "event-presence":
+          return <AdminEventPresence />;
         case "spa-overview":
           return <AdminSpa />;
         case "spa-reservations":
@@ -2285,6 +2288,14 @@
     closeSidebar={() => setSidebarOpen(false)}
   />
   )}
+  <SidebarBtn
+  id="event-presence"
+  icon={<FaCheckToSlot />}
+  label="Présences — Clôture"
+  activeTab={activeTab}
+  setActiveTab={setActiveTab}
+  closeSidebar={() => setSidebarOpen(false)}
+/>
   <SidebarBtn
     id="achievements"
     icon={<FaPuzzlePiece />}

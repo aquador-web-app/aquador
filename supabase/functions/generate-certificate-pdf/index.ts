@@ -114,7 +114,38 @@ function replaceAllTokens(html: string, replacements: Record<string, any>) {
   return out;
 }
 
-function wrapPdf(inner: string) {
+function getStudentNameFontSize(fullName: string) {
+  const name = String(fullName || "").trim();
+
+  /*
+   * Estimate the visual width of the name.
+   * Script fonts use less space for lowercase letters,
+   * but capitals and accented letters usually use more.
+   */
+  let widthUnits = 0;
+
+  for (const char of name) {
+    if (char === " ") {
+      widthUnits += 0.28;
+    } else if (char === "-" || char === "–" || char === "—") {
+      widthUnits += 0.35;
+    } else if (/[A-ZÀ-ÖØ-Ý]/.test(char)) {
+      widthUnits += 0.72;
+    } else if (/[a-zà-öø-ÿ]/.test(char)) {
+      widthUnits += 0.5;
+    } else {
+      widthUnits += 0.52;
+    }
+  }
+
+  const availableWidth = 880;
+  const calculatedSize =
+    widthUnits > 0 ? availableWidth / widthUnits : 72;
+
+  return Math.max(30, Math.min(72, calculatedSize));
+}
+
+function wrapPdf(inner: string, studentNameFontSize: number) {
   return `<!doctype html>
 <html lang="fr">
 <head>
@@ -155,49 +186,47 @@ function wrapPdf(inner: string) {
   object-fit: cover !important;
   display:block !important;
 }
+
+/* The name container shrinks to the exact rendered name width */
+/* Full available area for the name */
+.aq-cert .student-name-line {
+  display: block !important;
+  width: 900px !important;
+  max-width: 900px !important;
+  margin: 8px auto 14px auto !important;
+  text-align: center !important;
+  overflow: visible !important;
+  border: 0 !important;
+}
+
+.aq-cert [data-fit-name] {
+  display: inline-block !important;
+  width: auto !important;
+  max-width: none !important;
+
+  font-family: "Alex Brush", cursive !important;
+  font-size: ${studentNameFontSize}px !important;
+  font-weight: 400 !important;
+  line-height: 1.05 !important;
+
+  white-space: nowrap !important;
+  overflow: visible !important;
+
+  padding: 0 0 5px 0 !important;
+  margin: 0 auto !important;
+
+  border-bottom: 2px solid #5f6570 !important;
+  box-sizing: content-box !important;
+}
+
+.aq-cert [data-fit-underline] {
+  display: none !important;
+}
   </style>
 </head>
 <body>
   ${inner}
 
-  <script>
-    (function(){
-      function fitUnderline(){
-        const cert = document.querySelector('.aq-cert');
-        if(!cert) return;
-
-        const name = cert.querySelector('[data-fit-name]');
-        const underline = cert.querySelector('[data-fit-underline]');
-        const content = cert.querySelector('.content');
-
-        if(!name || !underline) return;
-
-        // measure visible name width
-        const nameW = name.getBoundingClientRect().width || name.scrollWidth || 260;
-
-        // clamp within content width
-        const contentW = (content ? content.getBoundingClientRect().width : 900) || 900;
-        const minLine = 180;
-        const maxLine = contentW * 0.92;
-
-        const w = Math.max(minLine, Math.min(maxLine, nameW));
-        underline.style.width = Math.round(w) + 'px';
-      }
-
-      // run multiple passes (fonts)
-      window.addEventListener('load', function(){
-        fitUnderline();
-        setTimeout(fitUnderline, 50);
-        setTimeout(fitUnderline, 200);
-        setTimeout(fitUnderline, 600);
-      });
-
-      fitUnderline();
-      setTimeout(fitUnderline, 50);
-      setTimeout(fitUnderline, 200);
-      setTimeout(fitUnderline, 600);
-    })();
-  </script>
 </body>
 </html>`;
 }
@@ -226,7 +255,20 @@ serve(async (req) => {
 
     const profile_id = body?.profile_id || null;
     const template_id = body?.template_id || null;
-    const hasCategoryKey = Object.prototype.hasOwnProperty.call(body || {}, "category_id");
+
+    // Swimming level selected in AdminStudentCertificates.jsx
+    const level_id_raw = body?.level_id;
+    const level_id =
+      level_id_raw &&
+      String(level_id_raw).trim() &&
+      String(level_id_raw).toLowerCase() !== "null"
+        ? String(level_id_raw)
+        : null;
+
+    const hasCategoryKey = Object.prototype.hasOwnProperty.call(
+      body || {},
+      "category_id"
+    );
 
 // normalize: "", "null", undefined => null
 const category_id_raw = body?.category_id;
@@ -235,8 +277,8 @@ const category_id =
     ? String(category_id_raw)
     : null;
 
-    // Optional overrides (you can later make these come from DB)
-    const level_name = body?.level_name || "Débutant";
+    // Optional overrides
+    let resolvedLevelName = String(body?.level_name || "").trim();
     const program_name = body?.program_name || "Programme Académique A’QUA D’OR";
     const school_year_start = body?.school_year_start || "01 septembre 2025";
     const school_year_end = body?.school_year_end || "31 août 2026";
@@ -252,6 +294,46 @@ const category_id =
         status: 400,
         headers: { "Content-Type": "application/json", ...corsHeaders },
       });
+    }
+
+    if (!level_id) {
+      return new Response(JSON.stringify({ error: "Missing level_id" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    // Resolve the level from the database.
+    // The database value is the source of truth, not the text sent by the browser.
+    const { data: certificateLevel, error: levelErr } = await supabase
+      .from("student_certificate_levels")
+      .select("id, code, name, description, is_active")
+      .eq("id", level_id)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (levelErr) throw levelErr;
+
+    if (!certificateLevel) {
+      return new Response(
+        JSON.stringify({ error: "Certificate level not found or inactive" }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        }
+      );
+    }
+
+    resolvedLevelName = String(certificateLevel.name || "").trim();
+
+    if (!resolvedLevelName) {
+      return new Response(
+        JSON.stringify({ error: "Certificate level has no name" }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        }
+      );
     }
 
     // 1) Load template
@@ -323,7 +405,7 @@ const medalInline  = await urlToDataUri(medalUrl);
       "{{STUDENT_FULL_NAME}}": studentFullName,
       "{{DATE_OF_BIRTH}}": studentDob,
 
-      "{{LEVEL_NAME}}": level_name,
+      "{{LEVEL_NAME}}": resolvedLevelName,
       "{{PROGRAM_NAME}}": program_name,
       "{{SCHOOL_YEAR_START}}": school_year_start,
       "{{SCHOOL_YEAR_END}}": school_year_end,
@@ -351,8 +433,18 @@ const medalInline  = await urlToDataUri(medalUrl);
     replacements["{{medal_url}}"]         = medalInline  || medalUrl  || "";
 
 
-    let compiled = replaceAllTokens(String(tpl.html_template || ""), replacements);
-    compiled = wrapPdf(compiled);
+    const studentNameFontSize =
+  getStudentNameFontSize(studentFullName);
+
+let compiled = replaceAllTokens(
+  String(tpl.html_template || ""),
+  replacements
+);
+
+compiled = wrapPdf(
+  compiled,
+  studentNameFontSize
+);
 
     if (!compiled || compiled.trim().length < 50) throw new Error("Empty certificate HTML");
 
@@ -389,12 +481,13 @@ const object_path = `${folder}/${fileName}`;
           profile_id,
           template_id,
           category_id: effective_category_id,
+          certificate_level_id: certificateLevel.id,
 
           bucket: "certificates",
           object_path,
           file_name: fileName,
 
-          level_name,
+          level_name: resolvedLevelName,
           program_name,
           school_year_start,
           school_year_end,
@@ -405,6 +498,9 @@ const object_path = `${folder}/${fileName}`;
             date_of_birth: studentDob,
             achievement_title: achTitle,
             achievement_text: achText,
+            certificate_level_id: certificateLevel.id,
+            level_code: certificateLevel.code,
+            level_name: resolvedLevelName,
             public_url: publicUrl,
           },
         },
@@ -418,7 +514,7 @@ const object_path = `${folder}/${fileName}`;
         profile_id,
         kind: "certificate",
         title: achTitle || "Certificat",
-        description: achText || null,
+        description: `${achText || ""}${resolvedLevelName ? ` Niveau : ${resolvedLevelName}.` : ""}`.trim() || null,
         ref_table: "student_certificates_issued",
         ref_id: issued.id,
         bucket: "certificates",
@@ -436,6 +532,8 @@ const object_path = `${folder}/${fileName}`;
         object_path,
         file_name: fileName,
         public_url: publicUrl,
+        certificate_level_id: certificateLevel.id,
+        level_name: resolvedLevelName,
       }),
       { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );

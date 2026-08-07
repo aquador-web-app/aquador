@@ -1184,6 +1184,19 @@ const selectedAttendanceProfile = (attendanceProfiles || []).find(p => p.id === 
     Effectuer un paiement
   </button>
 </div>
+{/* 🎓 Clôture 2026 — Presence confirmation */}
+<div className="flex justify-center mt-3">
+  <button
+    type="button"
+    onClick={() => {
+      sessionStorage.setItem("scrollToCloturePresence", "true");
+      setActiveTab("profile");
+    }}
+    className="w-full sm:w-auto px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg shadow transition-all"
+  >
+    🎓 Marquez ma présence pour la clôture
+  </button>
+</div>
 </div>
 
 {/* === FORM PLACEHOLDER (optional — appears only when profile tab is active) === */}

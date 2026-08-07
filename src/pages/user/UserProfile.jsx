@@ -27,6 +27,17 @@ export default function UserProfile({ userId, onAddChild }) {
   const [referrals, setReferrals] = useState([]);
   const [children, setChildren] = useState([]);
   const [parent, setParent] = useState(null);
+  const EVENT_CODE = "cloture-2026-08-29";
+const EVENT_DATE = "2026-08-29";
+const EVENT_NAME =
+  "Cérémonie de clôture et remise de certificats";
+
+const [presenceLoading, setPresenceLoading] = useState(false);
+const [presenceSaving, setPresenceSaving] = useState(false);
+const [presenceConfirmations, setPresenceConfirmations] = useState([]);
+const [showAbsenceReason, setShowAbsenceReason] = useState(false);
+const [absenceReason, setAbsenceReason] = useState("");
+const [selectedParticipants, setSelectedParticipants] = useState([]);
   const [tab, setTab] = useState("infos");
   const [docs, setDocs] = useState([]);
   const { showAlert, showConfirm } = useGlobalAlert();
@@ -43,7 +54,176 @@ export default function UserProfile({ userId, onAddChild }) {
   docChoice.accord ? 2 :
   3;
 
+async function handleConfirmEventPresence() {
+  if (!profile?.id) return;
 
+  if (!selectedParticipants.length) {
+    showAlert?.(
+      "Veuillez sélectionner au moins un participant."
+    );
+    return;
+  }
+
+  try {
+    setPresenceSaving(true);
+
+    const participantIds = eventParticipants.map((participant) =>
+      String(participant.id)
+    );
+
+    const selectedIds = selectedParticipants.map(String);
+
+    const now = new Date().toISOString();
+
+    // ✅ Selected students = confirmed
+    const rowsToConfirm = selectedIds.map((participantId) => ({
+      event_code: EVENT_CODE,
+      event_name: EVENT_NAME,
+      event_date: EVENT_DATE,
+      participant_profile_id: participantId,
+      confirmed_by_profile_id: profile.id,
+      status: "confirmed",
+      confirmed_at: now,
+      cancelled_at: null,
+    }));
+
+    const { error: confirmError } = await supabase
+      .from("event_presence_confirmations")
+      .upsert(rowsToConfirm, {
+        onConflict: "event_code,participant_profile_id",
+      });
+
+    if (confirmError) throw confirmError;
+
+    // Students previously confirmed but now unchecked
+    // become cancelled.
+    const unselectedIds = participantIds.filter(
+      (participantId) => !selectedIds.includes(participantId)
+    );
+
+    if (unselectedIds.length) {
+      const { error: cancelError } = await supabase
+        .from("event_presence_confirmations")
+        .update({
+          status: "cancelled",
+          cancelled_at: now,
+        })
+        .eq("event_code", EVENT_CODE)
+        .eq("confirmed_by_profile_id", profile.id)
+        .in("participant_profile_id", unselectedIds);
+
+      if (cancelError) throw cancelError;
+    }
+
+    const { data: refreshed, error: refreshError } =
+      await supabase
+        .from("event_presence_confirmations")
+        .select("*")
+        .eq("event_code", EVENT_CODE)
+        .in("participant_profile_id", participantIds);
+
+    if (refreshError) throw refreshError;
+
+    setPresenceConfirmations(refreshed || []);
+
+    setSelectedParticipants(
+      (refreshed || [])
+        .filter((row) => row.status === "confirmed")
+        .map((row) => String(row.participant_profile_id))
+    );
+
+    showAlert?.(
+      "Votre présence pour le 29 août 2026 a été confirmée."
+    );
+  } catch (error) {
+    console.error("Presence confirmation error:", error);
+
+    showAlert?.(
+      error?.message ||
+        "Une erreur est survenue lors de la confirmation."
+    );
+  } finally {
+    setPresenceSaving(false);
+  }
+}
+
+async function handleDeclineEventPresence() {
+  if (!profile?.id) return;
+
+  const reason = absenceReason.trim();
+
+  if (!reason) {
+    showAlert?.(
+      "Veuillez indiquer la raison de votre absence."
+    );
+    return;
+  }
+
+  if (!eventParticipants.length) {
+    showAlert?.(
+      "Aucun participant n’est disponible sur ce compte."
+    );
+    return;
+  }
+
+  try {
+    setPresenceSaving(true);
+
+    const now = new Date().toISOString();
+
+    const rowsToCancel = eventParticipants.map((participant) => ({
+      event_code: EVENT_CODE,
+      event_name: EVENT_NAME,
+      event_date: EVENT_DATE,
+      participant_profile_id: String(participant.id),
+      confirmed_by_profile_id: profile.id,
+      status: "cancelled",
+      confirmed_at: null,
+      cancelled_at: now,
+      cancellation_reason: reason,
+    }));
+
+    const { error: cancelError } = await supabase
+      .from("event_presence_confirmations")
+      .upsert(rowsToCancel, {
+        onConflict: "event_code,participant_profile_id",
+      });
+
+    if (cancelError) throw cancelError;
+
+    const participantIds = eventParticipants.map((participant) =>
+      String(participant.id)
+    );
+
+    const { data: refreshed, error: refreshError } =
+      await supabase
+        .from("event_presence_confirmations")
+        .select("*")
+        .eq("event_code", EVENT_CODE)
+        .in("participant_profile_id", participantIds);
+
+    if (refreshError) throw refreshError;
+
+    setPresenceConfirmations(refreshed || []);
+    setSelectedParticipants([]);
+
+    setShowAbsenceReason(false);
+    setAbsenceReason("");
+
+    showAlert?.(
+      "Votre absence pour le 29 août 2026 a été enregistrée."
+    );
+  } catch (error) {
+    console.error("Presence decline error:", error);
+
+    showAlert?.(
+      error?.message ||
+        "Une erreur est survenue lors de l’enregistrement de votre absence."
+    );
+  } finally {
+    setPresenceSaving(false);
+  }
+}
   
 useEffect(() => {
   const fetchChildren = async () => {
@@ -89,6 +269,71 @@ useEffect(() => {
     }
   })();
 }, [profile?.full_name]);
+
+useEffect(() => {
+  if (!profile?.id) return;
+
+  const fetchPresenceConfirmations = async () => {
+    setPresenceLoading(true);
+
+    try {
+      const participantIds = [
+        profile.id,
+        ...children.map((child) => child.id),
+      ].filter(Boolean);
+
+      if (!participantIds.length) {
+        setPresenceConfirmations([]);
+        setSelectedParticipants([]);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("event_presence_confirmations")
+        .select(
+          `
+            id,
+            event_code,
+            event_name,
+            event_date,
+            participant_profile_id,
+            confirmed_by_profile_id,
+            status,
+            confirmed_at,
+            cancelled_at
+          `
+        )
+        .eq("event_code", EVENT_CODE)
+        .in("participant_profile_id", participantIds);
+
+      if (error) throw error;
+
+      const rows = data || [];
+
+      setPresenceConfirmations(rows);
+
+      setSelectedParticipants(
+        rows
+          .filter((row) => row.status === "confirmed")
+          .map((row) => String(row.participant_profile_id))
+      );
+    } catch (error) {
+      console.error(
+        "Presence confirmations loading error:",
+        error
+      );
+
+      showAlert?.(
+  error?.message ||
+    "Impossible de charger les confirmations de présence."
+);
+    } finally {
+      setPresenceLoading(false);
+    }
+  };
+
+  fetchPresenceConfirmations();
+}, [profile?.id, children]);
 
 
 
@@ -299,6 +544,16 @@ const invoiceItems = (inv) => {
   return `${hh}:${mm}`;
 }
 
+function togglePresenceParticipant(participantId) {
+  const id = String(participantId);
+
+  setSelectedParticipants((current) =>
+    current.includes(id)
+      ? current.filter((currentId) => currentId !== id)
+      : [...current, id]
+  );
+}
+
 function timeRangeWithFallback(start_time, end_time, duration_hours) {
   const toHM = (s) => (s || "").slice(0, 5);
   if (start_time && end_time) return `${toHM(start_time)}–${toHM(end_time)}`;
@@ -341,6 +596,24 @@ function timeRangeWithFallback(start_time, end_time, duration_hours) {
 ];
 
 const childrenNames = children.map((c) => c.full_name);
+
+const eventParticipants = [
+  ...(profile?.signup_type !== "children_only"
+    ? [
+        {
+          id: profile.id,
+          full_name: profile.full_name,
+          is_active: profile.is_active,
+        },
+      ]
+    : []),
+
+  ...children.map((child) => ({
+    id: child.id,
+    full_name: child.full_name,
+    is_active: child.is_active,
+  })),
+].filter((participant) => participant.id && participant.is_active);
 
 
   return (
@@ -405,6 +678,168 @@ const childrenNames = children.map((c) => c.full_name);
 >
   + Ajouter une personne
 </button>
+  </div>
+</div>
+
+{/* Confirmation de présence — Clôture du 29 août */}
+<div className="bg-white rounded-2xl shadow border border-orange-100 overflow-hidden">
+  <div className="bg-gradient-to-r from-orange-500 to-blue-700 px-5 py-4 text-white">
+    <h2 className="text-lg font-bold">
+      Cérémonie de clôture — 29 août 2026
+    </h2>
+
+    <p className="text-sm text-white/90 mt-1">
+      Remise de certificats et mini-compétition à partir
+      de 9 h 00.
+    </p>
+  </div>
+
+  <div className="p-5 space-y-4">
+    <p className="text-sm text-gray-700">
+      Tous les élèves ayant participé aux activités
+      d’A’QUA D’OR entre septembre 2025 et août 2026 sont
+      invités à confirmer leur présence.
+    </p>
+
+    {presenceLoading ? (
+      <p className="text-sm text-gray-500">
+        Chargement des confirmations…
+      </p>
+    ) : eventParticipants.length === 0 ? (
+      <p className="text-sm text-gray-500 italic">
+        Aucun participant actif trouvé sur ce compte.
+      </p>
+    ) : (
+      <div className="space-y-2">
+        <p className="text-sm font-semibold text-gray-700">
+          Sélectionnez les personnes qui seront présentes :
+        </p>
+
+        {eventParticipants.map((participant) => {
+          const participantId = String(participant.id);
+
+          return (
+            <label
+              key={participant.id}
+              className="flex items-center gap-3 border rounded-xl px-4 py-3 cursor-pointer hover:bg-gray-50"
+            >
+              <input
+                type="checkbox"
+                checked={selectedParticipants.includes(
+                  participantId
+                )}
+                onChange={() =>
+                  togglePresenceParticipant(participantId)
+                }
+                className="w-5 h-5 rounded text-blue-600"
+              />
+
+              <span className="font-medium text-gray-800">
+                {participant.full_name}
+              </span>
+            </label>
+          );
+        })}
+      </div>
+    )}
+
+    <div className="flex flex-col sm:flex-row gap-3">
+  <button
+    type="button"
+    onClick={handleConfirmEventPresence}
+    disabled={
+      presenceLoading ||
+      presenceSaving ||
+      eventParticipants.length === 0 ||
+      selectedParticipants.length === 0
+    }
+    className="w-full sm:w-auto px-6 py-3 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-semibold shadow disabled:opacity-60 disabled:cursor-not-allowed"
+  >
+    {presenceSaving
+      ? "Enregistrement…"
+      : "Je confirme ma présence"}
+  </button>
+
+  <button
+  type="button"
+  onClick={() => setShowAbsenceReason(true)}
+  disabled={
+    presenceLoading ||
+    presenceSaving ||
+    eventParticipants.length === 0
+  }
+  className="w-full sm:w-auto px-6 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold shadow disabled:opacity-60 disabled:cursor-not-allowed"
+>
+  Je ne serai pas présent
+</button>
+{showAbsenceReason && (
+  <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center px-4">
+    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+      <h3 className="text-lg font-bold text-gray-800">
+        Motif de votre absence
+      </h3>
+
+      <p className="text-sm text-gray-600 mt-2">
+        Veuillez nous indiquer brièvement pourquoi vous ne pourrez
+        pas être présent le 29 août 2026.
+      </p>
+
+      <textarea
+        value={absenceReason}
+        onChange={(e) => setAbsenceReason(e.target.value)}
+        rows={4}
+        placeholder="Expliquez brièvement la raison de votre absence…"
+        className="w-full mt-4 border border-gray-300 rounded-xl px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+      />
+
+      <div className="flex gap-3 mt-5">
+        <button
+          type="button"
+          onClick={() => {
+            setShowAbsenceReason(false);
+            setAbsenceReason("");
+          }}
+          disabled={presenceSaving}
+          className="flex-1 px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700"
+        >
+          Retour
+        </button>
+
+        <button
+          type="button"
+          onClick={handleDeclineEventPresence}
+          disabled={
+            presenceSaving ||
+            !absenceReason.trim()
+          }
+          className="flex-1 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold disabled:opacity-60"
+        >
+          {presenceSaving
+            ? "Enregistrement…"
+            : "Confirmer mon absence"}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+</div>
+
+    {presenceConfirmations.some(
+  (row) => row.status === "confirmed"
+) ? (
+  <div className="rounded-xl bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">
+    ✓ Votre confirmation a bien été enregistrée. Vous pouvez
+    modifier votre réponse si nécessaire.
+  </div>
+) : presenceConfirmations.length > 0 &&
+  presenceConfirmations.every(
+    (row) => row.status === "cancelled"
+  ) ? (
+  <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+    Votre absence pour le 29 août 2026 a bien été enregistrée.
+    Vous pouvez toujours modifier votre réponse avant l’événement.
+  </div>
+) : null}
   </div>
 </div>
 

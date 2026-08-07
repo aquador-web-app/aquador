@@ -280,6 +280,19 @@ if (underline) {
     const [uiError, setUiError] = useState("");
     const [uiOk, setUiOk] = useState("");
 
+    // Certificate levels
+const [levelsLoading, setLevelsLoading] = useState(false);
+const [levels, setLevels] = useState([]);
+const [selectedLevelId, setSelectedLevelId] = useState("");
+
+const selectedLevel = useMemo(
+  () =>
+    levels.find(
+      (level) => String(level.id) === String(selectedLevelId)
+    ) || null,
+  [levels, selectedLevelId]
+);
+
     // DB readiness detection
     const [dbReady, setDbReady] = useState(true);
 
@@ -385,7 +398,7 @@ const studentDob = selectedStudent?.birth_date
       const replacements = {
         "{{STUDENT_FULL_NAME}}": studentFullName,
         "{{DATE_OF_BIRTH}}": studentDob,
-        "{{LEVEL_NAME}}": "Débutant",
+        "{{LEVEL_NAME}}": selectedLevel?.name || "—",
         "{{PROGRAM_NAME}}": "Programme Académique A’QUA D’OR",
         "{{SCHOOL_YEAR_START}}": "01 septembre 2025",
         "{{SCHOOL_YEAR_END}}": "31 août 2026",
@@ -406,7 +419,7 @@ const studentDob = selectedStudent?.birth_date
 
       h = replaceAllTokens(h, replacements);
       return wrapPreview(h);
-    }, [html, showPlaceholders, selectedCategoryId, categories, selectedStudentId, students]);
+    }, [html, showPlaceholders, selectedCategoryId, categories, selectedStudentId, students, selectedLevelId, levels]);
 
     function wrapPdf(inner) {
   const baseHref =
@@ -475,7 +488,7 @@ const studentDob = selectedStudent?.birth_date
       })
     : "—";
 
-  const LEVEL_NAME = "Débutant";
+  const LEVEL_NAME = selectedLevel?.name || "—";
   const PROGRAM_NAME = "Programme Académique A’QUA D’OR";
   const SCHOOL_YEAR_START = "01 septembre 2025";
   const SCHOOL_YEAR_END = "31 août 2026";
@@ -562,6 +575,49 @@ const studentDob = selectedStudent?.birth_date
         setCatLoading(false);
       }
     }
+
+    async function fetchLevels() {
+  setLevelsLoading(true);
+  setUiError("");
+
+  try {
+    const { data, error } = await supabase
+      .from("student_certificate_levels")
+      .select(
+        "id, code, name, description, sort_order, is_active, created_at, updated_at"
+      )
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true });
+
+    if (error) throw error;
+
+    const list = data || [];
+    setLevels(list);
+
+    if (
+      selectedLevelId &&
+      list.some(
+        (level) =>
+          String(level.id) === String(selectedLevelId)
+      )
+    ) {
+      return;
+    }
+
+    setSelectedLevelId(list[0]?.id || "");
+  } catch (error) {
+    console.error("fetchLevels error:", error);
+    setLevels([]);
+    setSelectedLevelId("");
+    setUiError(
+      `Certificate levels error: ${
+        error?.message || String(error)
+      }`
+    );
+  } finally {
+    setLevelsLoading(false);
+  }
+}
 
     async function fetchStudents() {
   setStudentsLoading(true);
@@ -654,16 +710,17 @@ const studentDob = selectedStudent?.birth_date
         apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
       },
       body: JSON.stringify({
-        profile_id: String(selectedStudentId),
-        template_id: String(selectedId),
-        category_id: selectedCategoryId || null,
+  profile_id: String(selectedStudentId),
+  template_id: String(selectedId),
+  category_id: selectedCategoryId || null,
 
-        // optional overrides (match your UI defaults)
-        level_name: "Débutant",
-        program_name: "Programme Académique A’QUA D’OR",
-        school_year_start: "01 septembre 2025",
-        school_year_end: "31 août 2026",
-      }),
+  level_id: selectedLevelId || null,
+  level_name: selectedLevel?.name || null,
+
+  program_name: "Programme Académique A’QUA D’OR",
+  school_year_start: "01 septembre 2025",
+  school_year_end: "31 août 2026",
+}),
     });
 
     const json = await res.json().catch(() => ({}));
@@ -914,6 +971,7 @@ const studentDob = selectedStudent?.birth_date
     useEffect(() => {
       (async () => {
         await fetchCategories();
+        await fetchLevels();
         await fetchTemplates();
         await fetchStudents();
       })();
@@ -934,6 +992,7 @@ const studentDob = selectedStudent?.birth_date
             <button
               onClick={async () => {
                 await fetchCategories();
+                await fetchLevels();
                 await fetchTemplates();
                 await fetchStudents();
               }}
@@ -956,16 +1015,19 @@ const studentDob = selectedStudent?.birth_date
         )}
 
         <div className="space-y-6">
-  {/* ROW 1: Versions + Achievement Categories */}
-  <div className="space-y-6">
-  {/* Row 1: Versions + Achievements */}
+
+  {/* ROW 1: Versions + Template Builder */}
   <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
     {/* LEFT: Versions */}
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 lg:col-span-3">
       <div className="flex items-center justify-between mb-3">
         <h3 className="font-semibold text-gray-800">Versions</h3>
+
         <span className="text-xs text-gray-500">
-          {dbReady ? `${templates.length} template(s)` : "DB not ready"}
+          {dbReady
+            ? `${templates.length} template(s)`
+            : "DB not ready"}
         </span>
       </div>
 
@@ -974,9 +1036,15 @@ const studentDob = selectedStudent?.birth_date
       ) : !dbReady ? (
         <div className="text-sm text-gray-600 space-y-2">
           <p className="font-semibold">UI is ready.</p>
+
           <p>
-            Create table <span className="font-mono">student_certificate_templates</span> then Refresh.
+            Create table{" "}
+            <span className="font-mono">
+              student_certificate_templates
+            </span>{" "}
+            then Refresh.
           </p>
+
           <button
             type="button"
             className="w-full mt-2 px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200"
@@ -991,30 +1059,44 @@ const studentDob = selectedStudent?.birth_date
           </button>
         </div>
       ) : templates.length === 0 ? (
-        <p className="text-gray-500 italic">No templates yet.</p>
+        <p className="text-gray-500 italic">
+          No templates yet.
+        </p>
       ) : (
-        <div className="space-y-2 max-h-[60vh] overflow-auto pr-1">
+        <div className="space-y-2 max-h-[70vh] overflow-auto pr-1">
           {templates.map((t) => {
             const active = !!t.is_active;
             const sel = t.id === selectedId;
+
             return (
               <button
                 key={t.id}
                 onClick={() => setSelectedId(t.id)}
                 className={`w-full text-left rounded-xl border px-3 py-2 transition ${
-                  sel ? "border-aquaBlue bg-blue-50" : "border-gray-100 hover:bg-gray-50"
+                  sel
+                    ? "border-aquaBlue bg-blue-50"
+                    : "border-gray-100 hover:bg-gray-50"
                 }`}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <div className="font-semibold text-gray-800 truncate">{t.version || "—"}</div>
+                  <div className="font-semibold text-gray-800 truncate">
+                    {t.version || "—"}
+                  </div>
+
                   {active && (
                     <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
                       Active
                     </span>
                   )}
                 </div>
-                <div className="text-xs text-gray-500 truncate">{t.title}</div>
-                <div className="text-[11px] text-gray-400 mt-1">{formatDateTimeFrSafe(t.created_at)}</div>
+
+                <div className="text-xs text-gray-500 truncate">
+                  {t.title}
+                </div>
+
+                <div className="text-[11px] text-gray-400 mt-1">
+                  {formatDateTimeFrSafe(t.created_at)}
+                </div>
 
                 <div className="mt-2 flex gap-2">
                   <button
@@ -1037,319 +1119,474 @@ const studentDob = selectedStudent?.birth_date
       )}
     </div>
 
-    {/* RIGHT: Achievement Categories */}
+    {/* RIGHT: Template Builder */}
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 lg:col-span-9">
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h3 className="font-semibold text-gray-800">Achievement Categories</h3>
+          <h3 className="font-semibold text-gray-800">
+            Template Builder
+          </h3>
+
           <p className="text-xs text-gray-500">
-            Create categories of accomplishment. Use placeholders:{" "}
-            <span className="font-mono">{"{{ACHIEVEMENT_TITLE}} {{ACHIEVEMENT_TEXT}}"}</span>
+            Pick an achievement category for this template.
+            The preview uses that same category.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-end gap-2 flex-wrap">
+          <div>
+            <label className="block text-xs text-gray-600 mb-1">
+              Student
+            </label>
+
+            <select
+              value={selectedStudentId}
+              onChange={(e) =>
+                setSelectedStudentId(e.target.value)
+              }
+              className="border rounded-lg px-2 py-2 text-sm"
+              disabled={studentsLoading}
+            >
+              <option value="">
+                {studentsLoading
+                  ? "Loading students..."
+                  : studentOptions.length === 0
+                  ? "No students"
+                  : "Select a student"}
+              </option>
+
+              {studentOptions.map((opt) => (
+                <option
+                  key={opt.value}
+                  value={opt.value}
+                >
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-600 mb-1">
+              Niveau
+            </label>
+
+            <select
+              value={selectedLevelId}
+              onChange={(e) =>
+                setSelectedLevelId(e.target.value)
+              }
+              className="border rounded-lg px-2 py-2 text-sm"
+              disabled={levelsLoading}
+            >
+              <option value="">
+                {levelsLoading
+                  ? "Chargement..."
+                  : levels.length === 0
+                  ? "Aucun niveau"
+                  : "Sélectionner un niveau"}
+              </option>
+
+              {levels.map((level) => (
+                <option
+                  key={level.id}
+                  value={level.id}
+                >
+                  {level.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <select
+            className="border rounded-lg px-2 py-2 text-sm"
+            value={previewMode}
+            onChange={(e) =>
+              setPreviewMode(e.target.value)
+            }
+          >
+            <option value="iframe">
+              Preview iframe
+            </option>
+
+            <option value="inline">
+              Preview inline
+            </option>
+          </select>
+
           <button
             className="px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-sm"
-            onClick={resetCategoryForm}
-            disabled={saving}
+            onClick={handleSaveEdits}
+            disabled={saving || loading || !isDirty()}
+            title={!isDirty() ? "No changes" : ""}
           >
-            New category
+            {saving ? "Saving..." : "Save"}
+          </button>
+
+          <button
+            className="px-3 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-60 text-sm"
+            onClick={handleCreateNewVersion}
+            disabled={
+              saving ||
+              loading ||
+              !html?.trim() ||
+              !version?.trim()
+            }
+          >
+            {saving
+              ? "Creating..."
+              : "Create new version (active)"}
+          </button>
+
+          <button
+            className="px-3 py-2 rounded-lg bg-aquaBlue text-white hover:opacity-90 disabled:opacity-60 text-sm"
+            onClick={handleGenerate}
+            disabled={
+              generating ||
+              saving ||
+              loading ||
+              !selectedStudentId ||
+              !selectedId ||
+              !selectedLevelId
+            }
+            title={
+              !selectedStudentId
+                ? "Select a student"
+                : !selectedId
+                ? "Select a template"
+                : !selectedLevelId
+                ? "Select a level"
+                : ""
+            }
+          >
+            {generating ? "Génération..." : "Générer"}
           </button>
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* List */}
-        <div className="border rounded-xl p-3">
-          <div className="flex items-center justify-between mb-2">
-            <div className="font-semibold text-sm text-gray-800">List</div>
-            <div className="text-xs text-gray-500">{catLoading ? "…" : `${categories.length}`}</div>
-          </div>
+      <div className="mt-4 grid grid-cols-1 xl:grid-cols-2 gap-4">
 
-          <div className="space-y-2 max-h-[240px] overflow-auto pr-1">
-            {categories.length === 0 ? (
-              <div className="text-sm text-gray-500 italic">No categories yet (or table missing).</div>
-            ) : (
-              categories.map((c) => (
-                <button
-                  key={c.id}
-                  className={`w-full text-left rounded-lg border px-3 py-2 ${
-                    c.id === selectedCategoryId
-                      ? "border-aquaBlue bg-blue-50"
-                      : "border-gray-100 hover:bg-gray-50"
-                  }`}
-                  onClick={() => setSelectedCategoryId(c.id)}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="font-semibold text-sm truncate">{c.name}</div>
-                    {!c.is_active && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                        Inactive
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-[11px] text-gray-500 truncate">{c.title || "—"}</div>
-
-                  <div className="mt-2">
-                    <button
-                      type="button"
-                      className="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setCatEditId(c.id);
-                      }}
-                    >
-                      Edit
-                    </button>
-                  </div>
-                </button>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Form */}
-        <div className="lg:col-span-2 border rounded-xl p-3">
-          <div className="flex items-center justify-between">
-            <div className="font-semibold text-sm text-gray-800">
-              {catEditId ? "Edit category" : "Create category"}
-            </div>
-            {catEditId && (
-              <div className="text-xs text-gray-500">Updated: {formatDateTimeFrSafe(catEditing?.updated_at)}</div>
-            )}
-          </div>
-
-          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+        {/* Editor */}
+        <div className="border rounded-2xl p-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
-              <label className="block text-sm text-gray-600 mb-1">Name *</label>
+              <label className="block text-sm text-gray-600 mb-1">
+                Version
+              </label>
+
               <input
                 className="w-full border rounded-lg px-3 py-2"
-                value={catName}
-                onChange={(e) => setCatName(e.target.value)}
-                placeholder="ex: Assiduité"
-                disabled={saving}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Title (optional)</label>
-              <input
-                className="w-full border rounded-lg px-3 py-2"
-                value={catTitle}
-                onChange={(e) => setCatTitle(e.target.value)}
-                placeholder="ex: Certificat d’assiduité"
-                disabled={saving}
+                value={version}
+                onChange={(e) =>
+                  setVersion(e.target.value)
+                }
+                placeholder="ex: v1"
               />
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-sm text-gray-600 mb-1">Text inserted into PDF *</label>
-              <textarea
-                className="w-full border rounded-xl px-3 py-2 text-sm min-h-[120px]"
-                value={catBodyText}
-                onChange={(e) => setCatBodyText(e.target.value)}
-                disabled={saving}
+              <label className="block text-sm text-gray-600 mb-1">
+                Title
+              </label>
+
+              <input
+                className="w-full border rounded-lg px-3 py-2"
+                value={title}
+                onChange={(e) =>
+                  setTitle(e.target.value)
+                }
+                placeholder="Certificat — Natation"
               />
-              <div className="text-[11px] text-gray-500 mt-2">
-                This becomes <span className="font-mono">{"{{ACHIEVEMENT_TEXT}}"}</span> in the template.
-              </div>
             </div>
 
-            <label className="md:col-span-2 text-sm text-gray-700 flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={catIsActive}
-                onChange={(e) => setCatIsActive(e.target.checked)}
-                disabled={saving}
-              />
-              Active
+            <div className="md:col-span-3">
+              <label className="block text-sm text-gray-600 mb-1">
+                Achievement category for this template
+              </label>
+
+              <select
+                className="w-full border rounded-lg px-3 py-2"
+                value={selectedCategoryId}
+                onChange={(e) =>
+                  setSelectedCategoryId(e.target.value)
+                }
+              >
+                <option value="">
+                  (Global / no category)
+                </option>
+
+                {categories.map((c) => (
+                  <option
+                    key={c.id}
+                    value={c.id}
+                  >
+                    {c.name}{" "}
+                    {c.is_active
+                      ? ""
+                      : "(inactive)"}
+                  </option>
+                ))}
+              </select>
+
+              <div className="text-[11px] text-gray-500 mt-2">
+                Template can use:{" "}
+                <span className="font-mono">
+                  {
+                    "{{ACHIEVEMENT_TITLE}} {{ACHIEVEMENT_TEXT}}"
+                  }
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-3">
+            <label className="block text-sm text-gray-600 mb-1">
+              HTML Template
             </label>
+
+            <textarea
+              className="w-full border rounded-xl px-3 py-2 font-mono text-xs min-h-[420px]"
+              value={html}
+              onChange={(e) =>
+                setHtml(e.target.value)
+              }
+              placeholder="Paste your HTML here…"
+            />
+          </div>
+        </div>
+
+        {/* Preview */}
+        <div className="border rounded-2xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-gray-800">
+              Preview
+            </h3>
+
+            <div className="text-xs text-gray-500">
+              Category:{" "}
+              <span className="font-semibold">
+                {selectedCategory?.name || "Global"}
+              </span>
+            </div>
           </div>
 
-          <div className="mt-3 flex items-center justify-end gap-2">
-            <button
-              className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200"
-              onClick={resetCategoryForm}
-              disabled={saving}
-            >
-              Reset
-            </button>
-
-            <button
-              className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-60"
-              onClick={handleSaveCategory}
-              disabled={saving}
-            >
-              {saving ? "Saving..." : catEditId ? "Update category" : "Create category"}
-            </button>
-          </div>
+          {previewMode === "iframe" ? (
+            <iframe
+              title="preview"
+              className="w-full h-[70vh] rounded-xl border"
+              sandbox="allow-same-origin allow-scripts"
+              srcDoc={previewHtml}
+            />
+          ) : (
+            <div
+              className="border rounded-xl p-4 max-h-[70vh] overflow-auto"
+              dangerouslySetInnerHTML={{
+                __html: previewHtml,
+              }}
+            />
+          )}
         </div>
       </div>
     </div>
   </div>
-  </div>
 
-  {/* ROW 2: Template Builder (FULL WIDTH, alone) */}
+  {/* ROW 2: Achievement Categories */}
   <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-    <div className="flex items-center justify-between gap-3 flex-wrap">
+    <div className="flex items-center justify-between flex-wrap gap-3">
       <div>
-        <h3 className="font-semibold text-gray-800">Template Builder</h3>
+        <h3 className="font-semibold text-gray-800">
+          Achievement Categories
+        </h3>
+
         <p className="text-xs text-gray-500">
-          Pick an achievement category for this template (scope). The preview uses that same category.
+          Create categories of accomplishment. Use
+          placeholders:{" "}
+          <span className="font-mono">
+            {
+              "{{ACHIEVEMENT_TITLE}} {{ACHIEVEMENT_TEXT}}"
+            }
+          </span>
         </p>
       </div>
 
-      <label className="text-xs text-gray-600">Student</label>
-<select
-  value={selectedStudentId}
-  onChange={(e) => setSelectedStudentId(e.target.value)}
-  className="border rounded-lg px-1 py-1 text-sm"
-  disabled={studentsLoading}
->
-  <option value="">
-    {studentsLoading
-      ? "Loading students..."
-      : studentOptions.length === 0
-      ? "No students (check error banner)"
-      : "Select a student"}
-  </option>
-
-  {studentOptions.map((opt) => (
-    <option key={opt.value} value={opt.value}>
-      {opt.label}
-    </option>
-  ))}
-</select>
-
-      <div className="flex items-center gap-2 flex-wrap">
-    
-
-        <select
-          className="border rounded-lg px-2 py-1 text-sm"
-          value={previewMode}
-          onChange={(e) => setPreviewMode(e.target.value)}
-        >
-          <option value="iframe">Preview iframe</option>
-          <option value="inline">Preview inline</option>
-        </select>
-
-        <button
-          className="px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-sm"
-          onClick={handleSaveEdits}
-          disabled={saving || loading || !isDirty()}
-          title={!isDirty() ? "No changes" : ""}
-        >
-          {saving ? "Saving..." : "Save"}
-        </button>
-
-        <button
-          className="px-3 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-60 text-sm"
-          onClick={handleCreateNewVersion}
-          disabled={saving || loading || !html?.trim() || !version?.trim()}
-        >
-          {saving ? "Creating..." : "Create new version (active)"}
-        </button>
-        <button
-  className="px-3 py-2 rounded-lg bg-aquaBlue text-white hover:opacity-90 disabled:opacity-60 text-sm"
-  onClick={handleGenerate}
-  disabled={generating || saving || loading || !selectedStudentId || !selectedId}
-  title={!selectedStudentId ? "Select a student" : !selectedId ? "Select a template" : ""}
->
-  {generating ? "Génération..." : "Générer"}
-</button>
-      </div>
+      <button
+        className="px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-sm"
+        onClick={resetCategoryForm}
+        disabled={saving}
+      >
+        New category
+      </button>
     </div>
 
-    <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
-      {/* LEFT: Editor */}
-      <div className="border rounded-2xl p-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+    <div className="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+      {/* Category List */}
+      <div className="border rounded-xl p-3">
+        <div className="flex items-center justify-between mb-2">
+          <div className="font-semibold text-sm text-gray-800">
+            List
+          </div>
+
+          <div className="text-xs text-gray-500">
+            {catLoading ? "…" : categories.length}
+          </div>
+        </div>
+
+        <div className="space-y-2 max-h-[300px] overflow-auto pr-1">
+          {categories.length === 0 ? (
+            <div className="text-sm text-gray-500 italic">
+              No categories yet.
+            </div>
+          ) : (
+            categories.map((c) => (
+              <button
+                key={c.id}
+                className={`w-full text-left rounded-lg border px-3 py-2 ${
+                  c.id === selectedCategoryId
+                    ? "border-aquaBlue bg-blue-50"
+                    : "border-gray-100 hover:bg-gray-50"
+                }`}
+                onClick={() =>
+                  setSelectedCategoryId(c.id)
+                }
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="font-semibold text-sm truncate">
+                    {c.name}
+                  </div>
+
+                  {!c.is_active && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                      Inactive
+                    </span>
+                  )}
+                </div>
+
+                <div className="text-[11px] text-gray-500 truncate">
+                  {c.title || "—"}
+                </div>
+
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    className="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setCatEditId(c.id);
+                    }}
+                  >
+                    Edit
+                  </button>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Category Form */}
+      <div className="lg:col-span-2 border rounded-xl p-3">
+        <div className="flex items-center justify-between">
+          <div className="font-semibold text-sm text-gray-800">
+            {catEditId
+              ? "Edit category"
+              : "Create category"}
+          </div>
+
+          {catEditId && (
+            <div className="text-xs text-gray-500">
+              Updated:{" "}
+              {formatDateTimeFrSafe(
+                catEditing?.updated_at
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Version</label>
+            <label className="block text-sm text-gray-600 mb-1">
+              Name *
+            </label>
+
             <input
               className="w-full border rounded-lg px-3 py-2"
-              value={version}
-              onChange={(e) => setVersion(e.target.value)}
-              placeholder="ex: v1"
+              value={catName}
+              onChange={(e) =>
+                setCatName(e.target.value)
+              }
+              placeholder="ex: Assiduité"
+              disabled={saving}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">
+              Title
+            </label>
+
+            <input
+              className="w-full border rounded-lg px-3 py-2"
+              value={catTitle}
+              onChange={(e) =>
+                setCatTitle(e.target.value)
+              }
+              placeholder="ex: Certificat d’assiduité"
+              disabled={saving}
             />
           </div>
 
           <div className="md:col-span-2">
-            <label className="block text-sm text-gray-600 mb-1">Title</label>
-            <input
-              className="w-full border rounded-lg px-3 py-2"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Certificat — Natation"
+            <label className="block text-sm text-gray-600 mb-1">
+              Text inserted into PDF *
+            </label>
+
+            <textarea
+              className="w-full border rounded-xl px-3 py-2 text-sm min-h-[120px]"
+              value={catBodyText}
+              onChange={(e) =>
+                setCatBodyText(e.target.value)
+              }
+              disabled={saving}
             />
           </div>
 
-          <div className="md:col-span-3">
-            <label className="block text-sm text-gray-600 mb-1">Achievement category for this template</label>
-            <select
-              className="w-full border rounded-lg px-3 py-2"
-              value={selectedCategoryId}
-              onChange={(e) => setSelectedCategoryId(e.target.value)}
-            >
-              <option value="">(Global / no category)</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} {c.is_active ? "" : "(inactive)"}
-                </option>
-              ))}
-            </select>
+          <label className="md:col-span-2 text-sm text-gray-700 flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={catIsActive}
+              onChange={(e) =>
+                setCatIsActive(e.target.checked)
+              }
+              disabled={saving}
+            />
 
-            <div className="text-[11px] text-gray-500 mt-2">
-              Template can use:{" "}
-              <span className="font-mono">{"{{ACHIEVEMENT_TITLE}} {{ACHIEVEMENT_TEXT}}"}</span>
-            </div>
-          </div>
+            Active
+          </label>
         </div>
 
-        <div className="mt-3">
-          <label className="block text-sm text-gray-600 mb-1">HTML Template</label>
-          <textarea
-            className="w-full border rounded-xl px-3 py-2 font-mono text-xs min-h-[420px]"
-            value={html}
-            onChange={(e) => setHtml(e.target.value)}
-            placeholder="Paste your HTML here…"
-          />
+        <div className="mt-3 flex items-center justify-end gap-2">
+          <button
+            className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200"
+            onClick={resetCategoryForm}
+            disabled={saving}
+          >
+            Reset
+          </button>
 
-          <div className="text-xs text-gray-500 mt-2">
-            Suggested placeholders:{" "}
-<span className="font-mono">
-  {
-    "{{STUDENT_FULL_NAME}} {{LEVEL_NAME}} {{SCHOOL_YEAR_START}} {{SCHOOL_YEAR_END}} {{DATE_ISSUED}} {{INSTRUCTOR_NAME}} {{ACHIEVEMENT_TITLE}} {{ACHIEVEMENT_TEXT}} {{logo_url}} {{signature_admin_url}} {{signature_instructor_url}}"
-  }
-</span>
-          </div>
+          <button
+            className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-60"
+            onClick={handleSaveCategory}
+            disabled={saving}
+          >
+            {saving
+              ? "Saving..."
+              : catEditId
+              ? "Update category"
+              : "Create category"}
+          </button>
         </div>
-      </div>
-
-      {/* RIGHT: Preview */}
-      <div className="border rounded-2xl p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold text-gray-800">Preview</h3>
-          <div className="text-xs text-gray-500">
-            Category: <span className="font-semibold">{selectedCategory?.name || "Global"}</span>
-          </div>
-        </div>
-
-        {previewMode === "iframe" ? (
-          <iframe
-  title="preview"
-  className="w-full h-[70vh] rounded-xl border"
-  sandbox="allow-same-origin allow-scripts"
-  srcDoc={previewHtml}
-/>
-        ) : (
-          <div
-            className="border rounded-xl p-4 max-h-[70vh] overflow-auto"
-            dangerouslySetInnerHTML={{ __html: previewHtml }}
-          />
-        )}
       </div>
     </div>
   </div>
