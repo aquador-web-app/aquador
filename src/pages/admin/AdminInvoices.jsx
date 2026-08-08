@@ -353,44 +353,110 @@ const loadPayments = async () => {
 
   /** Client-side filters for invoices */
 const filteredInvoices = useMemo(() => {
-  // start from all invoices
   let base = [...allInvoices];
 
-  // 🧍 filter by name (show *all months* for that name)
-if (nameFilter) {
-  base = base.filter((inv) => inv.child_full_name === nameFilter);
-}
+  // =====================================================
+  // NAME FILTER = ENTIRE FAMILY
+  // =====================================================
 
+  if (nameFilter) {
+    // Find one invoice belonging to the selected person
+    const selectedPersonInvoice = allInvoices.find(
+      (inv) =>
+        inv.child_full_name === nameFilter
+    );
 
-// 🗓️ filter by month (only apply if user also chose one)
-if (monthFilter) {
-  base = base.filter((inv) => monthKeyOf(inv) === monthFilter);
-}
+    if (selectedPersonInvoice) {
+      // Family root:
+      // child -> parent_id
+      // parent -> own user_id
+      const selectedFamilyId =
+        selectedPersonInvoice.parent_id_explicit ||
+        selectedPersonInvoice.user_id;
 
+      base = base.filter((inv) => {
+        const invoiceFamilyId =
+          inv.parent_id_explicit ||
+          inv.user_id;
 
-  // 💰 apply status + date range filters
-  return base.filter((inv) => {
-    // status
-    if (statusFilter !== "all") {
-      if ((inv.status || "").toLowerCase() !== statusFilter) return false;
+        return (
+          invoiceFamilyId ===
+          selectedFamilyId
+        );
+      });
+    } else {
+      base = [];
     }
+  }
 
-    // date range (prefer due_date, else issued_at)
-    const checkDate = inv.due_date || inv.issued_at;
-    if (startDate && checkDate) {
-      if (new Date(checkDate) < new Date(startDate).setHours(0, 0, 0, 0)) {
+  // =====================================================
+  // MONTH FILTER
+  // =====================================================
+
+  if (monthFilter) {
+    base = base.filter(
+      (inv) =>
+        monthKeyOf(inv) ===
+        monthFilter
+    );
+  }
+
+  // =====================================================
+  // STATUS / DATE FILTERS
+  // =====================================================
+
+  return base.filter((inv) => {
+    if (statusFilter !== "all") {
+      if (
+        (inv.status || "").toLowerCase() !==
+        statusFilter
+      ) {
         return false;
       }
     }
+
+    const checkDate =
+      inv.due_date ||
+      inv.issued_at;
+
+    if (startDate && checkDate) {
+      if (
+        new Date(checkDate) <
+        new Date(startDate).setHours(
+          0,
+          0,
+          0,
+          0
+        )
+      ) {
+        return false;
+      }
+    }
+
     if (endDate && checkDate) {
-      if (new Date(checkDate) > new Date(endDate).setHours(23, 59, 59, 999)) {
+      if (
+        new Date(checkDate) >
+        new Date(endDate).setHours(
+          23,
+          59,
+          59,
+          999
+        )
+      ) {
         return false;
       }
     }
 
     return true;
   });
-}, [allInvoices, nameFilter, monthFilter, statusFilter, startDate, endDate]);
+}, [
+  allInvoices,
+  nameFilter,
+  monthFilter,
+  statusFilter,
+  startDate,
+  endDate,
+]);
 
 // Reset pagination when filters change
 useEffect(() => {
@@ -1252,20 +1318,62 @@ if (inv.status === "paid") {
           </table>
         </div>
         {/* 📱 Mobile cards */}
-    <div className="md:hidden space-y-4">
-      {family.invoices.map((inv) => (
-        <AdminInvoiceCard
-          key={inv.invoice_id}
-          inv={inv}
-          paidDate={paidDates[inv.invoice_id]}
-          toggleExpandInvoice={toggleExpandInvoice}
-          expandingInvoice={expandingInvoice}
-          invoiceItemsById={invoiceItemsById}
-          reloadInvoices={reloadInvoices}
-          role={role}
-        />
-      ))}
+<div className="md:hidden space-y-4">
+  {family.invoices.map((inv) => (
+    <AdminInvoiceCard
+      key={inv.invoice_id}
+      inv={inv}
+      paidDate={paidDates[inv.invoice_id]}
+      toggleExpandInvoice={toggleExpandInvoice}
+      expandingInvoice={expandingInvoice}
+      invoiceItemsById={invoiceItemsById}
+      reloadInvoices={reloadInvoices}
+      role={role}
+    />
+  ))}
+
+  {/* Family totals — mobile */}
+  <div className="rounded-xl border-2 border-blue-200 bg-blue-50 p-4 shadow-sm">
+    <p className="text-sm font-bold text-blue-900 mb-3">
+      Total famille
+    </p>
+
+    <div className="space-y-2 text-sm">
+      <div className="flex justify-between">
+        <span className="text-gray-700">
+          Total
+        </span>
+        <strong className="text-red-600">
+          {formatCurrencyUSD(totals.total)}
+        </strong>
+      </div>
+
+      <div className="flex justify-between">
+        <span className="text-gray-700">
+          Payé
+        </span>
+        <strong className="text-green-600">
+          {formatCurrencyUSD(totals.paid)}
+        </strong>
+      </div>
+
+      <div className="flex justify-between border-t border-blue-200 pt-2">
+        <span className="font-semibold text-gray-900">
+          Restant
+        </span>
+        <strong
+          className={
+            totals.remaining > 0
+              ? "text-red-600"
+              : "text-green-600"
+          }
+        >
+          {formatCurrencyUSD(totals.remaining)}
+        </strong>
+      </div>
     </div>
+  </div>
+</div>
        </div>
       )}
     </div>

@@ -132,14 +132,10 @@ serve(async (req) => {
 const haitiParts = getHaitiDateTimeParts(now);
 const day = Number(haitiParts.day);
 
-// Find PARENT (invoices belong to parent, not child)
-const { data: prof } = await supabase
-  .from("profiles")
-  .select("parent_id")
-  .eq("id", profile_id)
-  .maybeSingle();
-
-const invoiceOwnerId = prof?.parent_id ?? profile_id;
+// Each student/profile has their own invoice row.
+// Attendance eligibility must therefore be checked
+// against the invoice belonging to the student being scanned.
+const invoiceOwnerId = profile_id;
 
 // Only enforce after the 7th
 if (day >= 8) {
@@ -156,7 +152,21 @@ const { data: invoices, error: invErr } = await supabase
 
   const list = invoices ?? [];
 
-  const unpaid = list.some(
+// From the 8th onward, a valid current-month invoice must exist.
+if (list.length === 0) {
+  return new Response(
+    JSON.stringify({
+      error:
+        "Aucune facture n'a été trouvée pour cet élève pour ce mois.",
+    }),
+    {
+      status: 403,
+      headers: corsHeaders,
+    }
+  );
+}
+
+const unpaid = list.some(
   (i) =>
     Number(i.paid_total) <= 0 &&
     Number(i.total) > 0

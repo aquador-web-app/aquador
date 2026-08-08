@@ -437,101 +437,296 @@ const fetchStaffMonthlySummary = async () => {
 }, [date, canSeeStaffDailyList]);
 
 
-  const saveAttendanceWithRules = async (enrollment_id, action, sessionStartISO) => {
-    const dayISO = getHaitiDateISO(date);
-    const now = new Date();
-    const start = sessionStartISO ? new Date(sessionStartISO) : null;
-    const decideStatus = () => {
-      if (!start) return "present";
-      const diffMin = Math.floor((now - start) / 60000);
-      return diffMin <= 15 ? "present" : "late";
-    };
+  const saveAttendanceWithRules = async (
+  enrollment_id,
+  action,
+  sessionStartISO
+) => {
+  const dayISO = getHaitiDateISO(date);
+  const now = new Date();
+  const start = sessionStartISO
+    ? new Date(sessionStartISO)
+    : null;
 
-    const { data: exist } = await supabase
+  const decideStatus = () => {
+    if (!start) return "present";
+
+    const diffMin = Math.floor(
+      (now - start) / 60000
+    );
+
+    return diffMin <= 15
+      ? "present"
+      : "late";
+  };
+
+  // ---------------------------------------------------------
+  // Read existing attendance
+  // ---------------------------------------------------------
+
+  const {
+    data: exist,
+    error: existError,
+  } = await supabase
+    .from("attendance")
+    .select(
+      "id, status, check_in_time, check_out_time"
+    )
+    .eq(
+      "enrollment_id",
+      enrollment_id
+    )
+    .eq(
+      "attended_on",
+      dayISO
+    )
+    .maybeSingle();
+
+  if (existError) {
+    throw existError;
+  }
+
+  // =========================================================
+  // CHECK-IN
+  // =========================================================
+
+  if (action === "check-in") {
+    const newStatus =
+      decideStatus();
+
+    if (!exist) {
+      const { error } =
+        await supabase
+          .from("attendance")
+          .insert([
+            {
+              enrollment_id,
+              attended_on: dayISO,
+              status: newStatus,
+              check_in_time:
+                now.toISOString(),
+            },
+          ]);
+
+      if (error) {
+        throw error;
+      }
+    } else {
+      const patch = {};
+
+      if (!exist.check_in_time) {
+        patch.check_in_time =
+          now.toISOString();
+      }
+
+      if (
+        exist.status === "absent"
+      ) {
+        patch.status = newStatus;
+      }
+
+      const { error } =
+        await supabase
+          .from("attendance")
+          .update(patch)
+          .eq("id", exist.id);
+
+      if (error) {
+        throw error;
+      }
+    }
+  }
+
+  // =========================================================
+  // CHECK-OUT
+  // =========================================================
+
+  else if (action === "check-out") {
+    if (!exist) {
+      const impliedStatus =
+        decideStatus();
+
+      const { error } =
+        await supabase
+          .from("attendance")
+          .insert([
+            {
+              enrollment_id,
+              attended_on: dayISO,
+              status:
+                impliedStatus,
+              check_in_time:
+                now.toISOString(),
+              check_out_time:
+                now.toISOString(),
+            },
+          ]);
+
+      if (error) {
+        throw error;
+      }
+    } else {
+      const patch = {
+        check_out_time:
+          now.toISOString(),
+      };
+
+      // If they had previously been marked absent,
+      // check-out also implies a new check-in.
+      // The database payment guard will validate this.
+      if (
+        exist.status ===
+          "absent" &&
+        !exist.check_in_time
+      ) {
+        patch.status =
+          decideStatus();
+
+        patch.check_in_time =
+          now.toISOString();
+      }
+
+      const { error } =
+        await supabase
+          .from("attendance")
+          .update(patch)
+          .eq("id", exist.id);
+
+      if (error) {
+        throw error;
+      }
+    }
+  }
+
+  // =========================================================
+  // MARK ABSENT
+  // Always permitted by DB attendance guard
+  // =========================================================
+
+  else if (
+    action === "mark-absent"
+  ) {
+    const {
+      data: existAbsent,
+      error: absentLookupError,
+    } = await supabase
       .from("attendance")
-      .select("id, status, check_in_time, check_out_time")
-      .eq("enrollment_id", enrollment_id)
-      .eq("attended_on", dayISO)
+      .select("id")
+      .eq(
+        "enrollment_id",
+        enrollment_id
+      )
+      .eq(
+        "attended_on",
+        dayISO
+      )
       .maybeSingle();
 
-    if (action === "check-in") {
-      const newStatus = decideStatus();
-      if (!exist) {
-        await supabase.from("attendance").insert([
-          { enrollment_id, attended_on: dayISO, status: newStatus, check_in_time: now.toISOString() },
-        ]);
-      } else {
-        const patch = {};
-        if (!exist.check_in_time) patch.check_in_time = now.toISOString();
-        if (exist.status === "absent") patch.status = newStatus;
-        await supabase.from("attendance").update(patch).eq("id", exist.id);
-      }
-    } else if (action === "check-out") {
-      if (!exist) {
-        const impliedStatus = decideStatus();
-        await supabase.from("attendance").insert([
-          {
-            enrollment_id,
-            attended_on: dayISO,
-            status: impliedStatus,
-            check_in_time: now.toISOString(),
-            check_out_time: now.toISOString(),
-          },
-        ]);
-      } else {
-        const patch = { check_out_time: now.toISOString() };
-        if (exist.status === "absent" && !exist.check_in_time) {
-          patch.status = decideStatus();
-          patch.check_in_time = now.toISOString();
-        }
-        await supabase.from("attendance").update(patch).eq("id", exist.id);
-      }
-          } else if (action === "mark-absent") {
-      // Mark student as ABSENT manually
-      const { data: existAbsent } = await supabase
-        .from("attendance")
-        .select("id")
-        .eq("enrollment_id", enrollment_id)
-        .eq("attended_on", dayISO)
-        .maybeSingle();
+    if (absentLookupError) {
+      throw absentLookupError;
+    }
 
-      if (!existAbsent) {
-        await supabase.from("attendance").insert([
-          {
-            enrollment_id,
-            attended_on: dayISO,
-            status: "absent",
-            check_in_time: null,
-            check_out_time: null,
-          },
-        ]);
-      } else {
+    if (!existAbsent) {
+      const { error } =
+        await supabase
+          .from("attendance")
+          .insert([
+            {
+              enrollment_id,
+              attended_on:
+                dayISO,
+              status: "absent",
+              check_in_time:
+                null,
+              check_out_time:
+                null,
+            },
+          ]);
+
+      if (error) {
+        throw error;
+      }
+    } else {
+      const { error } =
         await supabase
           .from("attendance")
           .update({
             status: "absent",
-            check_in_time: null,
-            check_out_time: null,
+            check_in_time:
+              null,
+            check_out_time:
+              null,
           })
-          .eq("id", existAbsent.id);
+          .eq(
+            "id",
+            existAbsent.id
+          );
+
+      if (error) {
+        throw error;
       }
-    } else if (action === "undo-checkin") {
+    }
+  }
+
+  // =========================================================
+  // UNDO CHECK-IN
+  // =========================================================
+
+  else if (
+    action === "undo-checkin"
+  ) {
+    const { error } =
       await supabase
         .from("attendance")
         .delete()
-        .eq("enrollment_id", enrollment_id)
-        .eq("attended_on", dayISO);
-    } else if (action === "undo-checkout") {
+        .eq(
+          "enrollment_id",
+          enrollment_id
+        )
+        .eq(
+          "attended_on",
+          dayISO
+        );
+
+    if (error) {
+      throw error;
+    }
+  }
+
+  // =========================================================
+  // UNDO CHECK-OUT
+  // =========================================================
+
+  else if (
+    action === "undo-checkout"
+  ) {
+    const { error } =
       await supabase
         .from("attendance")
-        .update({ check_out_time: null })
-        .eq("enrollment_id", enrollment_id)
-        .eq("attended_on", dayISO);
-    }
+        .update({
+          check_out_time: null,
+        })
+        .eq(
+          "enrollment_id",
+          enrollment_id
+        )
+        .eq(
+          "attended_on",
+          dayISO
+        );
 
-    await fetchSessions();
-    await fetchResumeMensuel();
-  };
+    if (error) {
+      throw error;
+    }
+  }
+
+  // ---------------------------------------------------------
+  // Refresh only AFTER successful DB write
+  // ---------------------------------------------------------
+
+  await fetchSessions();
+  await fetchResumeMensuel();
+};
 
   const handleStaffScan = async (text) => {
   if (typeof text !== "string" || !text.trim()) return;
@@ -799,13 +994,53 @@ const scanned_profile_id = m[0];
   };
 
   const handleManual = async () => {
-    try {
-      await saveAttendanceWithRules(modalEnrollment, modalAction, modalSessionStartISO);
-      closeModal();
-    } catch (e) {
-      setErreur(e.message);
+  setModalErreur("");
+  setModalResult("");
+
+  try {
+    await saveAttendanceWithRules(
+      modalEnrollment,
+      modalAction,
+      modalSessionStartISO
+    );
+
+    closeModal();
+  } catch (e) {
+    console.error(
+      "Manual attendance error:",
+      e
+    );
+
+    let message =
+      e?.message ||
+      "Impossible d'enregistrer la présence.";
+
+    if (
+      message.includes(
+        "ATTENDANCE_BLOCKED_UNPAID"
+      )
+    ) {
+      message =
+        "⛔ Un paiement doit être effectué avant de pouvoir accéder au cours.";
+    } else if (
+      message.includes(
+        "ATTENDANCE_BLOCKED_BALANCE"
+      )
+    ) {
+      message =
+        "⛔ La facture doit être entièrement réglée avant de pouvoir accéder au cours.";
+    } else if (
+      message.includes(
+        "ATTENDANCE_BLOCKED_NO_INVOICE"
+      )
+    ) {
+      message =
+        "⛔ Aucune facture valide n'a été trouvée pour cet élève pour ce mois.";
     }
-  };
+
+    setModalErreur(message);
+  }
+};
 
   const fetchResumeMensuel = async () => {
   try {
