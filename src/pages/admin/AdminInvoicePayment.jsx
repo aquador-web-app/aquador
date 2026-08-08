@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
   import { formatCurrencyUSD, formatDateFrSafe, formatMonth } from "../../lib/dateUtils";
   import { useGlobalAlert } from "../../components/GlobalAlert";
   import HoverOverlay from "../../components/HoverOverlay";
+  import PaymentPage from "../../components/payments/PaymentPage";
 
   function sanitizeName(name) {
   return String(name || "")
@@ -21,6 +22,9 @@ import React, { useEffect, useRef, useState } from "react";
     const [method, setMethod] = useState("cash");
     const [notes, setNotes] = useState("");
     const [loading, setLoading] = useState(false);
+    const [stripePaymentOpen, setStripePaymentOpen] = useState(false);
+const [stripeInvoice, setStripeInvoice] = useState(null);
+const [stripeUser, setStripeUser] = useState(null);
     const { showAlert, showConfirm } = useGlobalAlert();
 
     // payments
@@ -215,9 +219,9 @@ useEffect(() => {
   let query = supabase
     .from("payments")
     .select(
-      "id, invoice_id, amount, method, notes, paid_at, invoices(full_name, invoice_no, proof_url)",
-      { count: "exact" }
-    )
+  "id, invoice_id, amount, method, notes, paid_at, stripe_payment_intent, status, invoices(full_name, invoice_no, proof_url)",
+  { count: "exact" }
+)
     .eq("approved", true) // ✅ ONLY approved payments
     .order("paid_at", { ascending: false })
     .range(from, to);
@@ -304,10 +308,100 @@ async function handleProofPick(file) {
   }
 }
 
+async function openStripePayment() {
+  if (!selectedInvoiceId) {
+    return showAlert("Veuillez choisir une facture.");
+  }
+
+  const invoice = invoices.find(
+    (inv) => inv.id === selectedInvoiceId
+  );
+
+  if (!invoice) {
+    return showAlert("Facture introuvable.");
+  }
+
+  const remaining =
+    Number(invoice.total || 0) -
+    Number(invoice.paid_total || 0);
+
+  if (remaining <= 0) {
+    return showAlert("Cette facture est déjà payée.");
+  }
+
+  try {
+    // Get the invoice user directly from DB because the current
+    // invoices list does not load user_id/email.
+    const { data: fullInvoice, error: invoiceErr } =
+      await supabase
+        .from("invoices")
+        .select("id, user_id, full_name, total, paid_total")
+        .eq("id", invoice.id)
+        .single();
+
+    if (invoiceErr) throw invoiceErr;
+
+    let userForStripe = {
+      id: fullInvoice.user_id || null,
+      email: null,
+    };
+
+    if (fullInvoice.user_id) {
+      const { data: profile, error: profileErr } =
+        await supabase
+          .from("profiles")
+          .select("id, email")
+          .eq("id", fullInvoice.user_id)
+          .maybeSingle();
+
+      if (profileErr) {
+        console.warn(
+          "Could not load Stripe customer email:",
+          profileErr
+        );
+      }
+
+      if (profile) {
+        userForStripe = {
+          id: profile.id,
+          email: profile.email || null,
+        };
+      }
+    }
+
+    setStripeInvoice({
+      ...fullInvoice,
+      remaining,
+    });
+
+    setStripeUser(userForStripe);
+    setStripePaymentOpen(true);
+  } catch (err) {
+    console.error("openStripePayment error:", err);
+    showAlert(
+      "Erreur lors de l'ouverture du paiement par carte : " +
+        err.message
+    );
+  }
+}
+
     // ----------------- HANDLE PAYMENT -----------------
     async function handlePayment() {
-    if (!selectedInvoiceId || !amount)
-      return showAlert("Veuillez choisir une facture et entrer un montant.");
+  if (!selectedInvoiceId) {
+    return showAlert("Veuillez choisir une facture.");
+  }
+
+  // Card payments MUST go through Stripe.
+  // Do not insert anything manually into payments.
+  if (method === "card") {
+    await openStripePayment();
+    return;
+  }
+
+  // Manual methods still require an entered amount.
+  if (!amount) {
+    return showAlert("Veuillez entrer un montant.");
+  }
 
     setLoading(true);
     const invoice = invoices.find((inv) => inv.id === selectedInvoiceId);
@@ -1301,13 +1395,31 @@ async function fetchRevertedPaymentsLive(monthInput = selectedLiveMonth) {
         </select>
 
         {/* Amount */}
-        <label className="block mb-2 font-medium">Montant payé</label>
-        <input
-          type="number"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          className="w-full border px-2 py-1 rounded mb-4"
-        />
+{method !== "card" ? (
+  <>
+    <label className="block mb-2 font-medium">
+      Montant payé
+    </label>
+
+    <input
+      type="number"
+      value={amount}
+      onChange={(e) => setAmount(e.target.value)}
+      className="w-full border px-2 py-1 rounded mb-4"
+    />
+  </>
+) : (
+  <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3">
+    <p className="text-sm font-medium text-blue-900">
+      Paiement sécurisé par carte
+    </p>
+
+    <p className="text-xs text-blue-700 mt-1">
+      Le solde restant de la facture sera déterminé
+      automatiquement par le serveur.
+    </p>
+  </div>
+)}
 
         {/* Method */}
         <label className="block mb-2 font-medium">Méthode de paiement</label>
@@ -1372,12 +1484,16 @@ async function fetchRevertedPaymentsLive(monthInput = selectedLiveMonth) {
 
         {/* Submit */}
         <button
-          onClick={handlePayment}
-          disabled={loading}
-          className="bg-aquaBlue text-white px-4 py-2 rounded hover:bg-orange-600"
-        >
-          {loading ? "Enregistrement..." : "Enregistrer Paiement"}
-        </button>
+  onClick={handlePayment}
+  disabled={loading}
+  className="bg-aquaBlue text-white px-4 py-2 rounded hover:bg-orange-600"
+>
+  {loading
+    ? "Enregistrement..."
+    : method === "card"
+    ? "Payer par carte"
+    : "Enregistrer Paiement"}
+</button>
 
         {/* 🔹 Pending Payments Section */}
 <h2 className="text-lg font-bold mt-8 mb-4 text-yellow-700">
@@ -1623,14 +1739,27 @@ async function fetchRevertedPaymentsLive(monthInput = selectedLiveMonth) {
                 {/* 🔁 Action column */}
                     {role === "admin" && (
                       <td className="px-3 py-2">
-                        <button
-                          onClick={() =>
-                            handleRevertPayment(p.id, p.invoice_id, p.amount)
-                          }
-                          className="bg-red-100 text-red-700 border border-red-300 px-2 py-1 text-xs rounded hover:bg-red-200"
-                        >
-                          Annuler
-                        </button>
+                        {p.stripe_payment_intent ? (
+  <button
+    onClick={() =>
+      showAlert(
+        "Ce paiement a été effectué par Stripe. Une annulation doit être traitée comme un remboursement Stripe."
+      )
+    }
+    className="bg-orange-100 text-orange-700 border border-orange-300 px-2 py-1 text-xs rounded hover:bg-orange-200"
+  >
+    Rembourser
+  </button>
+) : (
+  <button
+    onClick={() =>
+      handleRevertPayment(p.id, p.invoice_id, p.amount)
+    }
+    className="bg-red-100 text-red-700 border border-red-300 px-2 py-1 text-xs rounded hover:bg-red-200"
+  >
+    Annuler
+  </button>
+)}
                       </td>
                     )}
                   </tr>
@@ -1683,13 +1812,32 @@ async function fetchRevertedPaymentsLive(monthInput = selectedLiveMonth) {
         </div>
 
         {role === "admin" && (
-          <button
-            onClick={() => handleRevertPayment(p.id, p.invoice_id, p.amount)}
-            className="mt-3 w-full bg-red-100 text-red-700 border px-3 py-2 rounded text-sm"
-          >
-            Annuler
-          </button>
-        )}
+  p.stripe_payment_intent ? (
+    <button
+      onClick={() =>
+        showAlert(
+          "Ce paiement a été effectué par Stripe. Une annulation doit être traitée comme un remboursement Stripe."
+        )
+      }
+      className="mt-3 w-full bg-orange-100 text-orange-700 border border-orange-300 px-3 py-2 rounded text-sm"
+    >
+      Rembourser
+    </button>
+  ) : (
+    <button
+      onClick={() =>  
+        handleRevertPayment(
+          p.id,
+          p.invoice_id,
+          p.amount
+        )
+      }
+      className="mt-3 w-full bg-red-100 text-red-700 border px-3 py-2 rounded text-sm"
+    >
+      Annuler
+    </button>
+  )
+)}
       </div>
     ))}
   </div>
@@ -1718,6 +1866,81 @@ async function fetchRevertedPaymentsLive(monthInput = selectedLiveMonth) {
             </button>
           </div>
         </div>
+        {stripePaymentOpen && stripeInvoice && (
+  <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4">
+    <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+      <div className="flex items-center justify-between border-b px-5 py-4">
+        <div>
+          <h3 className="text-lg font-bold text-gray-900">
+            Paiement par carte
+          </h3>
+
+          <p className="text-sm text-gray-500">
+            {stripeInvoice.full_name}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            setStripePaymentOpen(false);
+            setStripeInvoice(null);
+            setStripeUser(null);
+          }}
+          className="text-2xl leading-none text-gray-500 hover:text-gray-800"
+        >
+          ×
+        </button>
+      </div>
+
+      <div className="p-5">
+        <div className="mb-4 rounded-lg bg-gray-50 p-3">
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600">
+              Total facture
+            </span>
+
+            <strong>
+              {formatCurrencyUSD(
+                Number(stripeInvoice.total || 0)
+              )}
+            </strong>
+          </div>
+
+          <div className="mt-1 flex justify-between text-sm">
+            <span className="text-gray-600">
+              Déjà payé
+            </span>
+
+            <strong>
+              {formatCurrencyUSD(
+                Number(stripeInvoice.paid_total || 0)
+              )}
+            </strong>
+          </div>
+
+          <div className="mt-2 flex justify-between border-t pt-2">
+            <span className="font-semibold">
+              À payer
+            </span>
+
+            <strong className="text-lg">
+              {formatCurrencyUSD(
+                Number(stripeInvoice.remaining || 0)
+              )}
+            </strong>
+          </div>
+        </div>
+
+        <PaymentPage
+          invoiceId={stripeInvoice.id}
+          user={stripeUser}
+          invoiceType="school"
+        />
+      </div>
+    </div>
+  </div>
+)}
       </div>
     );
   }

@@ -1,4 +1,5 @@
-// src/hooks/useStripePayment.js
+// src/hooks/useStripePayment.jsx
+
 import { useState } from "react";
 import { loadStripe } from "@stripe/stripe-js";
 import {
@@ -8,133 +9,241 @@ import {
   CardElement,
 } from "@stripe/react-stripe-js";
 
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY);
+const stripePromise = loadStripe(
+  import.meta.env.VITE_STRIPE_PUBLIC_KEY
+);
 
-/**
- * useStripePayment
- * Hook to handle payment creation + card confirmation from any React component.
- */
+const PAYMENT_DESCRIPTIONS = {
+  school: "A'QUA D'OR School Invoice Payment",
+  club_membership: "A'QUA D'OR Club Membership Payment",
+  club_booking: "A'QUA D'OR Club Booking Payment",
+  spa: "A'QUA D'OR Spa Payment",
+  boutique: "A'QUA D'OR Boutique Payment",
+};
+
 export function useStripePayment() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
 
-  /**
-   * Starts a Stripe payment flow for the given invoice.
-   * 
-   * @param {object} opts
-   * @param {string} opts.invoiceId - Invoice UUID
-   * @param {string} opts.userId - User UUID
-   * @param {string} opts.email - User email
-   * @param {string} opts.origin - "school" | "club"
-   * @param {function} opts.onSuccess - Callback when payment succeeds
-   */
-  const startPayment = async ({ invoiceId, userId, email, origin, onSuccess }) => {
+  const startPayment = async ({
+    invoiceId,
+    userId,
+    email,
+    invoiceType = "school",
+  }) => {
     setLoading(true);
     setError(null);
     setSuccess(false);
 
     try {
-      // 1️⃣ Call backend to create PaymentIntent
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_FUNCTIONS_URL}/create-payment-intent`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+          },
           body: JSON.stringify({
             invoice_id: invoiceId,
-            user_id: userId,
-            email,
+            invoice_type: invoiceType,
+            user_id: userId || null,
+            email: email || null,
             description:
-              origin === "club"
-                ? "A'QUA D'OR Club Booking Payment"
-                : "A'QUA D'OR School Invoice Payment",
+              PAYMENT_DESCRIPTIONS[invoiceType] ||
+              "A'QUA D'OR Payment",
           }),
         }
       );
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Failed to create payment intent");
 
-      // Return the client_secret for Stripe Elements
-      return data.client_secret;
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+            "Failed to create payment intent"
+        );
+      }
+
+      setLoading(false);
+
+      return {
+        clientSecret: data.client_secret,
+        paymentIntentId: data.payment_intent_id,
+        amount: data.amount,
+        invoiceType: data.invoice_type,
+      };
     } catch (err) {
+      console.error(
+        "Error creating PaymentIntent:",
+        err
+      );
+
       setError(err.message);
       setLoading(false);
-      console.error("❌ Error creating payment intent:", err);
+
       return null;
     }
   };
 
-  return { startPayment, loading, error, success, setSuccess };
+  return {
+    startPayment,
+    loading,
+    error,
+    success,
+    setSuccess,
+  };
 }
 
-/**
- * Internal reusable Stripe Card Form component.
- * Use this if you want to embed card UI directly.
- */
-export function StripeCardForm({ clientSecret, email, onSuccess }) {
+export function StripeCardForm({
+  clientSecret,
+  email,
+  onSuccess,
+}) {
   const stripe = useStripe();
   const elements = useElements();
-  const [processing, setProcessing] = useState(false);
-  const [error, setError] = useState(null);
+
+  const [processing, setProcessing] =
+    useState(false);
+
+  const [error, setError] =
+    useState(null);
 
   const handleConfirm = async (e) => {
     e.preventDefault();
-    if (!stripe || !elements) return;
-    setProcessing(true);
-    setError(null);
 
-    const card = elements.getElement(CardElement);
-    const { error: stripeError, paymentIntent } =
-      await stripe.confirmCardPayment(clientSecret, {
-        payment_method: {
-          card,
-          billing_details: { email },
-        },
-      });
-
-    if (stripeError) {
-      setError(stripeError.message);
-      setProcessing(false);
+    if (
+      !stripe ||
+      !elements ||
+      !clientSecret
+    ) {
       return;
     }
 
-    console.log("✅ Payment succeeded:", paymentIntent.id);
-    setProcessing(false);
-    if (onSuccess) onSuccess(paymentIntent);
+    setProcessing(true);
+    setError(null);
+
+    try {
+      const card =
+        elements.getElement(CardElement);
+
+      if (!card) {
+        throw new Error(
+          "Card form is not available."
+        );
+      }
+
+      const {
+        error: stripeError,
+        paymentIntent,
+      } =
+        await stripe.confirmCardPayment(
+          clientSecret,
+          {
+            payment_method: {
+              card,
+              billing_details: {
+                email:
+                  email || undefined,
+              },
+            },
+          }
+        );
+
+      if (stripeError) {
+        throw stripeError;
+      }
+
+      if (
+        paymentIntent?.status !==
+        "succeeded"
+      ) {
+        throw new Error(
+          `Unexpected payment status: ${paymentIntent?.status}`
+        );
+      }
+
+      console.log(
+        "Payment confirmed by Stripe:",
+        paymentIntent.id
+      );
+
+      setProcessing(false);
+
+      if (onSuccess) {
+        onSuccess(paymentIntent);
+      }
+    } catch (err) {
+      console.error(
+        "Stripe confirmation error:",
+        err
+      );
+
+      setError(
+        err.message ||
+          "Payment could not be completed."
+      );
+
+      setProcessing(false);
+    }
   };
 
   return (
-    <form onSubmit={handleConfirm} className="space-y-3 bg-white p-4 rounded-xl shadow">
+    <form
+      onSubmit={handleConfirm}
+      className="space-y-4"
+    >
       <CardElement
         options={{
           hidePostalCode: true,
           style: {
-            base: { fontSize: "16px", color: "#32325d" },
-            invalid: { color: "#e53e3e" },
+            base: {
+              fontSize: "16px",
+              color: "#32325d",
+              "::placeholder": {
+                color: "#a0aec0",
+              },
+            },
+            invalid: {
+              color: "#e53e3e",
+            },
           },
         }}
       />
-      {error && <p className="text-red-600 text-sm">{error}</p>}
+
+      {error && (
+        <p className="text-red-600 text-sm">
+          {error}
+        </p>
+      )}
+
       <button
         type="submit"
-        disabled={!stripe || processing}
+        disabled={
+          !stripe ||
+          processing ||
+          !clientSecret
+        }
         className={`w-full py-2 rounded-lg font-semibold transition ${
           processing
             ? "bg-gray-400 cursor-not-allowed"
             : "bg-blue-600 hover:bg-blue-700 text-white"
         }`}
       >
-        {processing ? "Traitement..." : "Confirmer le paiement"}
+        {processing
+          ? "Traitement..."
+          : "Confirmer le paiement"}
       </button>
     </form>
   );
 }
 
-/**
- * Wraps Stripe Elements Provider for convenience.
- */
-export function StripeElementsWrapper({ children }) {
-  return <Elements stripe={stripePromise}>{children}</Elements>;
+export function StripeElementsWrapper({
+  children,
+}) {
+  return (
+    <Elements stripe={stripePromise}>
+      {children}
+    </Elements>
+  );
 }
