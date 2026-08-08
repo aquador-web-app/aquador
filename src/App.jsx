@@ -14,7 +14,7 @@ import ClubGuestDashboard from "./pages/Club/ClubGuestDashboard";
 import ClubQRScanner from "./pages/Club/ClubQRScanner";
 import ClubSignup from "./pages/Club/ClubSignup";
 import AdminClubMembership from "./pages/admin/AdminClubMembership";
-// import MassageLanding from "./pages/MassageLanding";
+import MassageLanding from "./pages/MassageLanding";
 
 
 
@@ -52,7 +52,7 @@ import UserClubDashboard from "./pages/Club/UserClubDashboard";
 import MemberProfile from "./pages/Club/MemberProfile";
 
 // Massage
-// import SpaReservationsAccess from "./pages/Spa/SpaReservationsAccess";
+import SpaReservationsAccess from "./pages/Spa/SpaReservationsAccess";
 
 
 // Auth
@@ -164,13 +164,12 @@ useEffect(() => {
       <Route path="/club/signup" element={<ClubSignup />} />
       <Route path="/club" element={<ClubLanding />} />
     
- {/* TEMPORARILY DISABLED — Massage/Spa not deployed yet
 <Route path="/massage" element={<MassageLanding />} />
 <Route
   path="/massage/mes-reservations"
   element={<SpaReservationsAccess />}
 />
-*/}
+
       
 
       {/* AUTH */}

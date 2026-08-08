@@ -59,15 +59,15 @@
   import AdminAchievements from "./AdminAchievements";
   import AdminCardImpressions from "./AdminCardImpressions";
   import AdminEventPresence from "./AdminEventPresence";
-  // import AdminSpa from "./AdminSpa";
-  // import AdminSpaInvoices from "./Spa/AdminSpaInvoices";
-  // import AdminSpaClients from "./Spa/AdminSpaClients";
-  // import AdminSpaServices from "./Spa/AdminSpaServices";
-  // import AdminSpaRooms from "./Spa/AdminSpaRooms";
-  // import AdminSpaReports from "./Spa/AdminSpaReports";
-  // import AdminSpaInvoicesPayments from "./Spa/AdminSpaInvoicesPayments";
-  // import AdminSpaInvoiceTemplates from "./Spa/AdminSpaInvoiceTemplates";
-  // import AdminSpaReservations from "./Spa/AdminSpaReservations";
+  import AdminSpa from "./AdminSpa";
+  import AdminSpaInvoices from "./Spa/AdminSpaInvoices";
+  import AdminSpaClients from "./Spa/AdminSpaClients";
+  import AdminSpaServices from "./Spa/AdminSpaServices";
+  import AdminSpaRooms from "./Spa/AdminSpaRooms";
+  import AdminSpaReports from "./Spa/AdminSpaReports";
+  import AdminSpaInvoicesPayments from "./Spa/AdminSpaInvoicesPayments";
+  import AdminSpaInvoiceTemplates from "./Spa/AdminSpaInvoiceTemplates";
+  import AdminSpaReservations from "./Spa/AdminSpaReservations";
 
 
   function SidebarBtn({ id, icon, label, activeTab, setActiveTab, closeSidebar }) {

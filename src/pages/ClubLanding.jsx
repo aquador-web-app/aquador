@@ -255,9 +255,10 @@ const [overtimePricePer30, setOvertimePricePer30] = useState(0);
       <div
         className="relative w-full min-h-[80svh] pt-[96px] pb-16 flex items-center justify-center text-center px-4"
         style={{
-          backgroundImage: "url('/bgd.jpg')",
+          backgroundImage:
+    "url('https://jrwsxeiueezuiueglfpv.supabase.co/storage/v1/object/public/assets/club%20bgd.jpeg')",
           backgroundSize: "cover",
-          backgroundPosition: "center",
+          backgroundPosition: "center 68%",
         }}
       >
         <div className="absolute inset-0 bg-black/50"></div>
@@ -278,12 +279,21 @@ const [overtimePricePer30, setOvertimePricePer30] = useState(0);
             rencontres.
           </p>
 
-          <Link
-            to="/club/signup"
-            className="inline-block w-full sm:w-auto bg-aquaBlue text-white px-8 py-3 rounded-xl text-base sm:text-lg font-semibold hover:bg-orange-600 shadow-lg transition"
-          >
-            Souscrire à un plan de membership
-          </Link>
+          <div className="mt-5 flex flex-col sm:flex-row justify-center gap-4">
+            <Link
+              to="/club/signup"
+              className="bg-aquaBlue text-white px-8 py-3 rounded-xl text-lg font-semibold hover:bg-orange-600 shadow-lg transition"
+            >
+              Souscrire à un plan de membership
+            </Link>
+
+            <Link
+              to="/massage"
+              className="bg-white/90 text-aquaBlue border border-white px-8 py-3 rounded-xl text-lg font-semibold hover:bg-white shadow-lg transition"
+            >
+              💆 Prendre un rendez-vous massage
+            </Link>
+          </div>
         </div>
       </div>
 
