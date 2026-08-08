@@ -737,18 +737,18 @@ metadata.stripe_charge_cents =
     const createParams: Stripe.PaymentIntentCreateParams = {
   amount: stripeChargeCents,
 
-      currency: "usd",
+  currency: "usd",
 
-      description:
-        description ||
-        defaultDescription,
+  description:
+    description ||
+    defaultDescription,
 
-      metadata,
+  metadata,
 
-      automatic_payment_methods: {
-        enabled: true,
-      },
-    };
+  payment_method_types: [
+  "card",
+],
+};
 
     if (customerEmail) {
       createParams.receipt_email =

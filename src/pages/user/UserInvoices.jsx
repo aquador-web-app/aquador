@@ -112,12 +112,6 @@ if (!profile) {
 
     const ownerOf = (uid) => allProfiles.find((p) => p.id === uid)?.full_name || "Inconnu";
 
-    const totalAmount = (selectedInvoice || [])
-      .map((id) => {
-        const inv = unpaidInvoices.find((i) => i.id === id);
-        return inv ? sumRemaining(inv) : 0;
-        })
-      .reduce((a, b) => a + b, 0);
 
     const formatInvoiceLabel = (inv) =>
       `${ownerOf(inv.user_id)} — ${inv.invoice_no} (${formatCurrencyUSD(sumRemaining(inv))} restant)`;
@@ -381,10 +375,15 @@ localStorage.removeItem("payment_proof_url");
           <select
             value={selectedMethod || ""}
             onChange={(e) => {
-              const method = e.target.value || null;
-              setSelectedMethod(method);
-              if (method === "card") setShowCardModal(true);
-            }}
+  const method = e.target.value || null;
+
+  setSelectedMethod(method);
+
+  if (method === "card") {
+    // Card payments use one invoice at a time.
+    setSelectedInvoice([]);
+  }
+}}
             className="w-72 bg-white text-gray-700 border border-gray-300 rounded-lg px-4 py-2 text-sm font-medium shadow focus:ring-4 focus:ring-blue-200 transition"
           >
             <option value="">— Choisissez un mode de paiement —</option>
@@ -606,12 +605,16 @@ export default function UserInvoices({ userId, initialTab = "factures" }) {
 );
 
 
-    const totalAmount = (selectedInvoice || [])
-      .map((id) => {
-        const inv = unpaidInvoices.find((i) => i.id === id);
-        return inv ? sumRemaining(inv) : 0;
-      })
-      .reduce((a, b) => a + b, 0);
+    const selectedCardInvoice =
+  unpaidInvoices.find(
+    (inv) =>
+      inv.id === selectedInvoice?.[0]
+  ) || null;
+
+const totalAmount =
+  selectedCardInvoice
+    ? sumRemaining(selectedCardInvoice)
+    : 0;
 
     return (
       <div className="py-8 text-center text-gray-700">
@@ -626,7 +629,9 @@ export default function UserInvoices({ userId, initialTab = "factures" }) {
         </button>
 
         <h3 className="text-2xl font-bold mb-4 text-gray-800">Paiement par carte 💳</h3>
-        <p className="text-sm text-gray-500 mb-8">Cochez une ou plusieurs factures à régler :</p>
+        <p className="text-sm text-gray-500 mb-8">
+  Sélectionnez la facture que vous souhaitez régler :
+</p>
 
         <div className="flex justify-center mb-6">
           <div
@@ -651,17 +656,16 @@ export default function UserInvoices({ userId, initialTab = "factures" }) {
                   >
                     <div className="flex items-center gap-3">
                       <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => {
-                          if (isSelected) {
-                            setSelectedInvoice(selectedInvoice.filter((id) => id !== inv.id));
-                          } else {
-                            setSelectedInvoice([...(selectedInvoice || []), inv.id]);
-                          }
-                        }}
-                        className="w-5 h-5 accent-blue-600 rounded"
-                      />
+  type="radio"
+  name="stripe_invoice"
+  checked={
+    selectedInvoice?.[0] === inv.id
+  }
+  onChange={() => {
+    setSelectedInvoice([inv.id]);
+  }}
+  className="w-5 h-5 accent-blue-600"
+/>
                       <span className="font-medium text-gray-700">
                         {owner} — {inv.invoice_no}
                       </span>
@@ -683,20 +687,21 @@ export default function UserInvoices({ userId, initialTab = "factures" }) {
           </p>
         )}
 
-        {selectedInvoice?.length > 0 ? (
-          <div className="max-w-lg mx-auto mt-6 bg-gray-50 border border-gray-200 rounded-2xl shadow-sm p-6">
-            <PaymentPage
-              invoiceIds={selectedInvoice}
-              user={profile}
-              origin="ecole"
-              total={totalAmount}
-            />
-          </div>
-        ) : (
-          <p className="text-sm text-gray-500 mt-8">
-            Veuillez sélectionner au moins une facture pour continuer.
-          </p>
-        )}
+        {selectedCardInvoice ? (
+  <button
+    type="button"
+    onClick={() =>
+      setShowCardModal(true)
+    }
+    className="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold shadow"
+  >
+    Continuer vers le paiement 💳
+  </button>
+) : (
+  <p className="text-sm text-gray-500 mt-8">
+    Veuillez sélectionner une facture pour continuer.
+  </p>
+)}
       </div>
     );
   };
@@ -1104,52 +1109,64 @@ export default function UserInvoices({ userId, initialTab = "factures" }) {
       </div>
       
 
-      {/* Floating Stripe Modal (unchanged) */}
-      {showCardModal && (
-        <div className="fixed inset-0 flex items-center justify-center z-[9999]">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-md"></div>
-          <div className="relative bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg">
-            <button
-              onClick={() => {
-                setShowCardModal(false);
-                setSelectedMethod(null);
-              }}
-              className="absolute top-3 right-3 text-gray-400 hover:text-gray-600 text-xl"
-            >
-              ✕
-            </button>
+      {/* Floating Stripe Modal */}
+{showCardModal && selectedInvoice?.[0] && (
+  <div className="fixed inset-0 z-[9999] overflow-y-auto">
 
-            <h3 className="text-2xl font-bold mb-4 text-gray-800 text-center">Paiement par carte 💳</h3>
-            <p className="text-center text-gray-500 mb-4">
-              Montant total :{" "}
-              <span className="text-blue-700 font-semibold text-xl">
-                {formatCurrencyUSD(
-                  (selectedInvoice || [])
-                    .map((id) => {
-                      const inv = invoices.find((i) => i.id === id);
-                      return inv ? sumRemaining(inv) : 0;
-                    })
-                    .reduce((a, b) => a + b, 0)
-                )}
-              </span>
-            </p>
+    {/* Dark background */}
+    <div
+      className="fixed inset-0 bg-black/50 backdrop-blur-md"
+      onClick={() => {
+        setShowCardModal(false);
+        setSelectedMethod(null);
+      }}
+    />
 
-            <div className="border-t border-gray-200 my-4"></div>
+    {/* Scrollable modal positioning */}
+    <div className="relative min-h-full flex items-start sm:items-center justify-center p-3 sm:p-6">
 
-            <PaymentPage
-              invoiceIds={selectedInvoice}
-              user={profile}
-              origin="ecole"
-              total={(selectedInvoice || [])
-                .map((id) => {
-                  const inv = invoices.find((i) => i.id === id);
-                  return inv ? sumRemaining(inv) : 0;
-                })
-                .reduce((a, b) => a + b, 0)}
-            />
-          </div>
-        </div>
-      )}
+      {/* Modal */}
+      <div
+        className="
+          relative
+          bg-white
+          rounded-2xl
+          shadow-2xl
+          w-full
+          max-w-lg
+          max-h-[90vh]
+          overflow-y-auto
+          p-4
+          sm:p-6
+          my-4
+        "
+      >
+        <button
+          type="button"
+          onClick={() => {
+            setShowCardModal(false);
+            setSelectedMethod(null);
+          }}
+          className="absolute top-3 right-3 z-20 text-gray-400 hover:text-gray-700 text-xl"
+        >
+          ✕
+        </button>
+
+        <h3 className="text-xl sm:text-2xl font-bold mb-4 pr-8 text-gray-800 text-center">
+          Paiement par carte 💳
+        </h3>
+
+        <div className="border-t border-gray-200 my-4"></div>
+
+        <PaymentPage
+          invoiceId={selectedInvoice[0]}
+          user={profile}
+          invoiceType="school"
+        />
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 }
