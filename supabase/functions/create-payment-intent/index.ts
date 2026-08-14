@@ -114,6 +114,7 @@ serve(async (req: Request) => {
       "club_booking",
       "spa",
       "boutique",
+      "event_visitor",
     ];
 
     if (!allowedTypes.includes(invoice_type)) {
@@ -409,6 +410,73 @@ serve(async (req: Request) => {
     }
 
     // =========================================================
+// EVENT VISITOR — CLÔTURE
+// =========================================================
+else if (invoice_type === "event_visitor") {
+  tableName = "event_visitor_invoices";
+  paymentTable = "";
+
+  const { data, error } = await supabase
+    .from("event_visitor_invoices")
+    .select(
+      `
+      id,
+      registration_id,
+      invoice_no,
+      event_code,
+      full_name,
+      email,
+      phone,
+      participant_count,
+      total,
+      paid_total,
+      status,
+      currency,
+      stripe_payment_intent_id
+      `
+    )
+    .eq("id", invoice_id)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  if (!data) {
+    return jsonResponse(
+      {
+        error:
+          "Event visitor invoice not found",
+      },
+      404
+    );
+  }
+
+  invoice = data;
+
+  const total =
+    Number(data.total || 0);
+
+  const paid =
+    Number(data.paid_total || 0);
+
+  const balance =
+    Math.max(0, total - paid);
+
+  amountCents =
+    Math.round(balance * 100);
+
+  invoiceNo =
+    data.invoice_no || "";
+
+  customerEmail =
+    data.email ||
+    customerEmail;
+
+  defaultDescription =
+    "A'QUA D'OR Closing Ceremony Visitor Payment";
+}
+  
+
+    // =========================================================
 // CARD PROCESSING FEE
 // Gross-up so A'QUA D'OR receives approximately the
 // original invoice balance after 2.9% + $0.30.
@@ -508,6 +576,12 @@ if (quote_only === true) {
 
 if (
   invoice_type === "school" &&
+  invoice.stripe_payment_intent_id
+) {
+  existingPaymentIntentId =
+    invoice.stripe_payment_intent_id;
+} else if (
+  invoice_type === "event_visitor" &&
   invoice.stripe_payment_intent_id
 ) {
   existingPaymentIntentId =
@@ -716,6 +790,14 @@ charge_amount_cents:
         String(invoice.reservation_id);
     }
 
+    if (
+  invoice_type === "event_visitor" &&
+  invoice.registration_id
+) {
+  metadata.registration_id =
+    String(invoice.registration_id);
+}
+
     // =========================================================
 // CARD PAYMENT AMOUNTS
 // =========================================================
@@ -784,6 +866,26 @@ metadata.stripe_charge_cents =
   if (updateError) {
     throw new Error(
       `Failed storing school PaymentIntent: ${updateError.message}`
+    );
+  }
+}
+
+if (invoice_type === "event_visitor") {
+  const { error: updateError } =
+    await supabase
+      .from("event_visitor_invoices")
+      .update({
+        stripe_payment_intent_id:
+          paymentIntent.id,
+      })
+      .eq(
+        "id",
+        invoice_id
+      );
+
+  if (updateError) {
+    throw new Error(
+      `Failed storing event visitor PaymentIntent: ${updateError.message}`
     );
   }
 }

@@ -83,7 +83,7 @@ async function queueSystemEmail(
       await supabase
         .from("email_queue")
         .insert({
-          to: ALERT_EMAIL,
+          email: ALERT_EMAIL,
           subject,
           body: `<pre>${body}</pre>`,
           status: "pending",
@@ -318,6 +318,7 @@ async function handleSchoolPayment(
         amount,
 
         method: "card",
+        approved: true,
 
         reversed: false,
 
@@ -894,6 +895,439 @@ async function handleBoutiquePayment(
 }
 
 // ============================================================
+// EVENT VISITOR — CLÔTURE
+// event_visitor_invoices → event_visitor_registrations
+// ============================================================
+
+async function handleEventVisitorPayment(
+  intent: Stripe.PaymentIntent,
+  invoiceId: string
+) {
+  const {
+    data: invoice,
+    error: invoiceError,
+  } =
+    await supabase
+      .from("event_visitor_invoices")
+      .select(`
+        id,
+        registration_id,
+        invoice_no,
+        event_code,
+        full_name,
+        email,
+        phone,
+        participant_count,
+        total,
+        paid_total,
+        status,
+        stripe_payment_intent_id
+      `)
+      .eq("id", invoiceId)
+      .maybeSingle();
+
+  if (invoiceError) {
+    throw invoiceError;
+  }
+
+  if (!invoice) {
+    throw new Error(
+      `Event visitor invoice not found: ${invoiceId}`
+    );
+  }
+
+  const {
+    invoiceAmount: amount,
+    processingFee,
+    chargedAmount,
+  } = getStripePaymentAmounts(intent);
+
+  if (amount <= 0) {
+    throw new Error(
+      `Invalid event visitor payment amount for ${intent.id}`
+    );
+  }
+
+  // ----------------------------------------------------------
+  // DUPLICATE PROTECTION
+  //
+// Event visitor payments are also stored in
+// event_visitor_payments.
+// Keep the PaymentIntent on the invoice as a quick reference too.
+  // ----------------------------------------------------------
+
+  if (
+  invoice.stripe_payment_intent_id === intent.id
+) {
+    console.log(
+      `Duplicate event visitor Stripe payment ignored: ${intent.id}`
+    );
+
+    return {
+      duplicate: true,
+    };
+  }
+
+  // ----------------------------------------------------------
+// RECORD CARD PAYMENT IN PAYMENT HISTORY
+// ----------------------------------------------------------
+
+const paymentResult =
+  await insertPaymentOnce({
+    tableName:
+      "event_visitor_payments",
+
+    stripeColumn:
+      "stripe_payment_intent_id",
+
+    paymentIntentId:
+      intent.id,
+
+    payload: {
+      invoice_id:
+        invoice.id,
+
+      registration_id:
+        invoice.registration_id,
+
+      amount,
+
+      method:
+        "card",
+
+      reference:
+        intent.id,
+
+      notes:
+        `Stripe payment — ${intent.id} | Invoice: $${amount.toFixed(
+          2
+        )} | Card fee: $${processingFee.toFixed(
+          2
+        )} | Charged: $${chargedAmount.toFixed(
+          2
+        )}`,
+
+      paid_at:
+        new Date().toISOString(),
+
+      created_by:
+        null,
+
+      stripe_payment_intent_id:
+        intent.id,
+    },
+  });
+
+if (paymentResult.duplicate) {
+  console.log(
+    `Duplicate event visitor card payment ignored: ${intent.id}`
+  );
+
+  return {
+    duplicate: true,
+  };
+}
+
+  const currentPaid =
+    Number(invoice.paid_total || 0);
+
+  const invoiceTotal =
+    Number(invoice.total || 0);
+
+  const newPaidTotal =
+    Math.min(
+      invoiceTotal,
+      currentPaid + amount
+    );
+
+  const newStatus =
+    newPaidTotal >= invoiceTotal
+      ? "paid"
+      : "partial";
+
+  // ----------------------------------------------------------
+  // UPDATE VISITOR INVOICE
+  // Only the base invoice amount is credited.
+  // Processing fee is NOT credited to the invoice.
+  // ----------------------------------------------------------
+
+  const {
+    error: updateInvoiceError,
+  } =
+    await supabase
+      .from("event_visitor_invoices")
+      .update({
+        paid_total: newPaidTotal,
+        status: newStatus,
+        payment_method: "card",
+        payment_reference: intent.id,
+        stripe_payment_intent_id:
+          intent.id,
+        updated_at:
+          new Date().toISOString(),
+      })
+      .eq("id", invoice.id);
+
+  if (updateInvoiceError) {
+    throw updateInvoiceError;
+  }
+
+  // ----------------------------------------------------------
+  // UPDATE REGISTRATION
+  // ----------------------------------------------------------
+
+  if (invoice.registration_id) {
+    const {
+      error: registrationError,
+    } =
+      await supabase
+        .from(
+          "event_visitor_registrations"
+        )
+        .update({
+          amount_paid:
+            newPaidTotal,
+
+          payment_status:
+            newStatus === "paid"
+              ? "paid"
+              : "partial",
+
+          updated_at:
+            new Date().toISOString(),
+        })
+        .eq(
+          "id",
+          invoice.registration_id
+        );
+
+    if (registrationError) {
+      throw registrationError;
+    }
+    // ----------------------------------------------------------
+// GENERATE / REFRESH CLOSURE QR CODE
+// ----------------------------------------------------------
+if (newStatus === "paid") {
+const qrResponse = await fetch(
+  `${supabaseUrl}/functions/v1/generate-qr-codes`,
+  {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${supabaseServiceKey}`,
+    },
+    body: JSON.stringify({
+      registration_id: invoice.registration_id,
+    }),
+  }
+);
+
+if (!qrResponse.ok) {
+  const qrError = await qrResponse.text();
+
+  console.error(
+    "Closure QR generation failed:",
+    qrError
+  );
+}
+
+const {
+  data: registration,
+  error: registrationFetchError,
+} = await supabase
+  .from("event_visitor_registrations")
+  .select(`
+    id,
+    full_name,
+    email,
+    phone,
+    guest_count,
+    amount_due,
+    amount_paid,
+    payment_status,
+    qr_code_url
+  `)
+  .eq("id", invoice.registration_id)
+  .single();
+
+if (registrationFetchError) {
+  throw registrationFetchError;
+}
+
+const {
+  data: participants,
+  error: participantsError,
+} = await supabase
+  .from("event_visitor_participants")
+  .select("full_name, phone")
+  .eq("registration_id", invoice.registration_id)
+  .order("created_at", {
+    ascending: true,
+  });
+
+if (participantsError) {
+  throw participantsError;
+}
+
+if (registration?.email) {
+  const participantNames =
+    (participants || [])
+      .map(
+        (participant) =>
+          `• ${participant.full_name}`
+      )
+      .join("<br>");
+
+  const emailBody = `
+    <p>Bonjour <b>${registration.full_name}</b>,</p>
+
+    <p>
+      Nous confirmons la réception de votre paiement pour la
+      <b>Cérémonie de clôture A'QUA D'OR</b>
+      du samedi 29 août 2026.
+    </p>
+
+    <p>
+      <b>Facture :</b> ${invoice.invoice_no}<br>
+      <b>Nombre de participants :</b> ${registration.guest_count}<br>
+      <b>Montant payé :</b> USD ${Number(newPaidTotal).toFixed(2)}<br>
+      <b>Statut :</b> ${
+        newStatus === "paid"
+          ? "Payé"
+          : "Partiellement payé"
+      }
+    </p>
+
+    <p>
+      <b>Personnes inscrites :</b><br>
+      ${participantNames}
+    </p>
+
+    ${
+      registration.qr_code_url
+        ? `
+          <p>
+            <b>Votre QR code :</b>
+          </p>
+
+          <p>
+            <img
+              src="${registration.qr_code_url}"
+              alt="QR Code A'QUA D'OR"
+              width="220"
+              style="display:block; width:220px; height:auto;"
+            />
+          </p>
+
+          <p>
+            Présentez ce QR code à l'accueil afin de retrouver
+            rapidement votre inscription. Il n'est pas obligatoire.
+          </p>
+        `
+        : ""
+    }
+
+    <br>
+
+    Cordialement,<br><br>
+
+    <table style="width:100%; border:none; margin-top:20px;">
+      <tr>
+        <td style="width:120px; vertical-align:top;">
+          <img
+            src="https://jrwsxeiueezuiueglfpv.supabase.co/storage/v1/object/public/assets/aquador.png"
+            alt="Logo A'QUA D'OR"
+            style="width:100px; height:auto;"
+          />
+        </td>
+
+        <td style="padding-left:20px; vertical-align:top; font-size:14px; line-height:2.1;">
+          <b>David E. ADRIEN</b><br>
+          Directeur<br>
+          Imp Hall, Rue Beauvais, Faustin 1er, Delmas 75<br>
+          Cell: +509 38 91 2429
+        </td>
+      </tr>
+    </table>
+  `;
+
+  const { error: emailError } =
+    await supabase
+      .from("email_queue")
+      .insert({
+        email: registration.email,
+        subject:
+          "Confirmation de paiement – Cérémonie de clôture A'QUA D'OR",
+        body: emailBody,
+        status: "pending",
+        kind: "cloture_payment_confirmation",
+        scheduled_at:
+          new Date().toISOString(),
+        invoice_id: invoice.id,
+        variables: {
+          registration_id:
+            invoice.registration_id,
+          payment_intent_id:
+            intent.id,
+          invoice_no:
+            invoice.invoice_no,
+          participant_count:
+            registration.guest_count,
+          amount_paid:
+            newPaidTotal,
+          payment_status:
+            newStatus,
+          qr_code_url:
+            registration.qr_code_url,
+        },
+      });
+
+  if (emailError) {
+  console.error(
+    "Closure confirmation email queue failed:",
+    emailError
+  );
+}
+}
+  }
+}
+
+  console.log(
+    "Event visitor payment processed",
+    {
+      invoice_id:
+        invoice.id,
+
+      registration_id:
+        invoice.registration_id,
+
+      payment_intent:
+        intent.id,
+
+      invoice_amount:
+        amount,
+
+      processing_fee:
+        processingFee,
+
+      stripe_charged:
+        chargedAmount,
+
+      paid_total:
+        newPaidTotal,
+
+      status:
+        newStatus,
+    }
+  );
+
+  return {
+    duplicate: false,
+  };
+}
+
+
+// ============================================================
 // ROUTER FOR PAYMENT INTENTS
 // ============================================================
 
@@ -981,12 +1415,18 @@ stripe_charge_cents:
       );
 
     case "boutique":
-      return await handleBoutiquePayment(
-        intent,
-        invoiceId
-      );
+  return await handleBoutiquePayment(
+    intent,
+    invoiceId
+  );
 
-    default:
+case "event_visitor":
+  return await handleEventVisitorPayment(
+    intent,
+    invoiceId
+  );
+
+default:
       throw new Error(
         `Unknown invoice_type "${invoiceType}" on PaymentIntent ${intent.id}`
       );

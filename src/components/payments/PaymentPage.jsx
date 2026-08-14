@@ -20,6 +20,7 @@ const TITLES = {
   club_booking: "Paiement — Réservation Club",
   spa: "Paiement — Spa",
   boutique: "Paiement — Boutique",
+  event_visitor: "Paiement — Cérémonie de clôture",
 };
 
 const DESCRIPTIONS = {
@@ -28,6 +29,7 @@ const DESCRIPTIONS = {
   club_booking: "A'QUA D'OR Club Booking Payment",
   spa: "A'QUA D'OR Spa Payment",
   boutique: "A'QUA D'OR Boutique Payment",
+  event_visitor: "A'QUA D'OR Closing Ceremony Visitor Payment",
 };
 
 function money(value) {
@@ -262,6 +264,7 @@ function CheckoutForm({
 export default function PaymentPage({
   invoiceId,
   user,
+  email: paymentEmail = null,
   invoiceType = "school",
 }) {
   const [quote, setQuote] =
@@ -269,6 +272,9 @@ export default function PaymentPage({
 
   const [clientSecret, setClientSecret] =
     useState(null);
+
+  const effectiveEmail =
+  paymentEmail || user?.email || null;
 
   const [loadingPayment, setLoadingPayment] =
     useState(true);
@@ -300,7 +306,7 @@ export default function PaymentPage({
               invoice_id: invoiceId,
               invoice_type: invoiceType,
               user_id: user?.id || null,
-              email: user?.email || null,
+              email: effectiveEmail,
               description:
                 DESCRIPTIONS[invoiceType] ||
                 "A'QUA D'OR Payment",
@@ -340,7 +346,7 @@ export default function PaymentPage({
               invoice_id: invoiceId,
               invoice_type: invoiceType,
               user_id: user?.id || null,
-              email: user?.email || null,
+              email: effectiveEmail,
               description:
                 DESCRIPTIONS[invoiceType] ||
                 "A'QUA D'OR Payment",
@@ -413,7 +419,7 @@ export default function PaymentPage({
     invoiceId,
     invoiceType,
     user?.id,
-    user?.email,
+    effectiveEmail,
   ]);
 
   if (loadingPayment) {
@@ -456,7 +462,7 @@ export default function PaymentPage({
       <CheckoutForm
         invoiceId={invoiceId}
         userId={user?.id}
-        email={user?.email}
+        email={effectiveEmail}
         invoiceType={invoiceType}
         clientSecret={clientSecret}
         quote={quote}

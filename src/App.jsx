@@ -50,6 +50,7 @@ import UserDashboard from "./pages/user/UserDashboard"
 import UserCommissions from "./pages/user/UserCommissions"
 import UserClubDashboard from "./pages/Club/UserClubDashboard";
 import MemberProfile from "./pages/Club/MemberProfile";
+import ClotureVisitorAccess from "./pages/ClotureVisitorAccess";
 
 // Massage
 import SpaReservationsAccess from "./pages/Spa/SpaReservationsAccess";
@@ -168,6 +169,10 @@ useEffect(() => {
 <Route
   path="/massage/mes-reservations"
   element={<SpaReservationsAccess />}
+/>
+<Route
+  path="/ceremonie/ma-participation"
+  element={<ClotureVisitorAccess />}
 />
 
       

@@ -49,6 +49,116 @@ serve(async (req) => {
       ),
     ];
 
+    const requestedRegistrationIds = [
+  ...new Set(
+    []
+      .concat(
+        body?.registration_id
+          ? [String(body.registration_id)]
+          : []
+      )
+      .concat(
+        Array.isArray(body?.registration_ids)
+          ? body.registration_ids.map(String)
+          : []
+      )
+      .filter(Boolean)
+  ),
+];
+
+// 🎟️ Closure event QR
+if (requestedRegistrationIds.length) {
+  const { data: registrations, error: regErr } =
+    await supabaseAdmin
+      .from("event_visitor_registrations")
+      .select("id, full_name, event_code, qr_token, qr_code_url")
+      .in("id", requestedRegistrationIds);
+
+  if (regErr) throw regErr;
+
+  for (const r of registrations || []) {
+    try {
+      let qrToken = r.qr_token;
+
+      // Safety: create token if missing
+      if (!qrToken) {
+        qrToken = crypto.randomUUID();
+
+        const { error: tokenErr } = await supabaseAdmin
+          .from("event_visitor_registrations")
+          .update({ qr_token: qrToken })
+          .eq("id", r.id);
+
+        if (tokenErr) throw tokenErr;
+      }
+
+      const folder = `events/${safeName(
+        r.event_code || "event"
+      )}`;
+
+      const fileName =
+        `aquador_event_qr_${r.id}.png`;
+
+      const path = `${folder}/${fileName}`;
+
+      const qrData =
+        `AQUADOR-CLOTURE:${qrToken}`;
+
+      const qrBuffer = await QRCode.toBuffer(qrData, {
+        width: 400,
+        margin: 2,
+        color: {
+          dark: "#000000",
+          light: "#FFFFFF",
+        },
+      });
+
+      const { error: uploadErr } =
+        await supabaseAdmin.storage
+          .from("QR_Code")
+          .upload(path, qrBuffer, {
+            contentType: "image/png",
+            upsert: true,
+          });
+
+      if (uploadErr) throw uploadErr;
+
+      const {
+        data: { publicUrl },
+      } = supabaseAdmin.storage
+        .from("QR_Code")
+        .getPublicUrl(path);
+
+      const { error: updateErr } =
+        await supabaseAdmin
+          .from("event_visitor_registrations")
+          .update({
+            qr_code_url: publicUrl,
+          })
+          .eq("id", r.id);
+
+      if (updateErr) throw updateErr;
+
+      console.log(
+        `✅ Closure QR saved for ${r.full_name} → ${path}`
+      );
+    } catch (eventErr) {
+      console.error(
+        `❌ Closure QR failed for ${r.full_name}:`,
+        eventErr
+      );
+    }
+  }
+
+  return new Response(
+    "✅ Closure visitor QR code generated.",
+    {
+      status: 200,
+      headers: corsHeaders,
+    }
+  );
+}
+
 
         // 1️⃣ Decide which profile ids to process:
     // - If request sends profile_id / profile_ids → use those (staff)

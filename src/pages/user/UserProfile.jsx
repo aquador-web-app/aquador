@@ -615,6 +615,17 @@ const eventParticipants = [
   })),
 ].filter((participant) => participant.id && participant.is_active);
 
+const presenceIsConfirmed =
+  presenceConfirmations.some(
+    (row) => row.status === "confirmed"
+  );
+
+const presenceIsCancelled =
+  presenceConfirmations.length > 0 &&
+  presenceConfirmations.every(
+    (row) => row.status === "cancelled"
+  );
+
 
   return (
     <div className="p-4 sm:p-6 space-y-6">
@@ -750,14 +761,17 @@ const eventParticipants = [
     disabled={
       presenceLoading ||
       presenceSaving ||
+      presenceIsConfirmed ||
       eventParticipants.length === 0 ||
       selectedParticipants.length === 0
     }
     className="w-full sm:w-auto px-6 py-3 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-semibold shadow disabled:opacity-60 disabled:cursor-not-allowed"
   >
     {presenceSaving
-      ? "Enregistrement…"
-      : "Je confirme ma présence"}
+  ? "Enregistrement…"
+  : presenceIsConfirmed
+  ? "Présence confirmée ✓"
+  : "Je confirme ma présence"}
   </button>
 
   <button
@@ -766,11 +780,14 @@ const eventParticipants = [
   disabled={
     presenceLoading ||
     presenceSaving ||
+    presenceIsCancelled ||
     eventParticipants.length === 0
   }
   className="w-full sm:w-auto px-6 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold shadow disabled:opacity-60 disabled:cursor-not-allowed"
 >
-  Je ne serai pas présent
+  {presenceIsCancelled
+  ? "Absence enregistrée ✓"
+  : "Je ne serai pas présent"}
 </button>
 {showAbsenceReason && (
   <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center px-4">

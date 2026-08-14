@@ -68,6 +68,7 @@
   import AdminSpaInvoicesPayments from "./Spa/AdminSpaInvoicesPayments";
   import AdminSpaInvoiceTemplates from "./Spa/AdminSpaInvoiceTemplates";
   import AdminSpaReservations from "./Spa/AdminSpaReservations";
+  import AdminCloture from "./AdminCloture";
 
 
   function SidebarBtn({ id, icon, label, activeTab, setActiveTab, closeSidebar }) {
@@ -1821,6 +1822,8 @@
           return <AdminSpaInvoicesPayments />;
         case "spa-invoices-templates":
           return <AdminSpaInvoiceTemplates />;
+        case "cloture":
+          return <AdminCloture />;
         default:
           return <h2 className="text-xl">Sélectionnez une section</h2>
       }
@@ -2624,6 +2627,21 @@
     </>
   )}
 
+  {/* ========================= */}
+  {/*         CLÔTURE           */}
+  {/* Admin + Assistant         */}
+  {/* ========================= */}
+
+  <SidebarBtn
+    id="cloture"
+    icon={<FaUserFriends />}
+    label="Clôture"
+    activeTab={activeTab}
+    setActiveTab={setActiveTab}
+    closeSidebar={() =>
+      setSidebarOpen(false)
+    }
+  />
 
   </nav>
 
