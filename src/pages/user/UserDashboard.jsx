@@ -53,11 +53,21 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from "recharts"
 import { FaChalkboardUser, FaDollarSign, FaLaptopFile } from "react-icons/fa6";
+import PhoneInput, {
+  isValidPhoneNumber,
+} from "react-phone-number-input";
+
+import { detectCountryISO } from "../../lib/detectCountry";
+import PaymentPage from "../../components/payments/PaymentPage";
 
 
 
 
 export default function UserDashboard() {
+  const EVENT_CODE = "cloture-2026-08-29";
+const EVENT_DATE = "2026-08-29";
+const EVENT_NAME =
+  "Cérémonie de clôture et remise de certificats";
   const { user } = useAuth()
   const [hasUnpaid, setHasUnpaid] = useState(false)
   const navigate = useNavigate()
@@ -70,6 +80,133 @@ export default function UserDashboard() {
   const [selectedAttendanceProfileId, setSelectedAttendanceProfileId] = useState(null);
   const [upcomingClasses, setUpcomingClasses] = useState([]);
   const [upcomingLoading, setUpcomingLoading] = useState(false);
+  const [presenceLoading, setPresenceLoading] =
+  useState(false);
+
+const [presenceSaving, setPresenceSaving] =
+  useState(false);
+
+const [presenceConfirmations, setPresenceConfirmations] =
+  useState([]);
+
+const [showAbsenceReason, setShowAbsenceReason] =
+  useState(false);
+
+const [absenceReason, setAbsenceReason] =
+  useState("");
+
+const [selectedParticipants, setSelectedParticipants] =
+  useState([]);
+
+  const [guestCountry, setGuestCountry] =
+  useState("HT");
+
+const [memberGuestData, setMemberGuestData] =
+  useState(null);
+
+const [memberGuestLoading, setMemberGuestLoading] =
+  useState(false);
+
+const [showFreeGuestModal, setShowFreeGuestModal] =
+  useState(false);
+
+const [selectedFreeStudent, setSelectedFreeStudent] =
+  useState(null);
+
+const [freeGuestName, setFreeGuestName] =
+  useState("");
+
+const [freeGuestPhone, setFreeGuestPhone] =
+  useState("");
+
+const [freeGuestSaving, setFreeGuestSaving] =
+  useState(false);
+
+  // =========================================================
+// CLOTURE — PAID EXTRA GUESTS
+// =========================================================
+
+const [showExtraGuestModal, setShowExtraGuestModal] =
+  useState(false);
+
+const [extraPeopleCount, setExtraPeopleCount] =
+  useState(1);
+
+const [extraParticipants, setExtraParticipants] =
+  useState([
+    {
+      full_name: "",
+      phone: "",
+    },
+  ]);
+
+const [extraGuestSaving, setExtraGuestSaving] =
+  useState(false);
+
+const [extraGuestResult, setExtraGuestResult] =
+  useState(null);
+
+const [extraPaymentMethod, setExtraPaymentMethod] =
+  useState(null);
+
+const [extraShowCardPayment, setExtraShowCardPayment] =
+  useState(false);
+
+const [extraManualAmount, setExtraManualAmount] =
+  useState("");
+
+const [extraManualProofUrl, setExtraManualProofUrl] =
+  useState(null);
+
+const [extraManualUploading, setExtraManualUploading] =
+  useState(false);
+
+const [extraManualSubmitting, setExtraManualSubmitting] =
+  useState(false);
+
+const [extraManualMessage, setExtraManualMessage] =
+  useState("");
+
+const extraAmountDue =
+  Number(extraPeopleCount || 0) * 10;
+
+const existingExtraGuests =
+  (
+    memberGuestData?.participants ||
+    []
+  ).filter(
+    (participant) =>
+      participant?.is_free !== true
+  );
+
+const existingExtraTotal =
+  existingExtraGuests.length * 10;
+
+const existingExtraPaidTotal =
+  Math.min(
+    existingExtraTotal,
+    Number(
+      memberGuestData?.paid_total || 0
+    )
+  );
+
+const existingExtraBalance =
+  Math.max(
+    0,
+    existingExtraTotal -
+      existingExtraPaidTotal
+  );
+
+  useEffect(() => {
+  try {
+    setGuestCountry(
+      detectCountryISO() || "HT"
+    );
+  } catch {
+    setGuestCountry("HT");
+  }
+}, []);
+
   // 🎫 Card receipt confirmation (Access card)
 const [cardReceipt, setCardReceipt] = useState({
   loading: false,
@@ -447,15 +584,15 @@ useEffect(() => {
   (async () => {
     // parent
     const { data: parent } = await supabase
-      .from("profiles_with_unpaid")
-      .select("id, full_name, signup_type")
+  .from("profiles_with_unpaid")
+  .select("id, full_name, signup_type, is_active")
       .eq("id", user.id)
       .maybeSingle();
 
     // children
     const { data: kids } = await supabase
-      .from("profiles_with_unpaid")
-      .select("id, full_name, parent_id")
+  .from("profiles_with_unpaid")
+  .select("id, full_name, parent_id, is_active")
       .eq("parent_id", user.id);
 
     const options =
@@ -474,6 +611,1044 @@ useEffect(() => {
     setSelectedAttendanceProfileId((prev) => prev || defaultId);
   })();
 }, [user?.id]);
+
+const eventParticipants =
+  (attendanceProfiles || []).filter(
+    (participant) =>
+      participant?.id &&
+      participant?.is_active !== false
+  );
+
+const presenceIsConfirmed =
+  presenceConfirmations.some(
+    (row) =>
+      row.status === "confirmed"
+  );
+
+const presenceIsCancelled =
+  presenceConfirmations.length > 0 &&
+  presenceConfirmations.every(
+    (row) =>
+      row.status === "cancelled"
+  );
+
+function togglePresenceParticipant(
+  participantId
+) {
+  const id = String(participantId);
+
+  setSelectedParticipants((current) =>
+    current.includes(id)
+      ? current.filter(
+          (currentId) =>
+            currentId !== id
+        )
+      : [...current, id]
+  );
+}
+
+useEffect(() => {
+  if (!user?.id) return;
+
+  const participantIds =
+    eventParticipants
+      .map((participant) =>
+        participant.id
+      )
+      .filter(Boolean);
+
+  if (!participantIds.length) {
+    setPresenceConfirmations([]);
+    setSelectedParticipants([]);
+    return;
+  }
+
+  const fetchPresenceConfirmations =
+    async () => {
+      setPresenceLoading(true);
+
+      try {
+        const { data, error } =
+          await supabase
+            .from(
+              "event_presence_confirmations"
+            )
+            .select(`
+              id,
+              event_code,
+              event_name,
+              event_date,
+              participant_profile_id,
+              confirmed_by_profile_id,
+              status,
+              confirmed_at,
+              cancelled_at,
+              cancellation_reason
+            `)
+            .eq(
+              "event_code",
+              EVENT_CODE
+            )
+            .in(
+              "participant_profile_id",
+              participantIds
+            );
+
+        if (error) throw error;
+
+        const rows = data || [];
+
+        setPresenceConfirmations(
+          rows
+        );
+
+        setSelectedParticipants(
+          rows
+            .filter(
+              (row) =>
+                row.status ===
+                "confirmed"
+            )
+            .map((row) =>
+              String(
+                row.participant_profile_id
+              )
+            )
+        );
+      } catch (error) {
+        console.error(
+          "Presence confirmations loading error:",
+          error
+        );
+
+        showAlert?.(
+          error?.message ||
+            "Impossible de charger les confirmations de présence."
+        );
+      } finally {
+        setPresenceLoading(false);
+      }
+    };
+
+  fetchPresenceConfirmations();
+}, [user?.id, attendanceProfiles]);
+
+async function handleConfirmEventPresence() {
+  if (!user?.id) return;
+
+  if (!selectedParticipants.length) {
+    showAlert?.(
+      "Veuillez sélectionner au moins un participant."
+    );
+    return;
+  }
+
+  try {
+    setPresenceSaving(true);
+
+    const participantIds =
+      eventParticipants.map(
+        (participant) =>
+          String(participant.id)
+      );
+
+    const selectedIds =
+      selectedParticipants.map(String);
+
+    const now =
+      new Date().toISOString();
+
+    const rowsToConfirm =
+      selectedIds.map(
+        (participantId) => ({
+          event_code:
+            EVENT_CODE,
+
+          event_name:
+            EVENT_NAME,
+
+          event_date:
+            EVENT_DATE,
+
+          participant_profile_id:
+            participantId,
+
+          confirmed_by_profile_id:
+            user.id,
+
+          status:
+            "confirmed",
+
+          confirmed_at:
+            now,
+
+          cancelled_at:
+            null,
+
+          cancellation_reason:
+            null,
+        })
+      );
+
+    const {
+      error: confirmError,
+    } = await supabase
+      .from(
+        "event_presence_confirmations"
+      )
+      .upsert(
+        rowsToConfirm,
+        {
+          onConflict:
+            "event_code,participant_profile_id",
+        }
+      );
+
+    if (confirmError) {
+      throw confirmError;
+    }
+
+    const unselectedIds =
+      participantIds.filter(
+        (participantId) =>
+          !selectedIds.includes(
+            participantId
+          )
+      );
+
+    if (unselectedIds.length) {
+      const {
+        error: cancelError,
+      } = await supabase
+        .from(
+          "event_presence_confirmations"
+        )
+        .update({
+          status:
+            "cancelled",
+
+          cancelled_at:
+            now,
+        })
+        .eq(
+          "event_code",
+          EVENT_CODE
+        )
+        .eq(
+          "confirmed_by_profile_id",
+          user.id
+        )
+        .in(
+          "participant_profile_id",
+          unselectedIds
+        );
+
+      if (cancelError) {
+        throw cancelError;
+      }
+    }
+
+    const {
+      data: refreshed,
+      error: refreshError,
+    } = await supabase
+      .from(
+        "event_presence_confirmations"
+      )
+      .select("*")
+      .eq(
+        "event_code",
+        EVENT_CODE
+      )
+      .in(
+        "participant_profile_id",
+        participantIds
+      );
+
+    if (refreshError) {
+      throw refreshError;
+    }
+
+    setPresenceConfirmations(
+      refreshed || []
+    );
+
+    setSelectedParticipants(
+      (refreshed || [])
+        .filter(
+          (row) =>
+            row.status ===
+            "confirmed"
+        )
+        .map((row) =>
+          String(
+            row.participant_profile_id
+          )
+        )
+    );
+
+    showAlert?.(
+      "Votre présence pour le 29 août 2026 a été confirmée."
+    );
+  } catch (error) {
+    console.error(
+      "Presence confirmation error:",
+      error
+    );
+
+    showAlert?.(
+      error?.message ||
+        "Une erreur est survenue lors de la confirmation."
+    );
+  } finally {
+    setPresenceSaving(false);
+  }
+}
+
+async function handleDeclineEventPresence() {
+  if (!user?.id) return;
+
+  const reason =
+    absenceReason.trim();
+
+  if (!reason) {
+    showAlert?.(
+      "Veuillez indiquer la raison de votre absence."
+    );
+    return;
+  }
+
+  if (!eventParticipants.length) {
+    showAlert?.(
+      "Aucun participant n’est disponible sur ce compte."
+    );
+    return;
+  }
+
+  try {
+    setPresenceSaving(true);
+
+    const now =
+      new Date().toISOString();
+
+    const rowsToCancel =
+      eventParticipants.map(
+        (participant) => ({
+          event_code:
+            EVENT_CODE,
+
+          event_name:
+            EVENT_NAME,
+
+          event_date:
+            EVENT_DATE,
+
+          participant_profile_id:
+            String(
+              participant.id
+            ),
+
+          confirmed_by_profile_id:
+            user.id,
+
+          status:
+            "cancelled",
+
+          confirmed_at:
+            null,
+
+          cancelled_at:
+            now,
+
+          cancellation_reason:
+            reason,
+        })
+      );
+
+    const {
+      error: cancelError,
+    } = await supabase
+      .from(
+        "event_presence_confirmations"
+      )
+      .upsert(
+        rowsToCancel,
+        {
+          onConflict:
+            "event_code,participant_profile_id",
+        }
+      );
+
+    if (cancelError) {
+      throw cancelError;
+    }
+
+    const participantIds =
+      eventParticipants.map(
+        (participant) =>
+          String(participant.id)
+      );
+
+    const {
+      data: refreshed,
+      error: refreshError,
+    } = await supabase
+      .from(
+        "event_presence_confirmations"
+      )
+      .select("*")
+      .eq(
+        "event_code",
+        EVENT_CODE
+      )
+      .in(
+        "participant_profile_id",
+        participantIds
+      );
+
+    if (refreshError) {
+      throw refreshError;
+    }
+
+    setPresenceConfirmations(
+      refreshed || []
+    );
+
+    setSelectedParticipants(
+      []
+    );
+
+    setShowAbsenceReason(
+      false
+    );
+
+    setAbsenceReason("");
+
+    showAlert?.(
+      "Votre absence pour le 29 août 2026 a été enregistrée."
+    );
+  } catch (error) {
+    console.error(
+      "Presence decline error:",
+      error
+    );
+
+    showAlert?.(
+      error?.message ||
+        "Une erreur est survenue lors de l’enregistrement de votre absence."
+    );
+  } finally {
+    setPresenceSaving(false);
+  }
+}
+
+async function loadMemberGuestData() {
+  if (!user?.id) return;
+
+  try {
+    setMemberGuestLoading(true);
+
+    const { data, error } =
+      await supabase.rpc(
+        "get_or_create_member_event_guest_registration"
+      );
+
+    if (error) throw error;
+
+    setMemberGuestData(
+      data || null
+    );
+  } catch (error) {
+    console.error(
+      "Member event guest load error:",
+      error
+    );
+
+    setMemberGuestData(null);
+  } finally {
+    setMemberGuestLoading(false);
+  }
+}
+
+useEffect(() => {
+  if (!user?.id) return;
+
+  loadMemberGuestData();
+}, [user?.id]);
+
+function openFreeGuestModal(student) {
+  if (!student?.profile_id) return;
+
+  setSelectedFreeStudent(
+    student
+  );
+
+  setFreeGuestName(
+    student.assigned_guest
+      ?.full_name || ""
+  );
+
+  setFreeGuestPhone(
+    student.assigned_guest
+      ?.phone || ""
+  );
+
+  setShowFreeGuestModal(true);
+}
+
+async function handleSaveFreeGuest() {
+  if (
+    !selectedFreeStudent
+      ?.profile_id
+  ) {
+    await showAlert(
+      "Élève introuvable."
+    );
+    return;
+  }
+
+  const guestName =
+    freeGuestName.trim();
+
+  if (!guestName) {
+    await showAlert(
+      "Veuillez entrer le nom complet de la personne."
+    );
+    return;
+  }
+
+  if (
+    !freeGuestPhone ||
+    !isValidPhoneNumber(
+      freeGuestPhone
+    )
+  ) {
+    await showAlert(
+      "Veuillez entrer un numéro de téléphone valide."
+    );
+    return;
+  }
+
+  try {
+    setFreeGuestSaving(true);
+
+    const { error } =
+      await supabase.rpc(
+        "assign_member_event_free_guest",
+        {
+          p_student_profile_id:
+            selectedFreeStudent
+              .profile_id,
+
+          p_full_name:
+            guestName,
+
+          p_phone:
+            freeGuestPhone,
+        }
+      );
+
+    if (error) throw error;
+
+    await loadMemberGuestData();
+
+    setShowFreeGuestModal(false);
+    setSelectedFreeStudent(null);
+    setFreeGuestName("");
+    setFreeGuestPhone("");
+
+    await showAlert(
+      "La personne gratuite a été enregistrée."
+    );
+  } catch (error) {
+    console.error(
+      "Free guest save error:",
+      error
+    );
+
+    await showAlert(
+      error?.message ||
+        "Impossible d'enregistrer cette personne."
+    );
+  } finally {
+    setFreeGuestSaving(false);
+  }
+}
+
+async function openExtraGuestModal() {
+  try {
+    /*
+     * NON-STUDENT PARENT CASE
+     *
+     * The getter can display the parent as a virtual free guest
+     * for the first child without having saved that participant yet.
+     *
+     * Before paid extras are allowed, materialize that free pass.
+     */
+    const virtualParentSlot =
+      memberGuestData?.students?.find(
+        (student) =>
+          student?.assigned_guest?.virtual === true
+      );
+
+    if (
+      virtualParentSlot?.profile_id &&
+      virtualParentSlot
+        ?.assigned_guest
+        ?.full_name &&
+      virtualParentSlot
+        ?.assigned_guest
+        ?.phone
+    ) {
+      const { error } =
+        await supabase.rpc(
+          "assign_member_event_free_guest",
+          {
+            p_student_profile_id:
+              virtualParentSlot.profile_id,
+
+            p_full_name:
+              virtualParentSlot
+                .assigned_guest
+                .full_name,
+
+            p_phone:
+              virtualParentSlot
+                .assigned_guest
+                .phone,
+          }
+        );
+
+      if (error) {
+        throw error;
+      }
+
+      await loadMemberGuestData();
+    }
+
+    /*
+     * IMPORTANT:
+     * These fields represent ONLY NEW people to add.
+     *
+     * Existing extras are not put back into this array,
+     * otherwise add_member_event_extra_guests() would insert
+     * them again and create duplicates.
+     */
+    setExtraPeopleCount(1);
+
+    setExtraParticipants([
+      {
+        full_name: "",
+        phone: "",
+      },
+    ]);
+
+    setExtraGuestResult(null);
+    setExtraPaymentMethod(null);
+    setExtraShowCardPayment(false);
+
+    setExtraManualAmount("");
+    setExtraManualProofUrl(null);
+    setExtraManualMessage("");
+
+    setShowExtraGuestModal(true);
+  } catch (error) {
+    console.error(
+      "Open extra guest modal error:",
+      error
+    );
+
+    await showAlert(
+      error?.message ||
+        "Impossible d'ouvrir l'ajout de personnes supplémentaires."
+    );
+  }
+}
+
+function openExistingExtraPayment() {
+  if (
+    !memberGuestData?.registration_id ||
+    !memberGuestData?.invoice_id ||
+    existingExtraBalance <= 0
+  ) {
+    return;
+  }
+
+  setExtraGuestResult({
+    registration_id:
+      memberGuestData.registration_id,
+
+    invoice_id:
+      memberGuestData.invoice_id,
+
+    total:
+      existingExtraTotal,
+
+    paid_total:
+      existingExtraPaidTotal,
+
+    balance:
+      existingExtraBalance,
+  });
+
+  setExtraManualAmount(
+    existingExtraBalance.toFixed(2)
+  );
+
+  setExtraPaymentMethod(null);
+  setExtraShowCardPayment(false);
+  setExtraManualProofUrl(null);
+  setExtraManualMessage("");
+
+  setShowExtraGuestModal(true);
+}
+
+function closeExtraGuestModal() {
+  if (
+    extraGuestSaving ||
+    extraManualSubmitting ||
+    extraManualUploading
+  ) {
+    return;
+  }
+
+  setShowExtraGuestModal(false);
+  setExtraGuestResult(null);
+  setExtraPaymentMethod(null);
+  setExtraShowCardPayment(false);
+
+  setExtraPeopleCount(1);
+
+  setExtraParticipants([
+    {
+      full_name: "",
+      phone: "",
+    },
+  ]);
+
+  setExtraManualAmount("");
+  setExtraManualProofUrl(null);
+  setExtraManualMessage("");
+}
+
+function handleExtraPeopleCountChange(event) {
+  const nextCount =
+    Number(event.target.value);
+
+  setExtraPeopleCount(nextCount);
+
+  setExtraParticipants((current) => {
+    const next = [];
+
+    for (
+      let index = 0;
+      index < nextCount;
+      index += 1
+    ) {
+      next.push(
+        current[index] || {
+          full_name: "",
+          phone: "",
+        }
+      );
+    }
+
+    return next;
+  });
+}
+
+function updateExtraParticipant(
+  index,
+  field,
+  value
+) {
+  setExtraParticipants((current) =>
+    current.map(
+      (
+        participant,
+        participantIndex
+      ) =>
+        participantIndex === index
+          ? {
+              ...participant,
+              [field]: value,
+            }
+          : participant
+    )
+  );
+}
+
+async function handleAddExtraGuests() {
+  for (
+    let index = 0;
+    index < extraParticipants.length;
+    index += 1
+  ) {
+    const participant =
+      extraParticipants[index];
+
+    if (
+      !participant.full_name?.trim()
+    ) {
+      await showAlert(
+        `Veuillez entrer le nom du participant ${
+          index + 1
+        }.`
+      );
+      return;
+    }
+
+    if (!participant.phone) {
+      await showAlert(
+        `Veuillez entrer le numéro de téléphone du participant ${
+          index + 1
+        }. Si cette personne ne possède pas de téléphone, veuillez saisir votre propre numéro.`
+      );
+      return;
+    }
+
+    if (
+      !isValidPhoneNumber(
+        participant.phone
+      )
+    ) {
+      await showAlert(
+        `Veuillez entrer un numéro de téléphone valide pour le participant ${
+          index + 1
+        }.`
+      );
+      return;
+    }
+  }
+
+  try {
+    setExtraGuestSaving(true);
+
+    const { data, error } =
+      await supabase.rpc(
+        "add_member_event_extra_guests",
+        {
+          p_participants:
+            extraParticipants.map(
+              (participant) => ({
+                full_name:
+                  participant.full_name.trim(),
+
+                phone:
+                  participant.phone,
+              })
+            ),
+        }
+      );
+
+    if (error) throw error;
+
+    setExtraGuestResult(data);
+
+    setExtraManualAmount(
+      Number(
+        data?.balance || 0
+      ).toFixed(2)
+    );
+
+    // Refresh free + paid participant data
+    await loadMemberGuestData();
+  } catch (error) {
+    console.error(
+      "Extra event guests error:",
+      error
+    );
+
+    await showAlert(
+      error?.message ||
+        "Impossible d'ajouter ces personnes."
+    );
+  } finally {
+    setExtraGuestSaving(false);
+  }
+}
+
+async function handleExtraVisitorProof(file) {
+  if (!file) return;
+
+  setExtraManualUploading(true);
+  setExtraManualProofUrl(null);
+
+  try {
+    const ext =
+      file.name.split(".").pop() ||
+      "jpg";
+
+    const path =
+      `event-visitor-proofs/${Date.now()}_${Math.random()
+        .toString(36)
+        .slice(2)}.${ext}`;
+
+    const { error: uploadError } =
+      await supabase.storage
+        .from("documents")
+        .upload(path, file, {
+          upsert: false,
+          contentType:
+            file.type || undefined,
+        });
+
+    if (uploadError) {
+      throw uploadError;
+    }
+
+    const { data } =
+      supabase.storage
+        .from("documents")
+        .getPublicUrl(path);
+
+    if (!data?.publicUrl) {
+      throw new Error(
+        "Impossible de récupérer l'URL de la preuve."
+      );
+    }
+
+    setExtraManualProofUrl(
+      data.publicUrl
+    );
+  } catch (error) {
+    console.error(
+      "Extra visitor proof error:",
+      error
+    );
+
+    await showAlert(
+      error?.message ||
+        "Impossible de téléverser la preuve."
+    );
+  } finally {
+    setExtraManualUploading(false);
+  }
+}
+
+async function submitExtraManualPayment() {
+  if (
+    !extraGuestResult
+      ?.registration_id
+  ) {
+    await showAlert(
+      "Inscription introuvable."
+    );
+    return;
+  }
+
+  const amount =
+    Number(extraManualAmount);
+
+  if (!amount || amount <= 0) {
+    await showAlert(
+      "Veuillez entrer un montant valide."
+    );
+    return;
+  }
+
+  const balance =
+    Number(
+      extraGuestResult.balance || 0
+    );
+
+  if (amount > balance) {
+    await showAlert(
+      `Le montant ne peut pas dépasser USD ${balance.toFixed(
+        2
+      )}.`
+    );
+    return;
+  }
+
+  if (
+    extraPaymentMethod ===
+      "transfer" &&
+    !extraManualProofUrl
+  ) {
+    await showAlert(
+      "Veuillez joindre une preuve de virement."
+    );
+    return;
+  }
+
+  const registrationPhone =
+    memberGuestData
+      ?.participants?.[0]
+      ?.phone ||
+    memberGuestData?.member?.phone;
+
+  const registrationEmail =
+    memberGuestData?.member?.email;
+
+  if (
+    !registrationPhone ||
+    !registrationEmail
+  ) {
+    await showAlert(
+      "Impossible de retrouver les coordonnées liées à cette inscription."
+    );
+    return;
+  }
+
+  try {
+    setExtraManualSubmitting(true);
+    setExtraManualMessage("");
+
+    const { data, error } =
+      await supabase.rpc(
+        "submit_event_visitor_payment",
+        {
+          p_registration_id:
+            extraGuestResult
+              .registration_id,
+
+          p_phone:
+            registrationPhone,
+
+          p_email:
+            registrationEmail,
+
+          p_amount:
+            amount,
+
+          p_method:
+            extraPaymentMethod ===
+            "cash"
+              ? "cash"
+              : "transfer",
+
+          p_proof_url:
+            extraManualProofUrl,
+        }
+      );
+
+    if (error) throw error;
+
+    setExtraManualMessage(
+      data?.message ||
+        "Votre paiement a été soumis pour validation."
+    );
+
+    setExtraManualAmount("");
+    setExtraManualProofUrl(null);
+    setExtraPaymentMethod(null);
+
+    await loadMemberGuestData();
+  } catch (error) {
+    console.error(
+      "Extra visitor payment error:",
+      error
+    );
+
+    await showAlert(
+      error?.message ||
+        "Impossible de soumettre le paiement."
+    );
+  } finally {
+    setExtraManualSubmitting(false);
+  }
+}
 
 
 // 🎯 Determine default tab based on combined membership
@@ -1184,20 +2359,1393 @@ const selectedAttendanceProfile = (attendanceProfiles || []).find(p => p.id === 
     Effectuer un paiement
   </button>
 </div>
-{/* 🎓 Clôture 2026 — Presence confirmation */}
-<div className="flex justify-center mt-3">
-  <button
-    type="button"
-    onClick={() => {
-      sessionStorage.setItem("scrollToCloturePresence", "true");
-      setActiveTab("profile");
-    }}
-    className="w-full sm:w-auto px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg shadow transition-all"
-  >
-    🎓 Marquez ma présence pour la clôture
-  </button>
+{/* 🎓 CLOTURE 2026 */}
+<div className="mt-5 bg-white rounded-2xl shadow border border-orange-100 overflow-hidden">
+  <div className="bg-gradient-to-r from-orange-500 to-blue-700 px-5 py-4 text-white">
+    <h2 className="text-lg font-bold">
+      Cérémonie de clôture — 29 août 2026
+    </h2>
+
+    <p className="text-sm text-white/90 mt-1">
+      Remise de certificats et mini-compétition à partir de 9 h 00.
+    </p>
+  </div>
+
+  <div className="p-5 space-y-4">
+    <p className="text-sm text-gray-700">
+      Tous les élèves ayant participé aux activités
+      d’A’QUA D’OR entre septembre 2025 et août 2026
+      sont invités à confirmer leur présence.
+    </p>
+
+    {presenceLoading ? (
+      <p className="text-sm text-gray-500">
+        Chargement des confirmations…
+      </p>
+    ) : eventParticipants.length === 0 ? (
+      <p className="text-sm text-gray-500 italic">
+        Aucun participant actif trouvé sur ce compte.
+      </p>
+    ) : (
+      <div className="space-y-2">
+        <p className="text-sm font-semibold text-gray-700">
+          Sélectionnez les personnes qui seront présentes :
+        </p>
+
+        {eventParticipants.map(
+          (participant) => {
+            const participantId =
+              String(
+                participant.id
+              );
+
+            return (
+              <label
+                key={
+                  participant.id
+                }
+                className="flex items-center gap-3 border rounded-xl px-4 py-3 cursor-pointer hover:bg-gray-50"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedParticipants.includes(
+                    participantId
+                  )}
+                  onChange={() =>
+                    togglePresenceParticipant(
+                      participantId
+                    )
+                  }
+                  className="w-5 h-5 rounded text-blue-600"
+                />
+
+                <span className="font-medium text-gray-800">
+                  {
+                    participant.full_name
+                  }
+                </span>
+              </label>
+            );
+          }
+        )}
+      </div>
+    )}
+
+    <div className="flex flex-col sm:flex-row gap-3">
+      <button
+        type="button"
+        onClick={
+          handleConfirmEventPresence
+        }
+        disabled={
+          presenceLoading ||
+          presenceSaving ||
+          presenceIsConfirmed ||
+          eventParticipants.length ===
+            0 ||
+          selectedParticipants.length ===
+            0
+        }
+        className="w-full sm:w-auto px-6 py-3 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-semibold shadow disabled:opacity-60 disabled:cursor-not-allowed"
+      >
+        {presenceSaving
+          ? "Enregistrement…"
+          : presenceIsConfirmed
+          ? "Présence confirmée ✓"
+          : "Je confirme ma présence"}
+      </button>
+
+      <button
+        type="button"
+        onClick={() =>
+          setShowAbsenceReason(
+            true
+          )
+        }
+        disabled={
+          presenceLoading ||
+          presenceSaving ||
+          presenceIsCancelled ||
+          eventParticipants.length ===
+            0
+        }
+        className="w-full sm:w-auto px-6 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold shadow disabled:opacity-60 disabled:cursor-not-allowed"
+      >
+        {presenceIsCancelled
+          ? "Absence enregistrée ✓"
+          : "Je ne serai pas présent"}
+      </button>
+        </div>
+
+    {/* FREE GUESTS */}
+    <div className="border-t border-gray-200 pt-5">
+      <div className="mb-4">
+        <h3 className="text-base font-bold text-gray-800">
+          Personnes gratuites
+        </h3>
+
+        <p className="mt-1 text-sm text-gray-600">
+          Chaque élève actif bénéficie d'une personne gratuite
+          pour la cérémonie.
+        </p>
+      </div>
+
+      {memberGuestLoading ? (
+        <p className="text-sm text-gray-500">
+          Chargement des invitations…
+        </p>
+      ) : !memberGuestData?.students?.length ? (
+        <p className="text-sm italic text-gray-500">
+          Aucune invitation gratuite disponible.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {memberGuestData.students.map(
+            (student) => {
+                      const isAutoFilledParent =
+          !memberGuestData.member_is_student &&
+          memberGuestData.auto_filled_parent_profile_id ===
+            student.profile_id &&
+          !!student.assigned_guest &&
+          student.assigned_guest.full_name?.trim() ===
+            memberGuestData.member?.full_name?.trim() &&
+          student.assigned_guest.phone ===
+            memberGuestData.member?.phone;
+
+              return (
+                <div
+                  key={
+                    student.profile_id
+                  }
+                  className="rounded-xl border border-gray-200 bg-gray-50 p-4"
+                >
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        Invitation gratuite de
+                      </p>
+
+                      <p className="font-bold text-gray-800">
+                        {
+                          student.full_name
+                        }
+                      </p>
+
+                      {student.assigned_guest ? (
+                        <div className="mt-2">
+                          {isAutoFilledParent && (
+                            <p className="mb-2 text-xs font-medium text-blue-700">
+                              Le titulaire du compte a été inscrit automatiquement
+                              pour cette invitation gratuite.
+                            </p>
+                          )}
+
+                          <p className="text-sm text-green-700">
+                            ✓{" "}
+                            <span className="font-semibold">
+                              {
+                                student
+                                  .assigned_guest
+                                  .full_name
+                              }
+                            </span>
+                          </p>
+
+                          <p className="text-xs text-gray-500">
+                            {
+                              student
+                                .assigned_guest
+                                .phone
+                            }
+                          </p>
+
+                          {isAutoFilledParent && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                openFreeGuestModal(
+                                  student
+                                )
+                              }
+                              className="mt-2 text-sm font-semibold text-red-600 underline hover:text-red-700"
+                            >
+                              Je ne pourrai pas être présent
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="mt-2 text-sm text-orange-600">
+                          Aucune personne assignée
+                        </p>
+                      )}
+                    </div>
+
+                    {!isAutoFilledParent && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          openFreeGuestModal(
+                            student
+                          )
+                        }
+                        className={`w-full sm:w-auto rounded-xl px-4 py-2.5 font-semibold shadow transition ${
+                          student.assigned_guest
+                            ? "border border-blue-600 bg-white text-blue-700 hover:bg-blue-50"
+                            : "bg-blue-600 text-white hover:bg-blue-700"
+                        }`}
+                      >
+                        {student.assigned_guest
+                          ? "Modifier la personne"
+                          : "Ajouter ma personne gratuite"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            }
+                    )}
+
+          {existingExtraGuests.length > 0 && (
+  <div className="mt-5 border-t border-gray-200 pt-5">
+    <div className="mb-3">
+      <h3 className="font-bold text-gray-800">
+        Personnes supplémentaires
+      </h3>
+
+      <p className="mt-1 text-sm text-gray-500">
+        Personnes ajoutées à votre participation au tarif de USD 10.00
+        par personne.
+      </p>
+    </div>
+
+    <div className="space-y-3">
+      {existingExtraGuests.map(
+        (participant, index) => {
+          const paidForThisPerson =
+            Math.max(
+              0,
+              Math.min(
+                10,
+                existingExtraPaidTotal -
+                  index * 10
+              )
+            );
+
+          const isPaid =
+            paidForThisPerson >= 10;
+
+          const isPartial =
+            paidForThisPerson > 0 &&
+            paidForThisPerson < 10;
+
+          return (
+            <div
+              key={
+                participant.id ||
+                index
+              }
+              className="rounded-xl border border-purple-200 bg-purple-50 p-4"
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">
+                    Personne supplémentaire
+                  </p>
+
+                  <p className="mt-1 font-bold text-gray-800">
+                    {
+                      participant.full_name
+                    }
+                  </p>
+
+                  <p className="text-xs text-gray-500">
+                    {
+                      participant.phone
+                    }
+                  </p>
+
+                  <p className="mt-1 text-xs font-semibold text-blue-700">
+                    Invité de :{" "}
+                    {memberGuestData?.member?.full_name ||
+                      "Titulaire du compte"}
+                  </p>
+                </div>
+
+                <div className="text-left sm:text-right">
+                  <p className="font-semibold text-gray-800">
+                    USD 10.00
+                  </p>
+
+                  {isPaid ? (
+                    <span className="mt-1 inline-flex rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700">
+                      Payé
+                    </span>
+                  ) : isPartial ? (
+                    <span className="mt-1 inline-flex rounded-full bg-yellow-100 px-2.5 py-1 text-xs font-semibold text-yellow-700">
+                      Partiel
+                    </span>
+                  ) : (
+                    <span className="mt-1 inline-flex rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-700">
+                      Non payé
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        }
+      )}
+    </div>
+
+    {existingExtraBalance > 0 && (
+  <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-4">
+    <div className="flex items-center justify-between gap-3 text-sm text-red-700">
+      <span className="font-semibold">
+        Solde à payer
+      </span>
+
+      <strong>
+        USD{" "}
+        {existingExtraBalance.toFixed(
+          2
+        )}
+      </strong>
+    </div>
+
+    <button
+      type="button"
+      onClick={
+        openExistingExtraPayment
+      }
+      className="mt-3 w-full rounded-xl bg-green-600 px-4 py-3 font-semibold text-white shadow hover:bg-green-700 sm:w-auto"
+    >
+      💳 Effectuer un paiement
+    </button>
+  </div>
+)}
+  </div>
+)}
+
+          {memberGuestData?.students?.length > 0 &&
+            memberGuestData.students.every(
+              (student) =>
+                !!student.assigned_guest
+            ) && (
+              <div className="mt-5 border-t border-gray-200 pt-5">
+                <div className="rounded-xl border border-purple-200 bg-purple-50 p-4">
+                  <p className="font-semibold text-purple-900">
+                    Vous souhaitez inviter d'autres personnes ?
+                  </p>
+
+                  <p className="mt-1 text-sm text-purple-700">
+                    Une fois vos invitations gratuites utilisées,
+                    vous pouvez ajouter des personnes supplémentaires
+                    au tarif de USD 10.00 par personne.
+                  </p>
+
+                  <p className="mt-2 text-xs font-semibold text-red-600">
+                    ⚠️ Les frais de participation sont non remboursables.
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={
+                      openExtraGuestModal
+                    }
+                    className="mt-4 w-full rounded-xl bg-purple-600 px-4 py-3 font-semibold text-white hover:bg-purple-700 sm:w-auto"
+                  >
+                    + Ajouter d'autres personnes
+                  </button>
+                </div>
+              </div>
+            )}
+        </div>
+      )}
+    </div>
+  </div>
 </div>
+
+{showAbsenceReason && (
+  <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center px-4">
+    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+      <h3 className="text-lg font-bold text-gray-800">
+        Motif de votre absence
+      </h3>
+
+      <p className="text-sm text-gray-600 mt-2">
+        Veuillez nous indiquer brièvement pourquoi vous ne pourrez
+        pas être présent le 29 août 2026.
+      </p>
+
+      <textarea
+        value={absenceReason}
+        onChange={(e) =>
+          setAbsenceReason(
+            e.target.value
+          )
+        }
+        rows={4}
+        placeholder="Expliquez brièvement la raison de votre absence…"
+        className="w-full mt-4 border border-gray-300 rounded-xl px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+      />
+
+      <div className="flex gap-3 mt-5">
+        <button
+          type="button"
+          onClick={() => {
+            setShowAbsenceReason(
+              false
+            );
+            setAbsenceReason("");
+          }}
+          disabled={
+            presenceSaving
+          }
+          className="flex-1 px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700"
+        >
+          Retour
+        </button>
+
+        <button
+          type="button"
+          onClick={
+            handleDeclineEventPresence
+          }
+          disabled={
+            presenceSaving ||
+            !absenceReason.trim()
+          }
+          className="flex-1 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold disabled:opacity-60"
+        >
+          {presenceSaving
+            ? "Enregistrement…"
+            : "Confirmer mon absence"}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{showFreeGuestModal && (
+  <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center px-4">
+    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-lg font-bold text-gray-900">
+            {selectedFreeStudent
+              ?.assigned_guest
+              ? "Modifier la personne gratuite"
+              : "Ajouter ma personne gratuite"}
+          </h3>
+
+          <p className="mt-1 text-sm text-gray-500">
+            Invitation gratuite liée à{" "}
+            <strong>
+              {
+                selectedFreeStudent
+                  ?.full_name
+              }
+            </strong>
+          </p>
+        </div>
+
+        <button
+          type="button"
+          disabled={freeGuestSaving}
+          onClick={() => {
+            setShowFreeGuestModal(
+              false
+            );
+            setSelectedFreeStudent(
+              null
+            );
+            setFreeGuestName("");
+            setFreeGuestPhone("");
+          }}
+          className="text-2xl text-gray-400 hover:text-gray-700"
+        >
+          ×
+        </button>
+      </div>
+
+      <div className="mt-6 space-y-4">
+        <label className="block">
+          <span className="mb-1.5 block text-sm font-medium text-gray-700">
+            Nom complet *
+          </span>
+
+          <input
+            type="text"
+            value={freeGuestName}
+            onChange={(e) =>
+              setFreeGuestName(
+                e.target.value
+              )
+            }
+            className="input w-full"
+            placeholder="Nom et prénom"
+          />
+        </label>
+
+        <label className="block">
+          <span className="mb-1.5 block text-sm font-medium text-gray-700">
+            Téléphone *
+          </span>
+
+          <PhoneInput
+            international
+            defaultCountry={
+              guestCountry
+            }
+            countryCallingCodeEditable={
+              false
+            }
+            value={freeGuestPhone}
+            onChange={(value) => {
+              setFreeGuestPhone(
+                value || ""
+              );
+            }}
+            placeholder="Numéro de téléphone"
+          />
+
+          <p className="mt-2 text-xs text-gray-500">
+            Si cette personne ne possède pas de téléphone,
+            veuillez saisir votre propre numéro.
+          </p>
+        </label>
+
+        <div className="rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-800">
+          Cette personne utilise l'invitation gratuite de{" "}
+          <strong>
+            {
+              selectedFreeStudent
+                ?.full_name
+            }
+          </strong>
+          . Aucun paiement n'est requis.
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            type="button"
+            disabled={
+              freeGuestSaving
+            }
+            onClick={() => {
+              setShowFreeGuestModal(
+                false
+              );
+              setSelectedFreeStudent(
+                null
+              );
+              setFreeGuestName("");
+              setFreeGuestPhone("");
+            }}
+            className="flex-1 rounded-xl bg-gray-100 px-4 py-3 font-semibold text-gray-700 hover:bg-gray-200"
+          >
+            Annuler
+          </button>
+
+          <button
+            type="button"
+            disabled={
+              freeGuestSaving
+            }
+            onClick={
+              handleSaveFreeGuest
+            }
+            className="flex-1 rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+          >
+            {freeGuestSaving
+              ? "Enregistrement…"
+              : "Enregistrer"}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
 </div>
+
+{showExtraGuestModal && (
+  <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/60 px-4 py-6">
+    <div className="flex min-h-full items-start justify-center sm:items-center">
+      <div className="relative w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+
+        {/* HEADER */}
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-white px-5 py-4">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">
+              Ajouter d'autres personnes
+            </h2>
+
+            <p className="text-xs text-gray-500">
+              Cérémonie de clôture • 29 août 2026
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={
+              closeExtraGuestModal
+            }
+            className="rounded-full bg-gray-100 px-3 py-1.5 text-lg text-gray-600 hover:bg-gray-200"
+          >
+            ×
+          </button>
+        </div>
+
+        {!extraGuestResult ? (
+          <div className="space-y-6 p-5 sm:p-6">
+
+            {existingExtraGuests.length > 0 && (
+  <section>
+    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h3 className="font-bold text-gray-900">
+            Personnes déjà ajoutées
+          </h3>
+
+          <p className="mt-1 text-xs text-gray-500">
+            Ces personnes sont déjà enregistrées.
+            Elles ne seront pas ajoutées une deuxième fois.
+          </p>
+        </div>
+
+        <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-700">
+          {existingExtraGuests.length}
+        </span>
+      </div>
+
+      <div className="mt-4 space-y-3">
+        {existingExtraGuests.map(
+          (participant, index) => {
+            /*
+             * Payments are currently stored at INVOICE level,
+             * not participant level.
+             *
+             * We allocate payments oldest-first at USD 10/person
+             * for display purposes.
+             */
+            const paidForThisPerson =
+              Math.max(
+                0,
+                Math.min(
+                  10,
+                  existingExtraPaidTotal -
+                    index * 10
+                )
+              );
+
+            const isPaid =
+              paidForThisPerson >= 10;
+
+            const isPartial =
+              paidForThisPerson > 0 &&
+              paidForThisPerson < 10;
+
+            return (
+              <div
+                key={
+                  participant.id ||
+                  index
+                }
+                className="rounded-xl border bg-white p-4"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-gray-900">
+                      {
+                        participant.full_name
+                      }
+                    </p>
+
+                    <p className="text-sm text-gray-500">
+                      {participant.phone}
+                    </p>
+                  </div>
+
+                  {isPaid ? (
+                    <span className="rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700">
+                      Payé
+                    </span>
+                  ) : isPartial ? (
+                    <span className="rounded-full bg-yellow-100 px-2.5 py-1 text-xs font-semibold text-yellow-700">
+                      Partiel
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-700">
+                      Non payé
+                    </span>
+                  )}
+                </div>
+
+                <div className="mt-3 flex justify-between border-t pt-2 text-xs">
+                  <span className="text-gray-500">
+                    Frais
+                  </span>
+
+                  <strong>
+                    USD 10.00
+                  </strong>
+                </div>
+              </div>
+            );
+          }
+        )}
+      </div>
+
+      {existingExtraBalance > 0 && (
+        <div className="mt-4 flex justify-between rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+          <span>
+            Solde des personnes déjà ajoutées
+          </span>
+
+          <strong>
+            USD{" "}
+            {existingExtraBalance.toFixed(
+              2
+            )}
+          </strong>
+        </div>
+      )}
+    </div>
+  </section>
+)}
+
+            {/* COUNT */}
+            <section>
+              <h3 className="font-bold text-gray-900">
+                Personnes supplémentaires
+              </h3>
+
+              <p className="mt-1 text-sm text-gray-500">
+                Ces personnes s'ajouteront à vos invitations gratuites.
+              </p>
+
+              <label className="mt-4 block">
+                <span className="mb-2 block font-semibold text-gray-700">
+                  Nombre de personnes *
+                </span>
+
+                <select
+                  value={
+                    extraPeopleCount
+                  }
+                  onChange={
+                    handleExtraPeopleCountChange
+                  }
+                  className="input w-full"
+                >
+                  {Array.from(
+                    { length: 10 },
+                    (_, index) =>
+                      index + 1
+                  ).map((count) => (
+                    <option
+                      key={count}
+                      value={count}
+                    >
+                      {count}{" "}
+                      personne
+                      {count > 1
+                        ? "s"
+                        : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {/* PRICE */}
+              <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
+                <div className="flex justify-between text-sm">
+                  <span>
+                    Tarif par personne supplémentaire
+                  </span>
+
+                  <strong>
+                    USD 10.00
+                  </strong>
+                </div>
+
+                <div className="mt-2 flex justify-between border-t border-blue-200 pt-2">
+                  <span className="font-semibold">
+  Nouveaux frais
+</span>
+
+                  <strong className="text-lg text-blue-700">
+                    USD{" "}
+                    {extraAmountDue.toFixed(
+                      2
+                    )}
+                  </strong>
+                </div>
+
+                <p className="mt-2 text-xs text-blue-700">
+                  Des frais de traitement par carte seront affichés
+                  séparément avant le paiement.
+                </p>
+
+                <p className="mt-2 text-xs font-semibold text-red-600">
+                  ⚠️ Les frais de participation sont non remboursables.
+                </p>
+              </div>
+            </section>
+
+            {/* PARTICIPANTS */}
+            <section className="border-t pt-5">
+              <h3 className="font-bold text-gray-900">
+                Participants
+              </h3>
+
+              <p className="mt-1 text-sm text-gray-500">
+                Indiquez le nom et le téléphone de chaque personne.
+              </p>
+
+              <div className="mt-4 space-y-4">
+                {extraParticipants.map(
+                  (
+                    participant,
+                    index
+                  ) => (
+                    <div
+                      key={index}
+                      className="rounded-xl border border-gray-200 bg-gray-50 p-4"
+                    >
+                      <p className="mb-3 font-semibold text-gray-900">
+                        Participant{" "}
+                        {index + 1}
+                      </p>
+
+                      <div className="space-y-3">
+                        <label className="block">
+                          <span className="mb-1 block text-sm text-gray-700">
+                            Nom complet *
+                          </span>
+
+                          <input
+                            type="text"
+                            value={
+                              participant.full_name
+                            }
+                            onChange={(
+                              e
+                            ) =>
+                              updateExtraParticipant(
+                                index,
+                                "full_name",
+                                e.target
+                                  .value
+                              )
+                            }
+                            className="input w-full"
+                            required
+                          />
+                        </label>
+
+                        <label className="block">
+                          <span className="mb-1 block text-sm text-gray-700">
+                            Téléphone *
+                          </span>
+
+                          <PhoneInput
+                            international
+                            defaultCountry={
+                              guestCountry
+                            }
+                            countryCallingCodeEditable={
+                              false
+                            }
+                            value={
+                              participant.phone
+                            }
+                            onChange={(
+                              value
+                            ) =>
+                              updateExtraParticipant(
+                                index,
+                                "phone",
+                                value ||
+                                  ""
+                              )
+                            }
+                            placeholder="Numéro de téléphone"
+                          />
+
+                          <p className="mt-2 text-xs text-gray-500">
+                            Si cette personne ne possède pas de téléphone,
+                            veuillez saisir votre propre numéro.
+                          </p>
+                        </label>
+                      </div>
+                    </div>
+                  )
+                )}
+              </div>
+            </section>
+
+            <div className="flex flex-col-reverse gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={
+                  closeExtraGuestModal
+                }
+                disabled={
+                  extraGuestSaving
+                }
+                className="flex-1 rounded-xl border border-gray-300 px-5 py-3 font-semibold text-gray-700 hover:bg-gray-50"
+              >
+                Annuler
+              </button>
+
+              <button
+                type="button"
+                onClick={
+                  handleAddExtraGuests
+                }
+                disabled={
+                  extraGuestSaving
+                }
+                className="flex-1 rounded-xl bg-purple-600 px-5 py-3 font-semibold text-white hover:bg-purple-700 disabled:opacity-60"
+              >
+                {extraGuestSaving
+                  ? "Enregistrement..."
+                  : "Ajouter les personnes"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* ==========================================
+             AFTER PEOPLE WERE ADDED — PAYMENT
+          ========================================== */
+          <div className="p-5 sm:p-6">
+
+            <div className="rounded-2xl border border-green-200 bg-green-50 p-5 text-center">
+              <div className="text-4xl">
+                ✅
+              </div>
+
+              <h3 className="mt-3 text-xl font-bold text-green-800">
+                Personnes ajoutées
+              </h3>
+
+              <p className="mt-2 text-sm text-green-700">
+                Les personnes supplémentaires ont bien été ajoutées
+                à votre participation.
+              </p>
+            </div>
+
+            {existingExtraGuests.length > 0 && (
+  <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-4">
+    <div className="flex items-center justify-between gap-3">
+      <div>
+        <h4 className="font-bold text-gray-900">
+          Personnes supplémentaires enregistrées
+        </h4>
+
+        <p className="mt-1 text-xs text-gray-500">
+          Toutes les personnes supplémentaires liées à votre participation.
+        </p>
+      </div>
+
+      <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-700">
+        {existingExtraGuests.length}
+      </span>
+    </div>
+
+    <div className="mt-4 space-y-3">
+      {existingExtraGuests.map(
+        (participant, index) => {
+          const paidForThisPerson =
+            Math.max(
+              0,
+              Math.min(
+                10,
+                existingExtraPaidTotal -
+                  index * 10
+              )
+            );
+
+          const isPaid =
+            paidForThisPerson >= 10;
+
+          const isPartial =
+            paidForThisPerson > 0 &&
+            paidForThisPerson < 10;
+
+          return (
+            <div
+              key={
+                participant.id ||
+                index
+              }
+              className="rounded-xl border bg-white p-4"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-gray-900">
+                    {
+                      participant.full_name
+                    }
+                  </p>
+
+                  <p className="text-sm text-gray-500">
+                    {participant.phone}
+                  </p>
+                </div>
+
+                {isPaid ? (
+                  <span className="rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700">
+                    Payé
+                  </span>
+                ) : isPartial ? (
+                  <span className="rounded-full bg-yellow-100 px-2.5 py-1 text-xs font-semibold text-yellow-700">
+                    Partiel
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-700">
+                    Non payé
+                  </span>
+                )}
+              </div>
+
+              <div className="mt-3 flex justify-between border-t pt-2 text-xs">
+                <span className="text-gray-500">
+                  Frais
+                </span>
+
+                <strong>
+                  USD 10.00
+                </strong>
+              </div>
+            </div>
+          );
+        }
+      )}
+    </div>
+  </div>
+)}
+
+            <div className="mt-5 rounded-xl border border-gray-200 p-4">
+              <div className="flex justify-between py-1 text-sm">
+                <span className="text-gray-500">
+                  Total facture
+                </span>
+
+                <strong>
+                  USD{" "}
+                  {Number(
+                    extraGuestResult.total ||
+                      0
+                  ).toFixed(2)}
+                </strong>
+              </div>
+
+              <div className="flex justify-between py-1 text-sm">
+                <span className="text-gray-500">
+                  Déjà payé
+                </span>
+
+                <strong>
+                  USD{" "}
+                  {Number(
+                    extraGuestResult.paid_total ||
+                      0
+                  ).toFixed(2)}
+                </strong>
+              </div>
+
+              <div className="mt-2 flex justify-between border-t pt-3">
+                <span className="font-bold">
+                  Montant à payer
+                </span>
+
+                <strong className="text-lg text-blue-700">
+                  USD{" "}
+                  {Number(
+                    extraGuestResult.balance ||
+                      0
+                  ).toFixed(2)}
+                </strong>
+              </div>
+
+              <p className="mt-3 text-xs font-semibold text-red-600">
+                ⚠️ Les frais de participation sont non remboursables.
+              </p>
+            </div>
+
+            {!extraShowCardPayment ? (
+              <div className="mt-5 space-y-3">
+
+                <div className="rounded-xl border border-gray-200 p-4">
+                  <p className="mb-3 text-sm font-semibold text-gray-800">
+                    Choisissez votre mode de paiement
+                  </p>
+
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExtraPaymentMethod(
+                          "card"
+                        );
+                        setExtraShowCardPayment(
+                          true
+                        );
+                      }}
+                      className="rounded-xl bg-blue-600 px-3 py-3 text-sm font-semibold text-white hover:bg-blue-700"
+                    >
+                      💳 Carte
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExtraPaymentMethod(
+                          "cash"
+                        );
+                        setExtraManualAmount(
+                          Number(
+                            extraGuestResult.balance ||
+                              0
+                          ).toFixed(2)
+                        );
+                        setExtraManualProofUrl(
+                          null
+                        );
+                        setExtraManualMessage(
+                          ""
+                        );
+                      }}
+                      className="rounded-xl border border-green-500 px-3 py-3 text-sm font-semibold text-green-700 hover:bg-green-50"
+                    >
+                      💵 Espèces
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExtraPaymentMethod(
+                          "transfer"
+                        );
+                        setExtraManualAmount(
+                          Number(
+                            extraGuestResult.balance ||
+                              0
+                          ).toFixed(2)
+                        );
+                        setExtraManualProofUrl(
+                          null
+                        );
+                        setExtraManualMessage(
+                          ""
+                        );
+                      }}
+                      className="rounded-xl border border-purple-500 px-3 py-3 text-sm font-semibold text-purple-700 hover:bg-purple-50"
+                    >
+                      🏦 Virement
+                    </button>
+                  </div>
+                </div>
+
+                {extraPaymentMethod ===
+                  "cash" && (
+                  <div className="rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-800">
+                    <p className="font-semibold">
+                      Paiement en espèces
+                    </p>
+
+                    <p className="mt-1">
+                      Le paiement restera en attente jusqu'à sa
+                      validation par notre équipe.
+                    </p>
+
+                    <label className="mt-4 block">
+                      <span className="mb-1 block font-semibold">
+                        Montant (USD)
+                      </span>
+
+                      <input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        value={
+                          extraManualAmount
+                        }
+                        onChange={(e) =>
+                          setExtraManualAmount(
+                            e.target.value
+                          )
+                        }
+                        className="input w-full bg-white"
+                      />
+                    </label>
+
+                    <button
+                      type="button"
+                      disabled={
+                        extraManualSubmitting
+                      }
+                      onClick={
+                        submitExtraManualPayment
+                      }
+                      className="mt-4 w-full rounded-xl bg-green-600 px-4 py-3 font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+                    >
+                      {extraManualSubmitting
+                        ? "Soumission..."
+                        : "Soumettre le paiement"}
+                    </button>
+                  </div>
+                )}
+
+                {extraPaymentMethod ===
+                  "transfer" && (
+                  <div className="rounded-xl border border-purple-200 bg-purple-50 p-4 text-sm text-purple-800">
+                    <p className="font-semibold">
+                      Paiement par virement
+                    </p>
+
+                    <label className="mt-4 block">
+                      <span className="mb-1 block font-semibold">
+                        Montant du virement (USD)
+                      </span>
+
+                      <input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        value={
+                          extraManualAmount
+                        }
+                        onChange={(e) =>
+                          setExtraManualAmount(
+                            e.target.value
+                          )
+                        }
+                        className="input w-full bg-white"
+                      />
+                    </label>
+
+                    <div className="mt-4">
+                      <label className="block font-semibold">
+                        Preuve du virement
+                      </label>
+
+                      <input
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        onChange={(e) =>
+                          handleExtraVisitorProof(
+                            e.target
+                              .files?.[0]
+                          )
+                        }
+                        className="mt-2 block w-full text-sm"
+                      />
+
+                      {extraManualUploading && (
+                        <p className="mt-2 text-xs">
+                          Téléversement...
+                        </p>
+                      )}
+
+                      {extraManualProofUrl && (
+                        <p className="mt-2 font-semibold text-green-700">
+                          ✓ Preuve téléversée
+                        </p>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={
+                        extraManualSubmitting ||
+                        extraManualUploading
+                      }
+                      onClick={
+                        submitExtraManualPayment
+                      }
+                      className="mt-4 w-full rounded-xl bg-purple-600 px-4 py-3 font-semibold text-white hover:bg-purple-700 disabled:opacity-50"
+                    >
+                      {extraManualSubmitting
+                        ? "Soumission..."
+                        : "Soumettre le virement"}
+                    </button>
+                  </div>
+                )}
+
+                {extraManualMessage && (
+                  <div className="rounded-xl border border-green-200 bg-green-50 p-4 text-sm font-semibold text-green-800">
+                    {
+                      extraManualMessage
+                    }
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={
+                    closeExtraGuestModal
+                  }
+                  className="w-full rounded-xl border border-gray-300 px-5 py-3 font-semibold text-gray-700 hover:bg-gray-50"
+                >
+                  Payer plus tard / Fermer
+                </button>
+              </div>
+            ) : (
+              <div className="mt-6">
+                <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <h4 className="font-bold text-gray-900">
+                      Paiement par carte
+                    </h4>
+
+                    <p className="text-xs text-gray-500">
+                      Les frais de traitement seront affichés avant
+                      la confirmation du paiement.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExtraShowCardPayment(
+                        false
+                      );
+                      setExtraPaymentMethod(
+                        null
+                      );
+                    }}
+                    className="text-sm font-semibold text-blue-600"
+                  >
+                    Retour
+                  </button>
+                </div>
+
+                <PaymentPage
+                  invoiceId={
+                    extraGuestResult
+                      .invoice_id
+                  }
+                  user={user}
+                  email={
+                    memberGuestData
+                      ?.member?.email ||
+                    user?.email ||
+                    null
+                  }
+                  invoiceType="event_visitor"
+                />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  </div>
+)}
 
 {/* === FORM PLACEHOLDER (optional — appears only when profile tab is active) === */}
 {activeTab === "profile" && (

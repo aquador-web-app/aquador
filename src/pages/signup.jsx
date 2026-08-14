@@ -191,14 +191,43 @@ const { data: authRes, error: authErr } = await supabase.auth.signUp({
 
 if (authErr) throw authErr;
 
-const uid = authRes.user.id;
+const uid = authRes.user?.id;
 
-const {
-  data: { session },
-} = await supabase.auth.getSession();
+if (!uid) {
+  throw new Error(
+    "Le compte a été créé, mais son identifiant n'a pas pu être récupéré."
+  );
+}
+
+// Prefer the session returned directly by signUp.
+// getSession() immediately afterward can occasionally race.
+let session = authRes.session || null;
 
 if (!session?.access_token) {
-  throw new Error("Session non disponible après création du compte.");
+  const {
+    data: { session: currentSession },
+  } = await supabase.auth.getSession();
+
+  session = currentSession;
+}
+
+// Give Supabase one short retry before failing.
+// This prevents a newly-created parent profile from being left
+// without the children because the session had not propagated yet.
+if (!session?.access_token) {
+  await new Promise((resolve) => setTimeout(resolve, 750));
+
+  const {
+    data: { session: retrySession },
+  } = await supabase.auth.getSession();
+
+  session = retrySession;
+}
+
+if (!session?.access_token) {
+  throw new Error(
+    "Le compte principal a été créé, mais l'inscription n'a pas pu être finalisée. Veuillez réessayer."
+  );
 }
 
       // Step 2: Generate unique referral_code
@@ -216,6 +245,17 @@ if (!session?.access_token) {
       }
 
       console.log('✅ Referral code saved to profile:', uniqueCode)
+
+      console.log("🚀 Calling create-user", {
+  uid,
+  signup_type: form.signup_type,
+  children_count: children.length,
+  children: children.map((c) => ({
+    first_name: c.first_name,
+    last_name: c.last_name,
+    birth_date: c.birth_date,
+  })),
+});
 
       // Step 4: Trigger the create-user Edge Function manually
       const createUserRes = await fetch(

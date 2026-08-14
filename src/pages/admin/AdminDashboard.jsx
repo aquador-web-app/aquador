@@ -267,6 +267,7 @@
     const [openEcole, setOpenEcole] = useState(false);   // default closed
     const [openClub, setOpenClub] = useState(false);    // default closed
     const [openSpa, setOpenSpa] = useState(false);     // default closed
+    const [openCloture, setOpenCloture] = useState(false);
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [activeNonEnrolled, setActiveNonEnrolled] = useState({
       count: 0,
@@ -2292,14 +2293,6 @@
   />
   )}
   <SidebarBtn
-  id="event-presence"
-  icon={<FaCheckToSlot />}
-  label="Présences — Clôture"
-  activeTab={activeTab}
-  setActiveTab={setActiveTab}
-  closeSidebar={() => setSidebarOpen(false)}
-/>
-  <SidebarBtn
     id="achievements"
     icon={<FaPuzzlePiece />}
     label="Réussites / Notes"
@@ -2632,16 +2625,55 @@
   {/* Admin + Assistant         */}
   {/* ========================= */}
 
-  <SidebarBtn
-    id="cloture"
-    icon={<FaUserFriends />}
-    label="Clôture"
-    activeTab={activeTab}
-    setActiveTab={setActiveTab}
-    closeSidebar={() =>
-      setSidebarOpen(false)
-    }
-  />
+  <button
+  onClick={() => {
+    setOpenCloture((prev) => {
+      const next = !prev;
+
+      if (
+        next &&
+        activeTab !== "cloture" &&
+        activeTab !== "event-presence"
+      ) {
+        setActiveTab("cloture");
+      }
+
+      return next;
+    });
+  }}
+  className={`flex items-center justify-between w-full px-3 py-2 rounded-lg ${
+    openCloture
+      ? "bg-aquaBlue text-white"
+      : "text-gray-100 hover:bg-orange-700"
+  }`}
+>
+  <span className="flex items-center gap-2">
+    <FaUserFriends />
+    Clôture
+  </span>
+
+  <span>{openCloture ? "▲" : "▼"}</span>
+</button>
+
+{openCloture && (
+  <div className="ml-4 mt-1 space-y-1">
+    <SidebarSub
+      id="cloture"
+      label="Gestion Clôture"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    />
+
+    <SidebarSub
+      id="event-presence"
+      label="Présences"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    />
+  </div>
+)}
 
   </nav>
 

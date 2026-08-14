@@ -30,6 +30,9 @@ function InstallButton() {
 function ClosureVisitorRegistration() {
   const [open, setOpen] = useState(false);
 
+  const [showMemberWarning, setShowMemberWarning] =
+  useState(false);
+
   const [country, setCountry] =
     useState("HT");
 
@@ -555,19 +558,22 @@ async function submitVisitorManualPayment() {
               Participation visiteur :
             </strong>{" "}
             USD 10.00 par personne.
+            <p className="mt-1 text-xs font-semibold text-red-600">
+    ⚠️ Frais non remboursables.
+  </p>
           </div>
 
           <div className="mt-4 space-y-3">
   <button
-    type="button"
-    onClick={() => {
-      setError("");
-      setOpen(true);
-    }}
-    className="w-full rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700"
-  >
-    Confirmer ma participation
-  </button>
+  type="button"
+  onClick={() => {
+    setError("");
+    setShowMemberWarning(true);
+  }}
+  className="w-full rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700"
+>
+  Confirmer ma participation
+</button>
 
   <Link
     to="/ceremonie/ma-participation"
@@ -578,6 +584,86 @@ async function submitVisitorManualPayment() {
 </div>
         </div>
       </div>
+
+      {/* MEMBER WARNING BEFORE PUBLIC REGISTRATION */}
+{showMemberWarning && (
+  <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 px-4 py-6">
+    <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+      <div className="text-center">
+        <div className="text-4xl">
+          ⚠️
+        </div>
+
+        <h3 className="mt-3 text-xl font-bold text-gray-900">
+          Êtes-vous déjà inscrit(e) à A'QUA D'OR ?
+        </h3>
+
+        <p className="mt-4 text-sm leading-relaxed text-gray-600">
+          Si vous êtes déjà inscrit(e) à A'QUA D'OR,
+          <strong className="text-gray-900">
+            {" "}n'utilisez pas ce portail visiteur.
+          </strong>
+        </p>
+
+        <p className="mt-3 text-sm leading-relaxed text-gray-600">
+          Veuillez vous connecter à votre profil afin de
+          confirmer votre participation à la cérémonie et
+          d'ajouter votre ou vos invités.
+        </p>
+
+        <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+          Ce portail est destiné aux personnes qui ne sont
+          pas déjà inscrites à A'QUA D'OR.
+        </div>
+      </div>
+
+      <div className="mt-6 grid gap-3 sm:grid-cols-2">
+        <button
+          type="button"
+          onClick={() => {
+            setShowMemberWarning(false);
+
+            setTimeout(() => {
+              document
+                .getElementById(
+                  "aquador-login-card"
+                )
+                ?.scrollIntoView({
+                  behavior: "smooth",
+                  block: "center",
+                });
+            }, 100);
+          }}
+          className="rounded-xl border border-blue-600 px-4 py-3 font-semibold text-blue-700 hover:bg-blue-50"
+        >
+          🔐 Me connecter
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setShowMemberWarning(false);
+            setError("");
+            setOpen(true);
+          }}
+          className="rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-700"
+        >
+          Continuer
+        </button>
+      </div>
+
+      <button
+        type="button"
+        onClick={() =>
+          setShowMemberWarning(false)
+        }
+        className="mt-3 w-full py-2 text-sm font-medium text-gray-500 hover:text-gray-700"
+      >
+        Annuler
+      </button>
+    </div>
+  </div>
+)}
 
       {/* MODAL */}
       {open && (
@@ -924,6 +1010,9 @@ async function submitVisitorManualPayment() {
       seront affichés séparément avant
       le paiement.
     </p>
+    <p className="mt-2 text-xs font-semibold text-red-600">
+  ⚠️ Les frais de participation sont non remboursables.
+</p>
   </div>
 </section>
 

@@ -22,10 +22,14 @@ function normalizePaymentStatus(status) {
   }
 
   if (value === "paid") {
-    return "paid";
-  }
+  return "paid";
+}
 
-  return "unpaid";
+if (value === "free_pass") {
+  return "free_pass";
+}
+
+return "unpaid";
 }
 
 function formatDateTime(value) {
@@ -46,7 +50,15 @@ function paymentBadge(status) {
   const normalized =
     String(status || "").toLowerCase();
 
-  if (normalized === "paid") {
+    if (normalized === "free_pass") {
+  return (
+    <span className="inline-flex rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">
+      🎟️ Free-pass
+    </span>
+  );
+}
+  
+    if (normalized === "paid") {
     return (
       <span className="inline-flex rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700">
         Payé
@@ -161,22 +173,27 @@ const lastScanTime = useRef(0);
         supabase
           .from("event_visitor_registrations")
           .select(`
-            id,
-            event_code,
-            event_name,
-            event_date,
-            full_name,
-            email,
-            phone,
-            guest_count,
-            status,
-            payment_status,
-            amount_due,
-            amount_paid,
-            stripe_payment_intent_id,
-            created_at,
-            updated_at
-          `)
+  id,
+  event_code,
+  event_name,
+  event_date,
+  full_name,
+  email,
+  phone,
+  guest_count,
+  status,
+  payment_status,
+  amount_due,
+  amount_paid,
+  stripe_payment_intent_id,
+  member_profile_id,
+  member_profile:member_profile_id (
+    id,
+    full_name
+  ),
+  created_at,
+  updated_at
+`)
           .eq(
             "event_code",
             "cloture-2026-08-29"
@@ -188,12 +205,17 @@ const lastScanTime = useRef(0);
         supabase
           .from("event_visitor_participants")
           .select(`
-            id,
-            registration_id,
-            full_name,
-            phone,
-            created_at
-          `)
+  id,
+  registration_id,
+  full_name,
+  phone,
+  free_for_profile_id,
+  created_at,
+  free_for_profile:free_for_profile_id (
+    id,
+    full_name
+  )
+`)
           .order("created_at", {
             ascending: true,
           }),
@@ -323,35 +345,209 @@ const lastScanTime = useRef(0);
   // =========================================================
 
   const rows = useMemo(() => {
-    return registrations.map(
-      (registration) => {
-        const registrationParticipants =
-          participants.filter(
-            (participant) =>
-              participant.registration_id ===
-              registration.id
-          );
+  const flattened = [];
 
-        const invoice =
-          invoices.find(
-            (invoiceRow) =>
-              invoiceRow.registration_id ===
-              registration.id
-          ) || null;
+  registrations.forEach(
+    (registration) => {
+      const registrationParticipants =
+        participants.filter(
+          (participant) =>
+            participant.registration_id ===
+            registration.id
+        );
 
-        return {
+      const invoice =
+        invoices.find(
+          (invoiceRow) =>
+            invoiceRow.registration_id ===
+            registration.id
+        ) || null;
+
+      /*
+       * If somehow an old registration has no participant row,
+       * keep it visible for administration.
+       */
+      if (
+        registrationParticipants.length ===
+        0
+      ) {
+        flattened.push({
           ...registration,
+
+          row_key:
+            `registration-${registration.id}`,
+
+          participant_id:
+            null,
+
+          participant_name:
+            registration.full_name,
+
+          participant_phone:
+            registration.phone,
+
+          participant:
+            null,
+
+          is_free_pass:
+            false,
+
+          extra_index:
+            null,
+
+          participant_total:
+            Number(
+              invoice?.total ??
+                registration.amount_due ??
+                0
+            ),
+
+          participant_paid:
+            Number(
+              invoice?.paid_total ??
+                registration.amount_paid ??
+                0
+            ),
+
+          participant_payment_status:
+            normalizePaymentStatus(
+              invoice?.status ||
+                registration.payment_status
+            ),
+
           participants:
             registrationParticipants,
+
           invoice,
-        };
+        });
+
+        return;
       }
-    );
-  }, [
-    registrations,
-    participants,
-    invoices,
-  ]);
+
+      /*
+       * Paid extras in creation order.
+       * This lets us allocate invoice payments oldest-first.
+       */
+      const paidExtras =
+        registrationParticipants
+          .filter(
+            (participant) =>
+              !participant
+                .free_for_profile_id
+          )
+          .sort(
+            (a, b) =>
+              new Date(
+                a.created_at || 0
+              ) -
+              new Date(
+                b.created_at || 0
+              )
+          );
+
+      const invoicePaidTotal =
+        Number(
+          invoice?.paid_total ??
+            registration.amount_paid ??
+            0
+        );
+
+      registrationParticipants.forEach(
+        (participant) => {
+          const isFreePass =
+            !!participant
+              .free_for_profile_id;
+
+          let participantTotal = 0;
+          let participantPaid = 0;
+          let participantPaymentStatus =
+            "free_pass";
+          let extraIndex = null;
+
+          if (!isFreePass) {
+            extraIndex =
+              paidExtras.findIndex(
+                (extra) =>
+                  extra.id ===
+                  participant.id
+              );
+
+            participantTotal = 10;
+
+            participantPaid =
+              Math.max(
+                0,
+                Math.min(
+                  10,
+                  invoicePaidTotal -
+                    extraIndex * 10
+                )
+              );
+
+            if (
+              participantPaid >= 10
+            ) {
+              participantPaymentStatus =
+                "paid";
+            } else if (
+              participantPaid > 0
+            ) {
+              participantPaymentStatus =
+                "partial";
+            } else {
+              participantPaymentStatus =
+                "unpaid";
+            }
+          }
+
+          flattened.push({
+            ...registration,
+
+            row_key:
+              `participant-${participant.id}`,
+
+            participant_id:
+              participant.id,
+
+            participant_name:
+              participant.full_name,
+
+            participant_phone:
+              participant.phone,
+
+            participant,
+
+            is_free_pass:
+              isFreePass,
+
+            extra_index:
+              extraIndex,
+
+            participant_total:
+              participantTotal,
+
+            participant_paid:
+              participantPaid,
+
+            participant_payment_status:
+              participantPaymentStatus,
+
+            participants:
+              [participant],
+
+            invoice,
+          });
+        }
+      );
+    }
+  );
+
+  return flattened;
+}, [
+  registrations,
+  participants,
+  invoices,
+]);
 
   // =========================================================
   // STATS
@@ -363,61 +559,57 @@ const lastScanTime = useRef(0);
   );
 
   const totalRegistrations =
-    activeRows.length;
+  new Set(
+    activeRows.map(
+      (row) => row.id
+    )
+  ).size;
 
-  const totalParticipants =
-    activeRows.reduce(
-      (sum, row) =>
-        sum +
-        Number(
-          row.guest_count ||
-            row.participants?.length ||
-            0
-        ),
-      0
-    );
+const totalParticipants =
+  activeRows.length;
 
-  const totalExpected =
-    activeRows.reduce(
-      (sum, row) =>
-        sum +
-        Number(
-          row.invoice?.total ??
-            row.amount_due ??
-            0
-        ),
-      0
-    );
+const totalExpected =
+  activeRows.reduce(
+    (sum, row) =>
+      sum +
+      Number(
+        row.participant_total || 0
+      ),
+    0
+  );
 
-  const totalCollected =
-    activeRows.reduce(
-      (sum, row) =>
-        sum +
-        Number(
-          row.invoice?.paid_total ??
-            row.amount_paid ??
-            0
-        ),
-      0
-    );
+const totalCollected =
+  activeRows.reduce(
+    (sum, row) =>
+      sum +
+      Number(
+        row.participant_paid || 0
+      ),
+    0
+  );
 
   const paidCount =
-    activeRows.filter(
-      (row) =>
-        (
-          row.invoice?.status ||
-          row.payment_status
-        ) === "paid"
-    ).length;
+  activeRows.filter(
+    (row) =>
+      row.participant_payment_status ===
+      "paid"
+  ).length;
+
+  const freePassCount =
+  activeRows.filter(
+    (row) =>
+      row.participant_payment_status ===
+      "free_pass"
+  ).length;
 
   const unpaidCount =
-    activeRows.filter(
-      (row) =>
-        (
-          row.invoice?.status ||
-          row.payment_status
-        ) !== "paid"
-    ).length;
+  activeRows.filter(
+    (row) =>
+      row.participant_payment_status ===
+        "unpaid" ||
+      row.participant_payment_status ===
+        "partial"
+  ).length;
 
   // =========================================================
   // FILTERS
@@ -430,10 +622,7 @@ const lastScanTime = useRef(0);
 
       return rows.filter((row) => {
         const paymentStatus =
-  normalizePaymentStatus(
-    row.invoice?.status ||
-      row.payment_status
-  );
+  row.participant_payment_status;
 
         if (
           paymentFilter !== "all" &&
@@ -794,7 +983,7 @@ setPaymentModal(null);
       )}
 
       {/* STATS */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-7">
         <div className="rounded-xl border bg-white p-4 shadow-sm">
           <p className="text-xs text-gray-500">
             Inscriptions
@@ -824,6 +1013,16 @@ setPaymentModal(null);
             {paidCount}
           </p>
         </div>
+
+        <div className="rounded-xl border bg-white p-4 shadow-sm">
+  <p className="text-xs text-gray-500">
+    Free-pass
+  </p>
+
+  <p className="mt-1 text-2xl font-bold text-blue-600">
+    {freePassCount}
+  </p>
+</div>
 
         <div className="rounded-xl border bg-white p-4 shadow-sm">
           <p className="text-xs text-gray-500">
@@ -884,6 +1083,10 @@ setPaymentModal(null);
           <option value="paid">
             Payés
           </option>
+
+          <option value="free_pass">
+  Free-pass
+</option>
 
           <option value="partial">
             Partiels
@@ -972,17 +1175,14 @@ setPaymentModal(null);
                 filteredRows.map(
                   (row) => {
                     const isExpanded =
-                      expandedId ===
-                      row.id;
+  expandedId ===
+  row.row_key;
 
                     const paymentStatus =
-  normalizePaymentStatus(
-    row.invoice?.status ||
-      row.payment_status
-  );
+  row.participant_payment_status;
 
                     return (
-                      <Fragment key={row.id}>
+                      <Fragment key={row.row_key}>
                         <tr
                           className={
                             row.status ===
@@ -993,18 +1193,32 @@ setPaymentModal(null);
                         >
                           <td className="px-4 py-3">
                             <p className="font-semibold text-gray-900">
-                              {row.full_name}
-                            </p>
+  {row.participant_name}
+</p>
 
-                            <p className="text-xs text-gray-500">
-                              {row.phone}
-                            </p>
+<p className="text-xs text-gray-500">
+  {row.participant_phone}
+</p>
 
                             {row.email && (
                               <p className="text-xs text-gray-500">
                                 {row.email}
                               </p>
                             )}
+
+                           {row.member_profile?.full_name && (
+  <p className="mt-1 text-xs font-semibold text-blue-700">
+    Invité de :{" "}
+    {row.member_profile.full_name}
+  </p>
+)}
+
+{!row.is_free_pass &&
+  row.member_profile_id && (
+    <p className="mt-1 text-xs font-semibold text-purple-700">
+      Personne supplémentaire
+    </p>
+)}
 
                             <p className="mt-1 text-[11px] text-gray-400">
                               {formatDateTime(
@@ -1014,7 +1228,7 @@ setPaymentModal(null);
                           </td>
 
                           <td className="px-4 py-3 text-center font-semibold">
-                            {row.guest_count}
+                            1
                           </td>
 
                           <td className="px-4 py-3">
@@ -1025,18 +1239,14 @@ setPaymentModal(null);
 
                           <td className="px-4 py-3 text-right font-semibold">
                             {money(
-                              row.invoice
-                                ?.total ??
-                                row.amount_due
-                            )}
+  row.participant_total
+)}
                           </td>
 
                           <td className="px-4 py-3 text-right">
                             {money(
-                              row.invoice
-                                ?.paid_total ??
-                                row.amount_paid
-                            )}
+  row.participant_paid
+)}
                           </td>
 
                           <td className="px-4 py-3 text-center">
@@ -1056,12 +1266,12 @@ setPaymentModal(null);
                               <button
                                 type="button"
                                 onClick={() =>
-                                  setExpandedId(
-                                    isExpanded
-                                      ? null
-                                      : row.id
-                                  )
-                                }
+  setExpandedId(
+    isExpanded
+      ? null
+      : row.row_key
+  )
+}
                                 className="rounded-lg border px-3 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-50"
                               >
                                 {isExpanded
@@ -1073,7 +1283,7 @@ setPaymentModal(null);
                                 type="button"
                                 disabled={
                                   savingId ===
-                                  row.id
+                                  row.row_key
                                 }
                                 onClick={() =>
                                   toggleRegistrationStatus(
@@ -1088,7 +1298,7 @@ setPaymentModal(null);
                                 }`}
                               >
                                 {savingId ===
-                                row.id
+                                row.row_key
                                   ? "..."
                                   : row.status ===
                                     "cancelled"
@@ -1101,7 +1311,7 @@ setPaymentModal(null);
 
                         {isExpanded && (
                           <tr
-                            key={`${row.id}-details`}
+                            key={`${row.row_key}-details`}
                           >
                             <td
                               colSpan={8}
@@ -1181,11 +1391,11 @@ setPaymentModal(null);
                                       </span>
 
                                       <strong>
-                                        {money(
-                                          row
-                                            .invoice
-                                            ?.total
-                                        )}
+                                        <strong>
+  {money(
+    row.participant_total
+  )}
+</strong>
                                       </strong>
                                     </div>
 
@@ -1195,11 +1405,11 @@ setPaymentModal(null);
                                       </span>
 
                                       <strong>
-                                        {money(
-                                          row
-                                            .invoice
-                                            ?.paid_total
-                                        )}
+                                        <strong>
+  {money(
+    row.participant_paid
+  )}
+</strong>
                                       </strong>
                                     </div>
 
@@ -1209,23 +1419,21 @@ setPaymentModal(null);
                                       </span>
 
                                       <strong>
-                                        {money(
-                                          Math.max(
-                                            0,
-                                            Number(
-                                              row
-                                                .invoice
-                                                ?.total ||
-                                                0
-                                            ) -
-                                              Number(
-                                                row
-                                                  .invoice
-                                                  ?.paid_total ||
-                                                  0
-                                              )
-                                          )
-                                        )}
+                                        <strong>
+  {money(
+    Math.max(
+      0,
+      Number(
+        row.participant_total ||
+          0
+      ) -
+        Number(
+          row.participant_paid ||
+            0
+        )
+    )
+  )}
+</strong>
                                       </strong>
                                     </div>
 
@@ -1247,16 +1455,23 @@ setPaymentModal(null);
                                     )}
                                     {row.invoice &&
   paymentStatus !== "paid" &&
+  paymentStatus !== "free_pass" &&
+  Number(row.participant_total || 0) >
+    Number(row.participant_paid || 0) &&
   row.status !== "cancelled" && (
     <div className="border-t pt-3">
       <button
         type="button"
         onClick={() => {
           const balance = Math.max(
-            0,
-            Number(row.invoice.total || 0) -
-              Number(row.invoice.paid_total || 0)
-          );
+  0,
+  Number(
+    row.participant_total || 0
+  ) -
+    Number(
+      row.participant_paid || 0
+    )
+);
 
           setPaymentModal(row);
           setPaymentAmount(
@@ -1560,6 +1775,13 @@ function ClotureScanResult({
   const isPaid =
     total > 0 && paid >= total;
 
+  const isFreePass =
+  String(
+    invoice.status ||
+      registration.payment_status ||
+      ""
+  ).toLowerCase() === "free_pass";
+
   const isCancelled =
     registration.status ===
     "cancelled";
@@ -1568,19 +1790,23 @@ function ClotureScanResult({
     <div className="mt-5 space-y-4">
       <div
         className={`rounded-xl border p-5 text-center ${
-          isCancelled
-            ? "border-red-300 bg-red-50"
-            : isPaid
-            ? "border-green-300 bg-green-50"
-            : "border-yellow-300 bg-yellow-50"
-        }`}
+  isCancelled
+    ? "border-red-300 bg-red-50"
+    : isFreePass
+    ? "border-blue-300 bg-blue-50"
+    : isPaid
+    ? "border-green-300 bg-green-50"
+    : "border-yellow-300 bg-yellow-50"
+}`}
       >
         <div className="text-4xl">
           {isCancelled
-            ? "⛔"
-            : isPaid
-            ? "✅"
-            : "⚠️"}
+  ? "⛔"
+  : isFreePass
+  ? "🎟️"
+  : isPaid
+  ? "✅"
+  : "⚠️"}
         </div>
 
         <h3 className="mt-2 text-xl font-bold text-gray-900">
@@ -1589,10 +1815,12 @@ function ClotureScanResult({
 
         <p className="mt-1 font-semibold">
           {isCancelled
-            ? "Inscription annulée"
-            : isPaid
-            ? "Inscription confirmée — Payée"
-            : "Inscription confirmée — Paiement incomplet"}
+  ? "Inscription annulée"
+  : isFreePass
+  ? "Inscription confirmée — Free-pass"
+  : isPaid
+  ? "Inscription confirmée — Payée"
+  : "Inscription confirmée — Paiement incomplet"}
         </p>
       </div>
 
@@ -1658,6 +1886,12 @@ function ClotureScanResult({
                 <p className="text-sm text-gray-500">
                   {participant.phone}
                 </p>
+                {participant.free_for_profile?.full_name && (
+  <p className="mt-1 text-xs font-semibold text-blue-700">
+    🎟️ Invité de :{" "}
+    {participant.free_for_profile.full_name}
+  </p>
+)}
               </div>
             )
           )}
