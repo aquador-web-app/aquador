@@ -16,6 +16,7 @@ import {
 } from "react-icons/fa";
 import { formatCurrencyUSD } from "../../lib/dateUtils";
 import { useGlobalAlert } from "../../components/GlobalAlert";
+import PaymentPage from "../../components/payments/PaymentPage";
 
 export default function UserBoutique() {
   // ---------------- State ----------------
@@ -34,6 +35,11 @@ export default function UserBoutique() {
   const [openCart, setOpenCart] = useState(false);
   const [method, setMethod] = useState("commission");
   const [submitting, setSubmitting] = useState(false);
+  const [stripeInvoiceId, setStripeInvoiceId] =
+  useState(null);
+
+const [showStripePayment, setShowStripePayment] =
+  useState(false);
 
   // Virement proof
   const [proofUploading, setProofUploading] = useState(false);
@@ -245,33 +251,77 @@ export default function UserBoutique() {
       );
       if (error) throw error;
 
-      const invoiceId = inv?.id || inv;
+      const invoiceId =
+  inv?.id || inv;
 
-      if (method === "virement" && proofUrl && invoiceId) {
-        try {
-          await supabase
-            .from("boutique_invoices")
-            .update({ proof_url: proofUrl })
-            .eq("id", invoiceId);
-        } catch (e) {
-          console.warn("Could not save proof_url on invoice:", e?.message);
-        }
-      }
+if (!invoiceId) {
+  throw new Error(
+    "La facture de la boutique n'a pas pu être créée."
+  );
+}
 
-      showAlert(
-        method === "commission"
-          ? "Achat effectué avec vos commissions ✅"
-          : "Commande enregistrée. En attente de validation."
-      );
+/* =========================================================
+   CARD / STRIPE
+   ========================================================= */
 
-      setOpenCart(false);
-      clearCart();
-      setMethod("commission");
-      setProofUrl("");
+if (method === "stripe") {
+  setStripeInvoiceId(invoiceId);
+  setShowStripePayment(true);
 
-      waitForPdf(invoiceId);
-      loadProducts();
-      refreshCommissionBalance(user.id);
+  // Do NOT close the cart.
+  // Do NOT clear the cart yet.
+  // The customer still has to complete Stripe payment.
+  return;
+}
+
+/* =========================================================
+   BANK TRANSFER
+   ========================================================= */
+
+if (
+  method === "virement" &&
+  proofUrl
+) {
+  try {
+    const { error: proofError } =
+      await supabase
+        .from("boutique_invoices")
+        .update({
+          proof_url: proofUrl,
+        })
+        .eq("id", invoiceId);
+
+    if (proofError) {
+      throw proofError;
+    }
+  } catch (e) {
+    console.warn(
+      "Could not save proof_url on invoice:",
+      e?.message
+    );
+  }
+}
+
+/* =========================================================
+   NON-CARD ORDER COMPLETED
+   ========================================================= */
+
+await showAlert(
+  method === "commission"
+    ? "Achat effectué avec vos commissions ✅"
+    : "Commande enregistrée. En attente de validation."
+);
+
+setOpenCart(false);
+clearCart();
+setMethod("commission");
+setProofUrl("");
+
+waitForPdf(invoiceId);
+loadProducts();
+refreshCommissionBalance(
+  user.id
+);
     } catch (err) {
       alert("Erreur lors de la commande : " + err.message);
     } finally {
@@ -451,7 +501,15 @@ export default function UserBoutique() {
                 Panier & Paiement
               </h3>
               <button
-                onClick={() => setOpenCart(false)}
+                onClick={() => {
+  if (showStripePayment) {
+    setShowStripePayment(false);
+    setStripeInvoiceId(null);
+    return;
+  }
+
+  setOpenCart(false);
+}}
                 className="text-gray-500 hover:text-gray-700"
                 title="Fermer"
               >
@@ -546,7 +604,8 @@ export default function UserBoutique() {
                   ))}
                 </div>
 
-                {/* Payment Section */}
+               {/* Payment Section */}
+{!showStripePayment ? (
 <div className="mt-6 space-y-4">
   {/* Payment Method */}
   <div>
@@ -561,7 +620,7 @@ export default function UserBoutique() {
         },
         {
           key: "stripe",
-          label: "Carte (Stripe)",
+          label: "Carte",
           icon: <FaCreditCard />,
         },
         {
@@ -665,6 +724,45 @@ export default function UserBoutique() {
     </div>
   </div>
 </div>
+) : (
+  <div className="mt-6">
+    <div className="mb-4 flex items-start justify-between gap-4">
+      <div>
+        <h4 className="font-bold text-gray-900">
+          Paiement par carte
+        </h4>
+
+        <p className="mt-1 text-sm text-gray-500">
+          Complétez votre paiement sécurisé par carte.
+        </p>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => {
+          setShowStripePayment(false);
+          setStripeInvoiceId(null);
+        }}
+        className="text-sm font-semibold text-blue-600 hover:underline"
+      >
+        Retour
+      </button>
+    </div>
+
+    {stripeInvoiceId && (
+      <PaymentPage
+        invoiceId={
+          stripeInvoiceId
+        }
+        user={user}
+        email={
+          user?.email || null
+        }
+        invoiceType="boutique"
+      />
+    )}
+  </div>
+)}
 
               </>
             )}

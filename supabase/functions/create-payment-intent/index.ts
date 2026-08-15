@@ -115,6 +115,7 @@ serve(async (req: Request) => {
       "spa",
       "boutique",
       "event_visitor",
+      "cloture_tombola",
     ];
 
     if (!allowedTypes.includes(invoice_type)) {
@@ -474,6 +475,116 @@ else if (invoice_type === "event_visitor") {
   defaultDescription =
     "A'QUA D'OR Closing Ceremony Visitor Payment";
 }
+
+// =========================================================
+// CLOTURE TOMBOLA
+// =========================================================
+else if (
+  invoice_type ===
+  "cloture_tombola"
+) {
+  tableName =
+    "cloture_tombola_payments";
+
+  paymentTable =
+    "cloture_tombola_payments";
+
+  const {
+    data,
+    error,
+  } = await supabase
+    .from(
+      "cloture_tombola_payments"
+    )
+    .select(`
+      id,
+      event_code,
+      full_name,
+      phone,
+      email,
+      ticket_count,
+      amount_usd,
+      status,
+      stripe_payment_intent_id
+    `)
+    .eq("id", invoice_id)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
+    return jsonResponse(
+      {
+        error:
+          "Tombola payment not found",
+      },
+      404
+    );
+  }
+
+  if (
+    data.event_code !==
+    "cloture-2026-08-29"
+  ) {
+    return jsonResponse(
+      {
+        error:
+          "Invalid Tombola event",
+      },
+      400
+    );
+  }
+
+  if (
+    data.status === "paid"
+  ) {
+    return jsonResponse(
+      {
+        error:
+          "This Tombola payment is already paid",
+        code:
+          "TOMBOLA_ALREADY_PAID",
+      },
+      409
+    );
+  }
+
+  invoice = data;
+
+  const amount =
+    Number(
+      data.amount_usd || 0
+    );
+
+  amountCents =
+    Math.round(
+      amount * 100
+    );
+
+  invoiceNo =
+    `TOMBOLA-${String(
+      data.id
+    )
+      .slice(0, 8)
+      .toUpperCase()}`;
+
+  customerEmail =
+    data.email ||
+    customerEmail;
+
+  defaultDescription =
+    `A'QUA D'OR Tombola — ${
+      data.ticket_count
+    } billet${
+      Number(
+        data.ticket_count
+      ) > 1
+        ? "s"
+        : ""
+    }`;
+}
   
 
     // =========================================================
@@ -580,12 +691,22 @@ if (
 ) {
   existingPaymentIntentId =
     invoice.stripe_payment_intent_id;
+
 } else if (
   invoice_type === "event_visitor" &&
   invoice.stripe_payment_intent_id
 ) {
   existingPaymentIntentId =
     invoice.stripe_payment_intent_id;
+
+} else if (
+  invoice_type ===
+    "cloture_tombola" &&
+  invoice.stripe_payment_intent_id
+) {
+  existingPaymentIntentId =
+    invoice.stripe_payment_intent_id;
+
 } else if (
   invoice_type === "club_booking" &&
   invoice.stripe_payment_intent
@@ -798,6 +919,24 @@ charge_amount_cents:
     String(invoice.registration_id);
 }
 
+if (
+  invoice_type ===
+  "cloture_tombola"
+) {
+  metadata.tombola_payment_id =
+    String(invoice.id);
+
+  metadata.ticket_count =
+    String(
+      invoice.ticket_count
+    );
+
+  metadata.event_code =
+    String(
+      invoice.event_code
+    );
+}
+
     // =========================================================
 // CARD PAYMENT AMOUNTS
 // =========================================================
@@ -886,6 +1025,35 @@ if (invoice_type === "event_visitor") {
   if (updateError) {
     throw new Error(
       `Failed storing event visitor PaymentIntent: ${updateError.message}`
+    );
+  }
+}
+
+if (
+  invoice_type ===
+  "cloture_tombola"
+) {
+  const {
+    error: updateError,
+  } = await supabase
+    .from(
+      "cloture_tombola_payments"
+    )
+    .update({
+      stripe_payment_intent_id:
+        paymentIntent.id,
+
+      updated_at:
+        new Date().toISOString(),
+    })
+    .eq(
+      "id",
+      invoice_id
+    );
+
+  if (updateError) {
+    throw new Error(
+      `Failed storing Tombola PaymentIntent: ${updateError.message}`
     );
   }
 }

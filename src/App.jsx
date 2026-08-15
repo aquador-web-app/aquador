@@ -15,6 +15,7 @@ import ClubQRScanner from "./pages/Club/ClubQRScanner";
 import ClubSignup from "./pages/Club/ClubSignup";
 import AdminClubMembership from "./pages/admin/AdminClubMembership";
 import MassageLanding from "./pages/MassageLanding";
+import ClotureTombolaPayment from "./pages/ClotureTombolaPayment";
 
 
 
@@ -173,6 +174,12 @@ useEffect(() => {
 <Route
   path="/ceremonie/ma-participation"
   element={<ClotureVisitorAccess />}
+/>
+<Route
+  path="/cloture/tombola"
+  element={
+    <ClotureTombolaPayment />
+  }
 />
 
       

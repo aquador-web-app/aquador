@@ -1326,6 +1326,196 @@ if (registration?.email) {
   };
 }
 
+// ============================================================
+// CLOTURE TOMBOLA
+// cloture_tombola_payments
+// ============================================================
+
+async function handleClotureTombolaPayment(
+  intent: Stripe.PaymentIntent,
+  paymentId: string
+) {
+  const {
+    data: payment,
+    error: paymentError,
+  } = await supabase
+    .from(
+      "cloture_tombola_payments"
+    )
+    .select(`
+      id,
+      event_code,
+      full_name,
+      phone,
+      email,
+      ticket_count,
+      amount_usd,
+      status,
+      stripe_payment_intent_id,
+      paid_at
+    `)
+    .eq("id", paymentId)
+    .maybeSingle();
+
+  if (paymentError) {
+    throw paymentError;
+  }
+
+  if (!payment) {
+    throw new Error(
+      `Tombola payment not found: ${paymentId}`
+    );
+  }
+
+  if (
+    payment.event_code !==
+    "cloture-2026-08-29"
+  ) {
+    throw new Error(
+      `Invalid Tombola event for payment ${paymentId}`
+    );
+  }
+
+  // =========================================================
+  // AMOUNTS
+  // =========================================================
+
+  const {
+    invoiceAmount,
+    processingFee,
+    chargedAmount,
+  } = getStripePaymentAmounts(
+    intent
+  );
+
+  const expectedAmount =
+    Number(
+      payment.amount_usd || 0
+    );
+
+  if (
+    !Number.isFinite(
+      invoiceAmount
+    ) ||
+    invoiceAmount <= 0
+  ) {
+    throw new Error(
+      `Invalid Tombola Stripe amount for ${intent.id}`
+    );
+  }
+
+  // Safety:
+  // The amount credited by Stripe metadata must match
+  // the server-side Tombola package price.
+  if (
+    Math.round(
+      invoiceAmount * 100
+    ) !==
+    Math.round(
+      expectedAmount * 100
+    )
+  ) {
+    throw new Error(
+      `Tombola amount mismatch for ${intent.id}: expected USD ${expectedAmount.toFixed(
+        2
+      )}, received USD ${invoiceAmount.toFixed(
+        2
+      )}`
+    );
+  }
+
+  // =========================================================
+  // DUPLICATE PROTECTION
+  // =========================================================
+
+  if (
+    payment.status === "paid"
+  ) {
+    if (
+      payment
+        .stripe_payment_intent_id ===
+      intent.id
+    ) {
+      console.log(
+        `Duplicate Tombola Stripe payment ignored: ${intent.id}`
+      );
+
+      return {
+        duplicate: true,
+      };
+    }
+
+    throw new Error(
+      `Tombola payment ${paymentId} is already marked paid with another PaymentIntent.`
+    );
+  }
+
+  // =========================================================
+  // MARK PAID
+  // =========================================================
+
+  const now =
+    new Date().toISOString();
+
+  const {
+    error: updateError,
+  } = await supabase
+    .from(
+      "cloture_tombola_payments"
+    )
+    .update({
+      status:
+        "paid",
+
+      stripe_payment_intent_id:
+        intent.id,
+
+      paid_at:
+        now,
+
+      updated_at:
+        now,
+    })
+    .eq(
+      "id",
+      payment.id
+    );
+
+  if (updateError) {
+    throw updateError;
+  }
+
+  console.log(
+    "Cloture Tombola payment processed",
+    {
+      payment_id:
+        payment.id,
+
+      full_name:
+        payment.full_name,
+
+      ticket_count:
+        payment.ticket_count,
+
+      payment_intent:
+        intent.id,
+
+      amount:
+        invoiceAmount,
+
+      processing_fee:
+        processingFee,
+
+      stripe_charged:
+        chargedAmount,
+    }
+  );
+
+  return {
+    duplicate: false,
+  };
+}
+
 
 // ============================================================
 // ROUTER FOR PAYMENT INTENTS
@@ -1422,6 +1612,12 @@ stripe_charge_cents:
 
 case "event_visitor":
   return await handleEventVisitorPayment(
+    intent,
+    invoiceId
+  );
+
+case "cloture_tombola":
+  return await handleClotureTombolaPayment(
     intent,
     invoiceId
   );
@@ -1722,6 +1918,52 @@ serve(
                 "Unknown failure",
             }
           );
+
+          const failedInvoiceType =
+  intent.metadata
+    ?.invoice_type;
+
+const failedInvoiceId =
+  intent.metadata
+    ?.invoice_id;
+
+if (
+  failedInvoiceType ===
+    "cloture_tombola" &&
+  failedInvoiceId
+) {
+  const {
+    error: failedUpdateError,
+  } = await supabase
+    .from(
+      "cloture_tombola_payments"
+    )
+    .update({
+      status:
+        "failed",
+
+      stripe_payment_intent_id:
+        intent.id,
+
+      updated_at:
+        new Date().toISOString(),
+    })
+    .eq(
+      "id",
+      failedInvoiceId
+    )
+    .neq(
+      "status",
+      "paid"
+    );
+
+  if (failedUpdateError) {
+    console.error(
+      "Unable to mark Tombola payment as failed:",
+      failedUpdateError
+    );
+  }
+}
 
           break;
         }

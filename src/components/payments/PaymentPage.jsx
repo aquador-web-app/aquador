@@ -21,6 +21,7 @@ const TITLES = {
   spa: "Paiement — Spa",
   boutique: "Paiement — Boutique",
   event_visitor: "Paiement — Cérémonie de clôture",
+  cloture_tombola: "Paiement — Tombola",
 };
 
 const DESCRIPTIONS = {
@@ -30,6 +31,7 @@ const DESCRIPTIONS = {
   spa: "A'QUA D'OR Spa Payment",
   boutique: "A'QUA D'OR Boutique Payment",
   event_visitor: "A'QUA D'OR Closing Ceremony Visitor Payment",
+  cloture_tombola: "A'QUA D'OR Tombola Payment",
 };
 
 function money(value) {

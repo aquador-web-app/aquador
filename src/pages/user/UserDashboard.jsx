@@ -1573,25 +1573,87 @@ async function submitExtraManualPayment() {
   }
 
   const registrationPhone =
-    memberGuestData
-      ?.participants?.[0]
-      ?.phone ||
-    memberGuestData?.member?.phone;
+  memberGuestData?.member?.phone;
 
-  const registrationEmail =
-    memberGuestData?.member?.email;
+const registrationEmail =
+  memberGuestData?.member?.email;
 
-  if (
-    !registrationPhone ||
-    !registrationEmail
-  ) {
-    await showAlert(
-      "Impossible de retrouver les coordonnées liées à cette inscription."
-    );
-    return;
+if (
+  !registrationPhone ||
+  !registrationEmail
+) {
+  await showAlert(
+    "Impossible de retrouver les coordonnées liées à cette inscription."
+  );
+  return;
+}
+
+/* =========================================================
+   CHECK FOR AN EXISTING PENDING PAYMENT
+   ========================================================= */
+
+try {
+  const {
+    data: pendingPayments,
+    error: pendingError,
+  } = await supabase
+    .from("event_visitor_payments")
+    .select(`
+      id,
+      amount,
+      method,
+      created_at
+    `)
+    .eq(
+      "registration_id",
+      extraGuestResult.registration_id
+    )
+    .eq("approved", false)
+    .order("created_at", {
+      ascending: false,
+    });
+
+  if (pendingError) {
+    throw pendingError;
   }
 
-  try {
+  if (
+    pendingPayments &&
+    pendingPayments.length > 0
+  ) {
+    const pendingTotal =
+      pendingPayments.reduce(
+        (sum, payment) =>
+          sum +
+          Number(payment.amount || 0),
+        0
+      );
+
+    const continueAnyway =
+      await showConfirm(
+        `⚠️ Un paiement de USD ${pendingTotal.toFixed(
+          2
+        )} est déjà en attente de validation pour cette participation.\n\nVeuillez éviter de soumettre le même paiement deux fois.\n\nSouhaitez-vous quand même effectuer un autre paiement ?`
+      );
+
+    if (!continueAnyway) {
+      return;
+    }
+  }
+} catch (pendingCheckError) {
+  console.error(
+    "Pending event payment check error:",
+    pendingCheckError
+  );
+
+  await showAlert(
+    "Impossible de vérifier les paiements en attente. Veuillez réessayer."
+  );
+
+  return;
+}
+
+try {
     setExtraManualSubmitting(true);
     setExtraManualMessage("");
 
