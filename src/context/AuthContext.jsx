@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import OneSignal from "react-onesignal";
 
@@ -8,14 +8,11 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const resolvingRef = useRef(false);
+
 
   // 🔐 SAFE resolver: session is truth; profile is optional
   const resolveUser = async (session) => {
-    // prevent overlapping resolves
-    if (resolvingRef.current) return;
-    resolvingRef.current = true;
-
+    
     try {
       if (!session?.user) {
         setUser(null);
@@ -57,47 +54,65 @@ export function AuthProvider({ children }) {
       }
     } finally {
       setLoading(false);
-      resolvingRef.current = false;
     }
   };
 
   // 1️⃣ initial session + auth changes
   useEffect(() => {
-    let mounted = true;
+  let mounted = true;
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (mounted) resolveUser(session);
+  // =========================================================
+  // INITIAL SESSION
+  // Safe to resolve normally here
+  // =========================================================
+
+  supabase.auth
+    .getSession()
+    .then(({ data: { session } }) => {
+      if (!mounted) return;
+
+      resolveUser(session);
+    })
+    .catch((err) => {
+      console.error(
+        "Initial auth session error:",
+        err
+      );
+
+      if (mounted) {
+        setLoading(false);
+      }
     });
 
-    const { data: { subscription } } =
-      supabase.auth.onAuthStateChange((_event, session) => {
-        if (mounted) resolveUser(session);
-      });
+  // =========================================================
+  // AUTH STATE CHANGES
+  //
+  // IMPORTANT:
+  // Do NOT call Supabase queries directly inside
+  // onAuthStateChange.
+  // Defer resolveUser to the next event-loop tick.
+  // =========================================================
 
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
-  }, []);
+  const {
+    data: { subscription },
+  } = supabase.auth.onAuthStateChange(
+    (_event, session) => {
+      if (!mounted) return;
 
-  // 3️⃣ 🔄 Proactive token refresh every 10 minutes to prevent expiry
-  useEffect(() => {
-    const REFRESH_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+      setTimeout(() => {
+        if (!mounted) return;
 
-    const refreshToken = async () => {
-      try {
-        const { error } = await supabase.auth.refreshSession();
-        if (error) console.warn("⚠️ Token refresh failed:", error.message);
-      } catch (e) {
-        console.warn("⚠️ Token refresh threw:", e);
-      }
-    };
+        resolveUser(session);
+      }, 0);
+    }
+  );
 
-    // Refresh immediately in case the token is already close to expiry
-    refreshToken();
-    const interval = setInterval(refreshToken, REFRESH_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, []);
+  return () => {
+    mounted = false;
+    subscription.unsubscribe();
+  };
+}, []);
+
 
   // 2️⃣ ⏱️ loader failsafe (NEVER logs out)
   useEffect(() => {
