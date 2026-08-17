@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { formatDateFrSafe } from "../../lib/dateUtils";
+import TeacherNiveauAssignment from "../teacher/TeacherNiveauAssignment";
 
 function safeStr(v) {
   return (v ?? "").toString();
@@ -12,7 +13,7 @@ function normalize(s) {
 }
 
 export default function AdminAchievements() {
-  const [tab, setTab] = useState("certificates"); // certificates | achievements | notes
+  const [tab, setTab] = useState("certificates"); // certificates | achievements | notes | student-levels
 
   const [uiError, setUiError] = useState("");
   const [uiOk, setUiOk] = useState("");
@@ -403,10 +404,23 @@ export default function AdminAchievements() {
       {/* Tabs */}
       <div className="flex gap-2 flex-wrap">
         {[
-          { k: "certificates", label: "Certificates" },
-          { k: "achievements", label: "Achievements" },
-          { k: "notes", label: "Teacher Notes" },
-        ].map((t) => (
+  {
+    k: "certificates",
+    label: "Certificates",
+  },
+  {
+    k: "achievements",
+    label: "Achievements",
+  },
+  {
+    k: "notes",
+    label: "Teacher Notes",
+  },
+  {
+    k: "student-levels",
+    label: "Niveau Étudiant",
+  },
+].map((t) => (
           <button
             key={t.k}
             className={`px-4 py-2 rounded-xl border text-sm ${
@@ -419,8 +433,9 @@ export default function AdminAchievements() {
         ))}
       </div>
 
-      {/* Shared student picker (used for assignment; optional filtering later) */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center justify-between gap-3 flex-wrap">
+      {/* Shared student picker */}
+{tab !== "student-levels" && (
+<div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center justify-between gap-3 flex-wrap">
         <div className="text-sm text-gray-700">
           Student (for assignment):
           <span className="ml-2 font-semibold">
@@ -443,6 +458,7 @@ export default function AdminAchievements() {
           ))}
         </select>
       </div>
+      )}
 
       {/* TAB PANELS */}
       {tab === "certificates" && (
@@ -726,6 +742,9 @@ export default function AdminAchievements() {
           )}
         </div>
       )}
+      {tab === "student-levels" && (
+  <TeacherNiveauAssignment />
+)}
     </div>
   );
 }

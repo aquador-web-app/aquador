@@ -20,6 +20,7 @@
   import useConfirmLogoutOnBack from "../../hooks/useConfirmLogoutOnBack";
   import TeacherContractPage from "./TeacherContractPage";
   import TeacherSalary from "./TeacherSalary";
+  import TeacherNiveauAssignment from "./TeacherNiveauAssignment";
 
 
 
@@ -555,6 +556,19 @@
   <FaWallet /> Salaire
 </button>
 
+<button
+  onClick={() =>
+    goToTab("student-levels")
+  }
+  className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-left ${
+    activeTab === "student-levels"
+      ? "bg-aquaBlue text-white"
+      : "text-gray-100 hover:bg-orange-700"
+  }`}
+>
+  🏊 Niveaux des élèves
+</button>
+
             <button
               onClick={() => goToTab("contract")}
               className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-left ${
@@ -631,8 +645,12 @@
 
           {activeTab === "presence" && <Presence />}
           {activeTab === "bulletins" && <Bulletins />}
+          {activeTab === "student-levels" && (
+  <TeacherNiveauAssignment />
+)}
           {activeTab === "salary" && <TeacherSalary />}
           {activeTab === "contract" && <TeacherContractPage />}
+
         </main>
       </div>
     );

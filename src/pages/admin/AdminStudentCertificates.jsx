@@ -284,6 +284,10 @@ if (underline) {
 const [levelsLoading, setLevelsLoading] = useState(false);
 const [levels, setLevels] = useState([]);
 const [selectedLevelId, setSelectedLevelId] = useState("");
+const [
+  assignedLevelLoading,
+  setAssignedLevelLoading,
+] = useState(false);
 
 const selectedLevel = useMemo(
   () =>
@@ -369,6 +373,19 @@ const studentOptions = useMemo(() => {
 const selectedStudent = useMemo(() => {
   return studentOptions.find((o) => String(o.value) === String(selectedStudentId))?.raw || null;
 }, [studentOptions, selectedStudentId]);
+
+useEffect(() => {
+  if (!selectedStudentId) {
+    setSelectedLevelId("");
+    return;
+  }
+
+  fetchLatestStudentLevel(
+    selectedStudentId
+  );
+
+// eslint-disable-next-line react-hooks/exhaustive-deps
+}, [selectedStudentId]);
 
     // Preview HTML
     const previewHtml = useMemo(() => {
@@ -595,16 +612,15 @@ const studentDob = selectedStudent?.birth_date
     setLevels(list);
 
     if (
-      selectedLevelId &&
-      list.some(
-        (level) =>
-          String(level.id) === String(selectedLevelId)
-      )
-    ) {
-      return;
-    }
-
-    setSelectedLevelId(list[0]?.id || "");
+  selectedLevelId &&
+  !list.some(
+    (level) =>
+      String(level.id) ===
+      String(selectedLevelId)
+  )
+) {
+  setSelectedLevelId("");
+}
   } catch (error) {
     console.error("fetchLevels error:", error);
     setLevels([]);
@@ -648,6 +664,75 @@ const studentDob = selectedStudent?.birth_date
     setSelectedStudentId("");
   } finally {
     setStudentsLoading(false);
+  }
+}
+
+async function fetchLatestStudentLevel(
+  profileId
+) {
+  if (!profileId) {
+    setSelectedLevelId("");
+    return;
+  }
+
+  setAssignedLevelLoading(true);
+
+  try {
+    const { data, error } =
+      await supabase
+        .from(
+          "student_swim_levels"
+        )
+        .select(`
+          id,
+          profile_id,
+          level_id,
+          academic_year,
+          assigned_by,
+          assigned_at
+        `)
+        .eq(
+          "profile_id",
+          profileId
+        )
+        .eq(
+          "academic_year",
+          "2025-2026"
+        )
+        .order(
+          "assigned_at",
+          {
+            ascending: false,
+          }
+        )
+        .limit(1)
+        .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    setSelectedLevelId(
+      data?.level_id || ""
+    );
+  } catch (error) {
+    console.error(
+      "fetchLatestStudentLevel error:",
+      error
+    );
+
+    setSelectedLevelId("");
+
+    setUiError(
+      `Impossible de récupérer le niveau actuel de l'élève : ${
+        error?.message ||
+        String(error)
+      }`
+    );
+  } finally {
+    setAssignedLevelLoading(
+      false
+    );
   }
 }
 
@@ -1196,6 +1281,11 @@ const studentDob = selectedStudent?.birth_date
                 </option>
               ))}
             </select>
+            {selectedLevel?.description && (
+  <div className="mt-2 max-w-[280px] text-xs leading-relaxed text-gray-500">
+    {selectedLevel.description}
+  </div>
+)}
           </div>
 
           <select
