@@ -58,7 +58,7 @@
   import AdminStudentCertificates from "./AdminStudentCertificates";
   import AdminAchievements from "./AdminAchievements";
   import AdminCardImpressions from "./AdminCardImpressions";
-  import AdminEventPresence from "./AdminEventPresence";
+  import AdminCloturePresence from "./AdminCloturePresence";
   import AdminSpa from "./AdminSpa";
   import AdminSpaInvoices from "./Spa/AdminSpaInvoices";
   import AdminSpaClients from "./Spa/AdminSpaClients";
@@ -70,6 +70,7 @@
   import AdminSpaReservations from "./Spa/AdminSpaReservations";
   import AdminCloture from "./AdminCloture";
   import AdminCloturePayment from "./AdminCloturePayment";
+  import AdminClotureGestionPresence from "./AdminClotureGestionPresence";
 
 
   function SidebarBtn({ id, icon, label, activeTab, setActiveTab, closeSidebar }) {
@@ -1805,7 +1806,7 @@
         case "reports-cards":
           return <AdminCardImpressions />;
         case "event-presence":
-          return <AdminEventPresence />;
+          return <AdminCloturePresence />;
         case "spa-overview":
           return <AdminSpa />;
         case "spa-reservations":
@@ -1828,6 +1829,8 @@
           return <AdminCloture />;
         case "cloture-payments":
           return <AdminCloturePayment />;
+        case "cloture-gestion-presence":
+          return <AdminClotureGestionPresence />;
 
         default:
           return <h2 className="text-xl">Sélectionnez une section</h2>
@@ -2638,6 +2641,7 @@
         next &&
         activeTab !== "cloture" &&
         activeTab !== "event-presence" &&
+        activeTab !== "cloture-gestion-presence" &&
         activeTab !== "cloture-payments"
       ) {
         setActiveTab("cloture");
@@ -2671,12 +2675,20 @@
     />
 
     <SidebarSub
-      id="event-presence"
-      label="Présences"
-      activeTab={activeTab}
-      setActiveTab={setActiveTab}
-      closeSidebar={() => setSidebarOpen(false)}
-    />
+  id="event-presence"
+  label="Confirmations élèves"
+  activeTab={activeTab}
+  setActiveTab={setActiveTab}
+  closeSidebar={() => setSidebarOpen(false)}
+/>
+
+<SidebarSub
+  id="cloture-gestion-presence"
+  label="Gestion Présence"
+  activeTab={activeTab}
+  setActiveTab={setActiveTab}
+  closeSidebar={() => setSidebarOpen(false)}
+/>
 
     <SidebarSub
   id="cloture-payments"

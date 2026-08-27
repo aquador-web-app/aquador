@@ -134,24 +134,61 @@ const handleAddChild = (parentId) => {
 }
 
   async function handleDelete(id) {
-  if (!confirm("Êtes-vous sûr de vouloir supprimer cet utilisateur ?")) return;
-  
-  // Delete from auth
-  const { error: authError } = await supabase.auth.admin.deleteUser(id);
-  if (authError) {
-    console.error("Auth delete error:", authError.message);
-    alert("Erreur Auth: " + authError.message);
+  if (
+    !confirm(
+      "Êtes-vous sûr de vouloir supprimer définitivement cet utilisateur ?"
+    )
+  ) {
     return;
   }
 
-  // Delete profile
-  const { error: deleteError } = await supabase.from("profiles").delete().eq("id", id);
-  if (deleteError) {
-    console.error("Delete error:", deleteError.message);
-    alert("Erreur Profile: " + deleteError.message);
-  } else {
-    console.log("Delete success");
-    fetchUsers();
+  try {
+    setSavingRow(id);
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      throw new Error("Session administrateur introuvable.");
+    }
+
+    const response = await fetch(
+      `${import.meta.env.VITE_SUPABASE_FUNCTIONS_URL}/admin-delete-user`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          user_id: id,
+        }),
+      }
+    );
+
+    const result = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(
+        result?.error ||
+          `Erreur serveur (${response.status})`
+      );
+    }
+
+    await fetchUsers();
+
+    alert("Utilisateur supprimé avec succès.");
+  } catch (error) {
+    console.error("Delete user error:", error);
+
+    alert(
+      "Erreur lors de la suppression : " +
+        (error?.message || String(error))
+    );
+  } finally {
+    setSavingRow(null);
   }
 }
 

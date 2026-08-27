@@ -20,7 +20,7 @@ function formatDateTime(value) {
   }
 }
 
-export default function AdminEventPresence() {
+export default function AdminCloturePresence() {
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState([]);
   const [search, setSearch] = useState("");
