@@ -9,6 +9,14 @@ import { supabase } from "../../lib/supabaseClient";
 
 const EVENT_CODE = "cloture-2026-08-29";
 
+// =========================================================
+// MANUAL EVENT OVERRIDES
+// =========================================================
+
+const FORCED_VISITOR_PROFILE_IDS = new Set([
+  "beedd869-f57a-4234-9a62-6fad8437f95f", // Tamara Alexandre
+]);
+
 const EXTRA_GUEST_PRICE = 10;
 
 
@@ -385,24 +393,31 @@ setCancelledStudents(
     // =======================================================
 
     students.forEach((confirmation) => {
-      const profile =
-        confirmation.participant;
+  const profile =
+    confirmation.participant;
 
-      if (!profile?.id) return;
+  if (!profile?.id) return;
 
-      const checkin = getCheckin(
-        "student",
-        profile.id
-      );
+  const isForcedVisitor =
+    FORCED_VISITOR_PROFILE_IDS.has(
+      profile.id
+    );
 
-      output.push({
+  const checkin = getCheckin(
+    "student",
+    profile.id
+  );
+
+  output.push({
         row_key:
           `student-${profile.id}`,
 
         source_type: "student",
         source_id: profile.id,
 
-        person_type: "student",
+        person_type: isForcedVisitor
+  ? "visitor"
+  : "student",
 
         full_name:
           profile.full_name || "—",
@@ -421,11 +436,12 @@ setCancelledStudents(
           confirmation.confirmer?.full_name ||
           null,
 
-        payment_status:
-          "student",
+        payment_status: isForcedVisitor
+  ? "free_pass"
+  : "student",
 
-        amount_due: 0,
-        amount_paid: 0,
+amount_due: 0,
+amount_paid: 0,
 
         registration_id: null,
         invoice_no: null,

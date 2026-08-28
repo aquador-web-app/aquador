@@ -336,29 +336,40 @@ useEffect(() => {
   const saveAll = async () => {
     if (!studentId) return setGlobalErreur("Veuillez sélectionner un élève.");
 
-    const records = sessionRows
-      .filter((r) => r.date)
-      .map((r) => ({
-        student_id: studentId,
-        student_name: studentName,
-        month: monthRange.label,
-        academic_year: academicYear,
-        date: r.date,
-        respiration: r.respiration || null,
-        flottage: r.flottage || null,
-        battement: r.battement || null,
-        posture: r.posture || null,
-        attentif: r.attentif || null,
-        maitrise: r.maitrise || null,
-        reaction: r.reaction || null,
-        esprit_equipe: r.esprit_equipe || null,
-        performance: r.performance || null,
-        estime_de_soi: r.estime_de_soi || null,
-        perseverance: r.perseverance || null,
-        discipline: r.discipline || null,
-        devoirs: r.devoirs || null,
-        notes: r.notes?.trim() || null,
-      }));
+    const evaluationFields = Object.values(FIELDS).flat();
+
+const records = sessionRows
+  .filter((r) => {
+    if (!r.date) return false;
+
+    return evaluationFields.some(
+      (field) =>
+        r[field] !== null &&
+        r[field] !== undefined &&
+        String(r[field]).trim() !== ""
+    );
+  })
+  .map((r) => ({
+    student_id: studentId,
+    student_name: studentName,
+    month: monthRange.label,
+    academic_year: academicYear,
+    date: r.date,
+    respiration: r.respiration || null,
+    flottage: r.flottage || null,
+    battement: r.battement || null,
+    posture: r.posture || null,
+    attentif: r.attentif || null,
+    maitrise: r.maitrise || null,
+    reaction: r.reaction || null,
+    esprit_equipe: r.esprit_equipe || null,
+    performance: r.performance || null,
+    estime_de_soi: r.estime_de_soi || null,
+    perseverance: r.perseverance || null,
+    discipline: r.discipline || null,
+    devoirs: r.devoirs || null,
+    notes: r.notes?.trim() || null,
+  }));
 
     if (!records.length)
       return setGlobalErreur("Aucune ligne valide à enregistrer.");
