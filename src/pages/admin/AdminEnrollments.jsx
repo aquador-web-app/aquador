@@ -3,6 +3,10 @@ import { supabase } from "../../lib/supabaseClient";
 import { normalizeISODate, formatDateFrSafe, formatCurrencyUSD } from "../../lib/dateUtils";
 import { useGlobalAlert } from "../../components/GlobalAlert";
 import { useAuth } from "../../context/AuthContext";
+import {
+  getAcademicYearFromDate,
+  getCurrentAcademicYear,
+} from "../../lib/academicYear";
 
 
 
@@ -810,16 +814,15 @@ alert(
     setSelectedHours([]);
     setStartDate("");
   } catch (err) {
-  console.error("RPC Error:", err);
+  console.error("RPC Error FULL:", err);
 
-  if (
-    err?.message?.toLowerCase().includes("déjà inscrit") ||
-    err?.code === "23505"
-  ) {
-    alert("⚠️ Cet étudiant est déjà inscrit à ce créneau.");
-  } else {
-    alert("Erreur inscription: " + err.message);
-  }
+  alert(
+    `Erreur inscription\n\n` +
+    `Message: ${err?.message || "—"}\n` +
+    `Code: ${err?.code || "—"}\n` +
+    `Details: ${err?.details || "—"}\n` +
+    `Hint: ${err?.hint || "—"}`
+  );
 } finally {
     setLoading(false);
   }
@@ -831,6 +834,12 @@ const [dayFilter, setDayFilter] = useState("");    // "", "0".."6"
 const [timeFilter, setTimeFilter] = useState("");  // "", "08h-09h" etc.
 const [nameFilter, setNameFilter] = useState(""); // filter by student name
 
+const [schoolYearFilter, setSchoolYearFilter] = useState(
+  getCurrentAcademicYear()
+);
+const [statusFilter, setStatusFilter] = useState("active");
+
+
 // hour options for the filter dropdown
 const hourOptions = useMemo(() => {
   const set = new Set((enrollments || [])
@@ -839,36 +848,116 @@ const hourOptions = useMemo(() => {
   return Array.from(set).sort();
 }, [enrollments, plans, seriesByCourse]);
 
+const availableSchoolYears = useMemo(() => {
+  const years = new Set();
+
+  for (const enrollment of enrollments || []) {
+    if (!enrollment.start_date) continue;
+
+    const academicYear = getAcademicYearFromDate(enrollment.start_date);
+
+    if (academicYear) {
+      years.add(academicYear);
+    }
+  }
+
+  // Make sure current year is always available,
+  // even before the first enrollment is created.
+  years.add(getCurrentAcademicYear());
+
+  return Array.from(years).sort().reverse();
+}, [enrollments]);
+
+
 // ✅ define filteredEnrollments BEFORE using it
 const filteredEnrollments = useMemo(() => {
   const needle = nameFilter.trim().toLowerCase();
 
   return (enrollments || []).filter((e) => {
-    // ✅ name filter
+    // Name
     if (needle) {
       const fullName = (e.profiles?.full_name || e.full_name || "").toLowerCase();
       if (!fullName.includes(needle)) return false;
     }
 
-    if (filterCourseId && e.course_id !== filterCourseId) return false;
-    if (filterHours && Number(e.plans?.duration_hours ?? 0) !== Number(filterHours)) return false;
-
-    if (dayFilter !== "") {
-      const dowDb = e.sessions?.day_of_week != null ? Number(e.sessions.day_of_week) - 1 : null; // 0..6
-      const dowJs = e.start_date ? new Date(e.start_date).getDay() : null;
-      const dow = dowDb ?? dowJs;
-      if (String(dow) !== String(dayFilter)) return false;
+    // Academic year
+    if (
+      schoolYearFilter &&
+      getAcademicYearFromDate(e.start_date) !== schoolYearFilter
+    ) {
+      return false;
     }
 
-    if (timeFilter && timeFilter !== "" && heureRange(e, plans, seriesByCourse) !== timeFilter) return false;
+    // Status
+    if (statusFilter && e.status !== statusFilter) {
+      return false;
+    }
+
+    // Course
+    if (filterCourseId && e.course_id !== filterCourseId) {
+      return false;
+    }
+
+    // Duration
+    if (
+      filterHours &&
+      Number(e.plans?.duration_hours ?? 0) !== Number(filterHours)
+    ) {
+      return false;
+    }
+
+    // Day
+    if (dayFilter !== "") {
+      const dowDb =
+        e.sessions?.day_of_week != null
+          ? Number(e.sessions.day_of_week) - 1
+          : null;
+
+      const dowJs = e.start_date
+        ? new Date(`${normalizeISODate(e.start_date)}T00:00:00`).getDay()
+        : null;
+
+      const dow = dowDb ?? dowJs;
+
+      if (String(dow) !== String(dayFilter)) {
+        return false;
+      }
+    }
+
+    // Time
+    if (
+      timeFilter &&
+      heureRange(e, plans, seriesByCourse) !== timeFilter
+    ) {
+      return false;
+    }
 
     return true;
   });
-}, [enrollments, plans, seriesByCourse, filterCourseId, filterHours, dayFilter, timeFilter, nameFilter]);
+}, [
+  enrollments,
+  plans,
+  seriesByCourse,
+  filterCourseId,
+  filterHours,
+  dayFilter,
+  timeFilter,
+  nameFilter,
+  schoolYearFilter,
+  statusFilter,
+]);
 
 useEffect(() => {
   setPage(1);
-}, [filterCourseId, filterHours, dayFilter, timeFilter, nameFilter]);
+}, [
+  filterCourseId,
+  filterHours,
+  dayFilter,
+  timeFilter,
+  nameFilter,
+  schoolYearFilter,
+  statusFilter,
+]);
 
 const enrolledCount = filteredEnrollments.length;
 
@@ -1181,6 +1270,36 @@ const Pager = () => (
 
       {/* Table with filters */}
       <div className="flex flex-wrap gap-3 mb-3">
+        <div>
+  <label className="block text-sm mb-1">Année académique</label>
+  <select
+    value={schoolYearFilter}
+    onChange={(e) => setSchoolYearFilter(e.target.value)}
+    className="border rounded px-2 py-1 text-sm"
+  >
+    <option value="">Toutes les années</option>
+
+{availableSchoolYears.map((year) => (
+  <option key={year} value={year}>
+    {year}
+  </option>
+))}
+  </select>
+</div>
+
+<div>
+  <label className="block text-sm mb-1">Statut</label>
+  <select
+    value={statusFilter}
+    onChange={(e) => setStatusFilter(e.target.value)}
+    className="border rounded px-2 py-1 text-sm"
+  >
+    <option value="">Tous les statuts</option>
+    <option value="active">Actif</option>
+    <option value="cancelled">Annulé</option>
+    <option value="paused">En pause</option>
+  </select>
+</div>
   <label className="text-sm">Nom</label>
 <input
   value={nameFilter}

@@ -2,6 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { formatDateFrSafe, formatCurrencyUSD } from "../../lib/dateUtils";
 import { useGlobalAlert } from "../../components/GlobalAlert";
+import {
+  getAcademicYearFromDate,
+  getCurrentAcademicYear,
+} from "../../lib/academicYear";
 
 
 // Calculate and update remaining capacity only for main session rows
@@ -85,8 +89,14 @@ function* eachDay(start, end) {
 
 export default function AdminSessions() {
   const { showAlert, showConfirm } = useGlobalAlert();
-  // series list & expansion
-  const [series, setSeries] = useState([]);
+
+// School year
+const [schoolYearFilter, setSchoolYearFilter] = useState(
+  getCurrentAcademicYear()
+);
+
+// series list & expansion
+const [series, setSeries] = useState([]);
   const [expanded, setExpanded] = useState({}); // { [seriesId]: true|false }
   const [sessionsBySeries, setSessionsBySeries] = useState({}); // { [seriesId]: Session[] }
   
@@ -513,6 +523,27 @@ for (const d of eachDay(start, end)) {
     return m;
   }, [courses]);
 
+  const availableSchoolYears = useMemo(() => {
+  const years = new Set();
+
+  for (const row of series || []) {
+    if (!row.start_date) continue;
+
+    const year = getAcademicYearFromDate(row.start_date);
+    if (year) years.add(year);
+  }
+
+  return Array.from(years).sort().reverse();
+}, [series]);
+
+const filteredSeries = useMemo(() => {
+  if (!schoolYearFilter) return series;
+
+  return (series || []).filter(
+    (row) => getAcademicYearFromDate(row.start_date) === schoolYearFilter
+  );
+}, [series, schoolYearFilter]);
+
   return (
     <div className="p-6">
       {/* Form */}
@@ -661,8 +692,31 @@ for (const d of eachDay(start, end)) {
       </div>
 
       {/* Series list */}
-      <h3 className="text-lg font-semibold mb-2">Séries existantes</h3>
-      <table className="min-w-full bg-white border border-gray-200 shadow-sm rounded-lg">
+<div className="flex flex-wrap items-end justify-between gap-3 mb-3">
+  <h3 className="text-lg font-semibold">Séries existantes</h3>
+
+  <div>
+    <label className="block text-sm font-medium mb-1">
+      Année académique
+    </label>
+
+    <select
+      value={schoolYearFilter}
+      onChange={(e) => setSchoolYearFilter(e.target.value)}
+      className="border rounded px-3 py-2 text-sm bg-white"
+    >
+      <option value="">Toutes les années</option>
+
+      {availableSchoolYears.map((year) => (
+        <option key={year} value={year}>
+          {year}
+        </option>
+      ))}
+    </select>
+  </div>
+</div>
+
+<table className="min-w-full bg-white border border-gray-200 shadow-sm rounded-lg">
         <thead className="bg-gray-100">
           <tr>
             <th className="px-2 py-1 text-left">Cours</th>
@@ -678,7 +732,7 @@ for (const d of eachDay(start, end)) {
           </tr>
         </thead>
         <tbody>
-          {series.map((row) => {
+          {filteredSeries.map((row) => {
             const isOpen = !!expanded[row.id];
             const courseName = row.courses?.name || courseNameById.get(row.course_id) || "—";
             return (
@@ -696,7 +750,7 @@ for (const d of eachDay(start, end)) {
               />
             );
           })}
-          {series.length === 0 && (
+          {filteredSeries.length === 0 && (
             <tr>
               <td colSpan={10} className="text-center py-4 text-gray-500">
                 Aucune série trouvée.

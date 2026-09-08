@@ -78,6 +78,14 @@ function groupByMonth(rows) {
     const { showAlert } = useGlobalAlert();
     const [proofUrl, setProofUrl] = useState(null);
     const [uploadingProof, setUploadingProof] = useState(false);
+    const [hasAdvancePayment, setHasAdvancePayment] = useState(false);
+
+const [advanceAllocations, setAdvanceAllocations] = useState([
+  {
+    targetMonth: "",
+    amount: "",
+  },
+]);
 
     useEffect(() => {
   const saved = localStorage.getItem("payment_proof_url");
@@ -143,159 +151,514 @@ if (!profile) {
   }
 }
 
-    
-    const handleSubmit = async () => {
-  if (selectedMethod === "cash" || selectedMethod === "virement") {
-    if (!selectedInvoice?.length) {
-      showAlert("Veuillez sélectionner au moins une facture.");
-      return;
-    }
+// ---------- Advance payment helpers ----------
 
-    if (selectedMethod === "virement" && uploadingProof) {
-  showAlert("Veuillez patienter pendant le téléversement de la preuve.");
-  setSubmitting(false);
-  return;
-}
-
-if (selectedMethod === "virement" && !proofUrl) {
-  showAlert("Veuillez joindre une preuve de virement.");
-  setSubmitting(false);
-  return;
-}
-
-
-    setSubmitting(true);
-
-    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-    if (sessionError || !sessionData?.session) {
-      showAlert("Session expirée. Veuillez vous reconnecter.");
-      setSubmitting(false);
-      return;
-    }
-
-    const user = sessionData.session.user;
-
-    // Prepare total and proof (if any)
-const proofUrlToSave = proofUrl;
-
-
-        // ✅ Get all unpaid invoices selected
-    const selectedUnpaidInvoices = invoices.filter((inv) =>
-  selectedInvoice.includes(inv.id)
+const advanceTotal = advanceAllocations.reduce(
+  (sum, row) => sum + Number(row.amount || 0),
+  0
 );
 
+const currentInvoiceAllocation = Math.max(
+  0,
+  Number(customAmount || 0) - advanceTotal
+);
 
-    // ✅ Calculate total remaining
-    const totalRemaining = selectedUnpaidInvoices.reduce(
-      (sum, inv) => sum + Math.max(Number(inv.total) - Number(inv.paid_total), 0),
+function updateAdvanceAllocation(index, field, value) {
+  setAdvanceAllocations((prev) =>
+    prev.map((row, i) =>
+      i === index
+        ? {
+            ...row,
+            [field]: value,
+          }
+        : row
+    )
+  );
+}
+
+function addAdvanceAllocation() {
+  setAdvanceAllocations((prev) => [
+    ...prev,
+    {
+      targetMonth: "",
+      amount: "",
+    },
+  ]);
+}
+
+function removeAdvanceAllocation(index) {
+  setAdvanceAllocations((prev) => {
+    if (prev.length === 1) {
+      return [
+        {
+          targetMonth: "",
+          amount: "",
+        },
+      ];
+    }
+
+    return prev.filter((_, i) => i !== index);
+  });
+}
+
+function resetAdvancePaymentForm() {
+  setHasAdvancePayment(false);
+  setAdvanceAllocations([
+    {
+      targetMonth: "",
+      amount: "",
+    },
+  ]);
+}
+
+    
+    const handleSubmit = async () => {
+  if (selectedMethod !== "cash" && selectedMethod !== "virement") {
+    return;
+  }
+
+  if (!selectedInvoice?.length) {
+    showAlert("Veuillez sélectionner au moins une facture.");
+    return;
+  }
+
+  if (selectedMethod === "virement" && uploadingProof) {
+    showAlert(
+      "Veuillez patienter pendant le téléversement de la preuve."
+    );
+    return;
+  }
+
+  if (selectedMethod === "virement" && !proofUrl) {
+    showAlert("Veuillez joindre une preuve de virement.");
+    return;
+  }
+
+  /*
+   * Advance payments must belong to ONE source invoice.
+   *
+   * Normal payments can still use the existing
+   * multi-invoice FIFO distribution.
+   */
+  if (hasAdvancePayment && selectedInvoice.length !== 1) {
+    showAlert(
+      "Pour effectuer un paiement anticipé, veuillez sélectionner une seule facture."
+    );
+    return;
+  }
+
+  const selectedUnpaidInvoices = invoices.filter((inv) =>
+    selectedInvoice.includes(inv.id)
+  );
+
+  if (selectedUnpaidInvoices.length === 0) {
+    showAlert("Aucune facture valide sélectionnée.");
+    return;
+  }
+
+  const totalRemaining = selectedUnpaidInvoices.reduce(
+    (sum, inv) =>
+      sum +
+      Math.max(
+        Number(inv.total || 0) -
+          Number(inv.paid_total || 0),
+        0
+      ),
+    0
+  );
+
+  if (
+  hasAdvancePayment &&
+  (!customAmount || Number(customAmount) <= 0)
+) {
+  showAlert(
+    "Veuillez entrer le montant total du paiement reçu avant d’ajouter un paiement anticipé."
+  );
+  return;
+}
+
+  const totalToPay =
+    Number(customAmount) > 0
+      ? Number(customAmount)
+      : totalRemaining;
+
+  if (!Number.isFinite(totalToPay) || totalToPay <= 0) {
+    showAlert("Veuillez entrer un montant valide.");
+    return;
+  }
+
+  /*
+   * Validate future allocations.
+   */
+  const validAdvanceAllocations = hasAdvancePayment
+    ? advanceAllocations.filter(
+        (row) =>
+          row.targetMonth &&
+          Number(row.amount || 0) > 0
+      )
+    : [];
+
+  if (hasAdvancePayment) {
+    if (validAdvanceAllocations.length === 0) {
+      showAlert(
+        "Veuillez ajouter au moins un mois de paiement anticipé."
+      );
+      return;
+    }
+
+    if (
+      validAdvanceAllocations.length !==
+      advanceAllocations.length
+    ) {
+      showAlert(
+        "Veuillez compléter le mois et le montant de chaque paiement anticipé."
+      );
+      return;
+    }
+
+    const sourceInvoice = selectedUnpaidInvoices[0];
+    const sourceMonth = String(
+      sourceInvoice.month || ""
+    ).slice(0, 7);
+
+    if (!sourceMonth) {
+      showAlert(
+        "Le mois de la facture sélectionnée est introuvable."
+      );
+      return;
+    }
+
+    for (const allocation of validAdvanceAllocations) {
+      if (allocation.targetMonth <= sourceMonth) {
+        showAlert(
+          "Chaque paiement anticipé doit viser un mois postérieur à celui de la facture sélectionnée."
+        );
+        return;
+      }
+    }
+
+    if (advanceTotal > totalToPay) {
+      showAlert(
+        "Le total des paiements anticipés ne peut pas dépasser le montant payé."
+      );
+      return;
+    }
+
+    /*
+     * The portion left for the current invoice cannot exceed
+     * its actual outstanding balance.
+     */
+    const sourceRemaining = Math.max(
+      Number(sourceInvoice.total || 0) -
+        Number(sourceInvoice.paid_total || 0),
       0
     );
 
-    // ✅ Determine total to pay (use entered amount or pay full)
-    const totalToPay = Number(customAmount) > 0 ? Number(customAmount) : totalRemaining;
+    const amountForCurrentInvoice =
+      totalToPay - advanceTotal;
 
-    if (totalToPay > totalRemaining) {
+    if (amountForCurrentInvoice > sourceRemaining) {
       showAlert(
-        `Le montant total (${formatCurrencyUSD(totalToPay)}) ne peut pas dépasser le total restant (${formatCurrencyUSD(totalRemaining)}).`
+        `La part affectée à la facture actuelle (${formatCurrencyUSD(
+          amountForCurrentInvoice
+        )}) dépasse son solde restant (${formatCurrencyUSD(
+          sourceRemaining
+        )}).`
       );
-      setSubmitting(false);
       return;
     }
 
+    const duplicateMonths = validAdvanceAllocations.map(
+  (row) => row.targetMonth
+);
 
-    // 🔒 Prevent double pending payment for same invoice(s)
-const { data: existingPending, error: pendingErr } = await supabase
-  .from("payments")
-  .select("id, invoice_id")
-  .in("invoice_id", selectedInvoice)
-  .eq("approved", false);
-
-if (pendingErr) {
-  showAlert("Erreur de vérification des paiements existants.");
-  setSubmitting(false);
-  return;
-}
-
-if (existingPending && existingPending.length > 0) {
+if (
+  new Set(duplicateMonths).size !==
+  duplicateMonths.length
+) {
   showAlert(
-    "⛔ Vous avez déjà une demande de paiement en cours pour cette facture. Veuillez attendre sa validation."
+    "Le même mois ne peut pas être ajouté deux fois."
   );
-  setSubmitting(false);
   return;
 }
+  } else {
+    /*
+     * Preserve the original rule for ordinary payments.
+     */
+    if (totalToPay > totalRemaining) {
+      showAlert(
+        `Le montant total (${formatCurrencyUSD(
+          totalToPay
+        )}) ne peut pas dépasser le total restant (${formatCurrencyUSD(
+          totalRemaining
+        )}).`
+      );
+      return;
+    }
+  }
 
+  setSubmitting(true);
 
-    // 🔥 FIFO Distribution Logic
-    let remainingToDistribute = totalToPay;
+  try {
+    const {
+      data: sessionData,
+      error: sessionError,
+    } = await supabase.auth.getSession();
 
-    for (const inv of selectedUnpaidInvoices) {
-      if (remainingToDistribute <= 0) break;
+    if (sessionError || !sessionData?.session) {
+      throw new Error(
+        "Session expirée. Veuillez vous reconnecter."
+      );
+    }
 
-      const invRemaining = Math.max(Number(inv.total) - Number(inv.paid_total), 0);
-      const paymentAmount = Math.min(invRemaining, remainingToDistribute);
+    const user = sessionData.session.user;
+    const proofUrlToSave = proofUrl;
 
-      if (paymentAmount <= 0) continue;
+    /*
+     * Prevent another pending payment for the selected
+     * source invoice(s).
+     */
+    const {
+      data: existingPending,
+      error: pendingErr,
+    } = await supabase
+      .from("payments")
+      .select("id, invoice_id")
+      .in("invoice_id", selectedInvoice)
+      .eq("approved", false);
 
-      const { error: payErr } = await supabase.from("payments").insert([
-        {
-          invoice_id: inv.id,
-          amount: paymentAmount,
-          method: selectedMethod === "cash" ? "cash" : "transfer",
-          notes:
-            selectedMethod === "virement"
-              ? `Preuve de virement envoyée (${formatCurrencyUSD(paymentAmount)})`
-              : `Paiement en espèces soumis (${formatCurrencyUSD(paymentAmount)})`,
-          paid_at: new Date().toISOString(),
-          approved: false,
-          created_by: user.id,
-          role: "assistant",
-        },
-      ]);
+    if (pendingErr) {
+      throw new Error(
+        "Erreur de vérification des paiements existants."
+      );
+    }
 
-      if (payErr) {
-        console.error("Erreur création paiement:", payErr);
-        showAlert("Erreur enregistrement paiement: " + payErr.message);
-        setSubmitting(false);
-        return;
+    if (existingPending?.length > 0) {
+      showAlert(
+        "⛔ Vous avez déjà une demande de paiement en cours pour cette facture. Veuillez attendre sa validation."
+      );
+      return;
+    }
+
+    /*
+     * =====================================================
+     * ADVANCE PAYMENT
+     * =====================================================
+     *
+     * One real payment is created for the entire amount.
+     * Future portions are stored as pending allocation
+     * instructions until admin approval.
+     */
+    if (hasAdvancePayment) {
+      const sourceInvoice = selectedUnpaidInvoices[0];
+
+      const {
+        data: insertedPayment,
+        error: payErr,
+      } = await supabase
+        .from("payments")
+        .insert([
+          {
+            invoice_id: sourceInvoice.id,
+            amount: totalToPay,
+            method:
+              selectedMethod === "cash"
+                ? "cash"
+                : "transfer",
+            notes:
+              selectedMethod === "virement"
+                ? `Preuve de virement envoyée (${formatCurrencyUSD(
+                    totalToPay
+                  )}) - paiement anticipé inclus`
+                : `Paiement en espèces soumis (${formatCurrencyUSD(
+                    totalToPay
+                  )}) - paiement anticipé inclus`,
+            paid_at: new Date().toISOString(),
+            approved: false,
+            created_by: user.id,
+            role: "assistant",
+          },
+        ])
+        .select("id")
+        .single();
+
+      if (payErr) throw payErr;
+
+      if (!insertedPayment?.id) {
+        throw new Error(
+          "Le paiement a été créé mais son identifiant est introuvable."
+        );
       }
 
-      // Deduct the distributed amount
-      remainingToDistribute -= paymentAmount;
+      /*
+       * Store every future allocation as pending.
+       */
+      for (const allocation of validAdvanceAllocations) {
+        const { error: allocationErr } =
+          await supabase.rpc(
+            "create_pending_advance_allocation",
+            {
+              p_payment_id: insertedPayment.id,
+              p_target_month:
+                `${allocation.targetMonth}-01`,
+              p_amount: Number(allocation.amount),
+              p_category: "natation",
+            }
+          );
 
-      // Optionally: attach proof URL to invoice
-      if (proofUrlToSave && selectedMethod === "virement") {
-        await supabase.from("invoices").update({ proof_url: proofUrlToSave }).eq("id", inv.id);
+        if (allocationErr) throw allocationErr;
+      }
+
+      if (
+        proofUrlToSave &&
+        selectedMethod === "virement"
+      ) {
+        const { error: proofErr } = await supabase
+          .from("invoices")
+          .update({ proof_url: proofUrlToSave })
+          .eq("id", sourceInvoice.id);
+
+        if (proofErr) throw proofErr;
+      }
+    } else {
+      /*
+       * =====================================================
+       * NORMAL PAYMENT
+       * =====================================================
+       *
+       * Preserve the existing multi-invoice FIFO behavior.
+       */
+      let remainingToDistribute = totalToPay;
+
+      for (const inv of selectedUnpaidInvoices) {
+        if (remainingToDistribute <= 0) break;
+
+        const invRemaining = Math.max(
+          Number(inv.total || 0) -
+            Number(inv.paid_total || 0),
+          0
+        );
+
+        const paymentAmount = Math.min(
+          invRemaining,
+          remainingToDistribute
+        );
+
+        if (paymentAmount <= 0) continue;
+
+        const { error: payErr } = await supabase
+          .from("payments")
+          .insert([
+            {
+              invoice_id: inv.id,
+              amount: paymentAmount,
+              method:
+                selectedMethod === "cash"
+                  ? "cash"
+                  : "transfer",
+              notes:
+                selectedMethod === "virement"
+                  ? `Preuve de virement envoyée (${formatCurrencyUSD(
+                      paymentAmount
+                    )})`
+                  : `Paiement en espèces soumis (${formatCurrencyUSD(
+                      paymentAmount
+                    )})`,
+              paid_at: new Date().toISOString(),
+              approved: false,
+              created_by: user.id,
+              role: "assistant",
+            },
+          ]);
+
+        if (payErr) throw payErr;
+
+        remainingToDistribute -= paymentAmount;
+
+        if (
+          proofUrlToSave &&
+          selectedMethod === "virement"
+        ) {
+          const { error: proofErr } = await supabase
+            .from("invoices")
+            .update({
+              proof_url: proofUrlToSave,
+            })
+            .eq("id", inv.id);
+
+          if (proofErr) throw proofErr;
+        }
       }
     }
 
+    /*
+     * Notify admin.
+     */
+    const { error: emailErr } = await supabase
+      .from("email_queue")
+      .insert({
+        to: "deadrien@clubaquador.com",
+        subject:
+          selectedMethod === "cash"
+            ? hasAdvancePayment
+              ? "Nouveau paiement en espèces avec paiement anticipé"
+              : "Nouveau paiement en espèces en attente d’approbation"
+            : hasAdvancePayment
+            ? "Virement avec paiement anticipé soumis"
+            : "Preuve de virement soumise",
+        body: hasAdvancePayment
+          ? `${profile?.full_name} a soumis un paiement de ${formatCurrencyUSD(
+              totalToPay
+            )}, dont ${formatCurrencyUSD(
+              advanceTotal
+            )} destiné à un ou plusieurs mois futurs.`
+          : `${profile?.full_name} a soumis un paiement ${selectedMethod} pour ${selectedInvoice.length} facture(s).`,
+        status: "pending",
+        kind: "payment_notice",
+        user_id: userId,
+      });
 
-    // Optional email alert for admin
-    await supabase.from("email_queue").insert({
-      to: "deadrien@clubaquador.com",
-      subject:
-        selectedMethod === "cash"
-          ? "Nouveau paiement en espèces en attente d’approbation"
-          : "Preuve de virement soumise",
-      body: `${profile?.full_name} a soumis un paiement ${selectedMethod} pour ${selectedInvoice.length} facture(s).`,
-      status: "pending",
-      kind: "payment_notice",
-      user_id: userId,
-    });
+    if (emailErr) {
+      console.error(
+        "Erreur notification paiement:",
+        emailErr
+      );
+    }
 
     setNotification(
-      selectedMethod === "cash"
+      hasAdvancePayment
+        ? `Votre paiement de ${formatCurrencyUSD(
+            totalToPay
+          )} a été soumis. ${formatCurrencyUSD(
+            advanceTotal
+          )} sera réservé pour le(s) mois futur(s) indiqué(s) après validation par l’administrateur.`
+        : selectedMethod === "cash"
         ? "Votre paiement en espèces a été soumis pour approbation par l’administrateur 💵."
         : "Votre virement a été soumis. 🏦 Un responsable validera la preuve prochainement."
     );
 
     setActiveTab("factures");
-    setSubmitting(false);
     setSelectedInvoice([]);
     setSelectedMethod(null);
+    setCustomAmount("");
     setProofUrl(null);
+    resetAdvancePaymentForm();
 
-    // ✅ clear saved proof after success
-localStorage.removeItem("payment_proof_url");
+    localStorage.removeItem(
+      "payment_proof_url"
+    );
+  } catch (err) {
+    console.error(
+      "Erreur soumission paiement:",
+      err
+    );
+
+    showAlert(
+      "Erreur enregistrement paiement: " +
+        err.message
+    );
+  } finally {
+    setSubmitting(false);
   }
 };
 
@@ -423,11 +786,155 @@ localStorage.removeItem("payment_proof_url");
     onChange={(e) => setCustomAmount(e.target.value)}
     className="w-48 text-center border border-gray-300 rounded-lg px-3 py-2 text-gray-700 focus:ring-2 focus:ring-blue-200"
   />
-  <p className="text-xs text-gray-500 mt-1">
-    Vous pouvez payer un montant partiel. Le reste restera dû.
-  </p>
 </div>
 
+{/* Advance payment */}
+<div className="w-full max-w-2xl">
+  <label className="flex items-center justify-center gap-2 cursor-pointer">
+    <input
+      type="checkbox"
+      checked={hasAdvancePayment}
+      onChange={(e) => {
+        const checked = e.target.checked;
+
+        if (checked && selectedInvoice.length !== 1) {
+          showAlert(
+            "Veuillez sélectionner une seule facture pour effectuer un paiement anticipé."
+          );
+          return;
+        }
+
+        setHasAdvancePayment(checked);
+
+        if (!checked) {
+          resetAdvancePaymentForm();
+        }
+      }}
+      className="w-4 h-4"
+    />
+
+    <span className="text-sm font-medium text-gray-700">
+      Une partie de ce paiement concerne un mois futur
+    </span>
+  </label>
+
+  {hasAdvancePayment && (
+    <div className="mt-4 border border-blue-200 bg-blue-50 rounded-xl p-4 text-left">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div>
+          <p className="font-semibold text-blue-900">
+            Paiement anticipé
+          </p>
+
+          <p className="text-xs text-blue-700">
+            Indiquez le montant à réserver pour un ou plusieurs mois futurs.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={addAdvanceAllocation}
+          className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700"
+        >
+          + Ajouter un mois
+        </button>
+      </div>
+
+      <div className="space-y-3">
+        {advanceAllocations.map((row, index) => (
+          <div
+            key={index}
+            className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-2 items-end bg-white border rounded-lg p-3"
+          >
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Mois
+              </label>
+
+              <input
+                type="month"
+                value={row.targetMonth}
+                onChange={(e) =>
+                  updateAdvanceAllocation(
+                    index,
+                    "targetMonth",
+                    e.target.value
+                  )
+                }
+                className="w-full border rounded px-2 py-1"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Montant
+              </label>
+
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={row.amount}
+                onChange={(e) =>
+                  updateAdvanceAllocation(
+                    index,
+                    "amount",
+                    e.target.value
+                  )
+                }
+                className="w-full border rounded px-2 py-1"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                removeAdvanceAllocation(index)
+              }
+              className="bg-red-100 text-red-700 px-3 py-1 rounded hover:bg-red-200"
+            >
+              Retirer
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4 border-t border-blue-200 pt-3 space-y-1 text-sm">
+        <div className="flex justify-between">
+          <span>Paiement soumis</span>
+          <b>
+            {formatCurrencyUSD(
+              Number(customAmount || 0)
+            )}
+          </b>
+        </div>
+
+        <div className="flex justify-between">
+          <span>Montant anticipé</span>
+          <b>
+            {formatCurrencyUSD(advanceTotal)}
+          </b>
+        </div>
+
+        <div className="flex justify-between">
+          <span>Affecté à la facture actuelle</span>
+          <b>
+            {formatCurrencyUSD(
+              currentInvoiceAllocation
+            )}
+          </b>
+        </div>
+
+        {advanceTotal >
+          Number(customAmount || 0) && (
+          <p className="text-red-600 font-semibold mt-2">
+            Le montant anticipé dépasse le paiement soumis.
+          </p>
+        )}
+      </div>
+    </div>
+  )}
+</div>
 
             <button
               type="button"

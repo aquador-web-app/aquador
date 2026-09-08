@@ -26,8 +26,75 @@ function InstallButton() {
   );
 }
 
+function getLastSaturdayOfAugust(year) {
+  // August = month 7 in JavaScript
+  const date = new Date(year, 7, 31, 12, 0, 0);
+
+  // Move backwards until Saturday (6)
+  const daysBack = (date.getDay() - 6 + 7) % 7;
+
+  date.setDate(date.getDate() - daysBack);
+
+  return date;
+}
+
+function capitalizeFirst(value) {
+  if (!value) return value;
+
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function formatClosureDate(date) {
+  return capitalizeFirst(
+    new Intl.DateTimeFormat("fr-FR", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }).format(date)
+  );
+}
+
 
 function ClosureVisitorRegistration() {
+    const now = new Date();
+
+  const closureYear = now.getFullYear();
+
+  const closureDate =
+    getLastSaturdayOfAugust(closureYear);
+
+  const closureDateLabel =
+    formatClosureDate(closureDate);
+
+  // Section becomes visible July 1
+  const closureDisplayStart =
+    new Date(
+      closureYear,
+      6, // July
+      1,
+      0,
+      0,
+      0,
+      0
+    );
+
+  // Hide after the closure Saturday ends
+  const closureDisplayEnd =
+    new Date(
+      closureYear,
+      7, // August
+      closureDate.getDate(),
+      23,
+      59,
+      59,
+      999
+    );
+
+  const showClosureSection =
+    now >= closureDisplayStart &&
+    now <= closureDisplayEnd;
+
   const [open, setOpen] = useState(false);
 
   const [showMemberWarning, setShowMemberWarning] =
@@ -77,17 +144,17 @@ function ClosureVisitorRegistration() {
   const [manualAmount, setManualAmount] =
   useState("");
 
-const [manualProofUrl, setManualProofUrl] =
-  useState(null);
+  const [manualProofUrl, setManualProofUrl] =
+    useState(null);
 
-const [manualSubmitting, setManualSubmitting] =
-  useState(false);
+  const [manualSubmitting, setManualSubmitting] =
+    useState(false);
 
-const [manualUploading, setManualUploading] =
-  useState(false);
+  const [manualUploading, setManualUploading] =
+    useState(false);
 
-const [manualMessage, setManualMessage] =
-  useState("");
+  const [manualMessage, setManualMessage] =
+    useState("");
 
   useEffect(() => {
     try {
@@ -527,6 +594,10 @@ async function submitVisitorManualPayment() {
   setVisitorPaymentMethod(null);
 }
 
+  if (!showClosureSection) {
+    return null;
+  }
+
   return (
     <>
       {/* PUBLIC CLOSING CEREMONY CARD */}
@@ -541,8 +612,8 @@ async function submitVisitorManualPayment() {
           </h2>
 
           <p className="mt-1 text-sm text-white/90">
-            Samedi 29 août 2026 • 9 h 00
-          </p>
+  {closureDateLabel} • 9 h 00
+</p>
         </div>
 
         <div className="p-5">
@@ -677,9 +748,8 @@ async function submitVisitorManualPayment() {
                   </h2>
 
                   <p className="text-xs text-gray-500">
-                    Samedi 29 août 2026 •
-                    9 h 00
-                  </p>
+  {closureDateLabel} • 9 h 00
+</p>
                 </div>
 
                 <button
@@ -1202,11 +1272,14 @@ async function submitVisitorManualPayment() {
                     </h3>
 
                     <p className="mt-2 text-sm text-green-700">
-                      Votre participation à la
-                      cérémonie de clôture du
-                      29 août 2026 a bien été
-                      enregistrée.
-                    </p>
+  Votre participation à la cérémonie de clôture du{" "}
+  {new Intl.DateTimeFormat("fr-FR", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(closureDate)}{" "}
+  a bien été enregistrée.
+</p>
                   </div>
 
                   <div className="mt-5 rounded-xl border border-gray-200 p-4">

@@ -46,6 +46,23 @@ function formatDateTime(value) {
   }
 }
 
+function formatEventDate(value) {
+  if (!value) return "—";
+
+  try {
+    return new Intl.DateTimeFormat("fr-FR", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(
+      new Date(`${value}T12:00:00Z`)
+    );
+  } catch {
+    return value;
+  }
+}
+
 function paymentBadge(status) {
   const normalized =
     String(status || "").toLowerCase();
@@ -98,6 +115,38 @@ function registrationBadge(status) {
 }
 
 export default function AdminCloture() {
+    const [eventOptions, setEventOptions] =
+    useState([]);
+
+  const [selectedEventCode, setSelectedEventCode] =
+    useState("");
+
+  const [currentEventCode, setCurrentEventCode] =
+    useState("");
+
+  const selectedEvent =
+    useMemo(() => {
+      return (
+        eventOptions.find(
+          (event) =>
+            event.event_code === selectedEventCode
+        ) || null
+      );
+    }, [
+      eventOptions,
+      selectedEventCode,
+    ]);
+
+  const EVENT_CODE =
+    selectedEvent?.event_code || null;
+
+  const EVENT_DATE =
+    selectedEvent?.event_date || null;
+
+  const isCurrentEvent =
+    !!EVENT_CODE &&
+    EVENT_CODE === currentEventCode;
+
   const [registrations, setRegistrations] =
     useState([]);
 
@@ -160,9 +209,228 @@ const [scanLoading, setScanLoading] =
 
 const lastScanTime = useRef(0);
 
+useEffect(() => {
+  let cancelled = false;
+
+  async function loadEventOptions() {
+    try {
+      const [
+        currentEventResult,
+        historicalRegistrationsResult,
+        historicalInvoicesResult,
+      ] = await Promise.all([
+        supabase.rpc(
+          "get_closure_event_info"
+        ),
+
+        supabase
+          .from(
+            "event_visitor_registrations"
+          )
+          .select(`
+            event_code,
+            event_name,
+            event_date
+          `)
+          .not(
+            "event_code",
+            "is",
+            null
+          ),
+
+        supabase
+          .from(
+            "event_visitor_invoices"
+          )
+          .select(`
+            event_code
+          `)
+          .not(
+            "event_code",
+            "is",
+            null
+          ),
+      ]);
+
+      if (currentEventResult.error) {
+        throw currentEventResult.error;
+      }
+
+      if (
+        historicalRegistrationsResult.error
+      ) {
+        throw historicalRegistrationsResult.error;
+      }
+
+      if (
+        historicalInvoicesResult.error
+      ) {
+        throw historicalInvoicesResult.error;
+      }
+
+      const eventMap = new Map();
+
+      const currentEvent =
+        currentEventResult.data || null;
+
+      if (currentEvent?.event_code) {
+        eventMap.set(
+          currentEvent.event_code,
+          {
+            event_code:
+              currentEvent.event_code,
+
+            event_name:
+              currentEvent.event_name,
+
+            event_date:
+              currentEvent.event_date,
+
+            is_current: true,
+          }
+        );
+      }
+
+      (
+        historicalRegistrationsResult.data ||
+        []
+      ).forEach((row) => {
+        if (!row?.event_code) return;
+
+        const previous =
+          eventMap.get(
+            row.event_code
+          ) || {};
+
+        eventMap.set(
+          row.event_code,
+          {
+            ...previous,
+
+            event_code:
+              row.event_code,
+
+            event_name:
+              row.event_name ||
+              previous.event_name ||
+              "Cérémonie de clôture A'QUA D'OR",
+
+            event_date:
+              row.event_date ||
+              previous.event_date ||
+              null,
+          }
+        );
+      });
+
+      (
+        historicalInvoicesResult.data ||
+        []
+      ).forEach((row) => {
+        if (
+          !row?.event_code ||
+          eventMap.has(
+            row.event_code
+          )
+        ) {
+          return;
+        }
+
+        const match =
+          String(
+            row.event_code
+          ).match(
+            /^cloture-(\d{4}-\d{2}-\d{2})$/
+          );
+
+        eventMap.set(
+          row.event_code,
+          {
+            event_code:
+              row.event_code,
+
+            event_name:
+              "Cérémonie de clôture A'QUA D'OR",
+
+            event_date:
+              match?.[1] || null,
+
+            is_current: false,
+          }
+        );
+      });
+
+      const options =
+        Array.from(
+          eventMap.values()
+        ).sort((a, b) =>
+          String(
+            b.event_date || ""
+          ).localeCompare(
+            String(
+              a.event_date || ""
+            )
+          )
+        );
+
+      if (cancelled) return;
+
+      setEventOptions(options);
+
+      setCurrentEventCode(
+        currentEvent?.event_code ||
+          ""
+      );
+
+      setSelectedEventCode(
+        (previous) => {
+          if (
+            previous &&
+            options.some(
+              (event) =>
+                event.event_code ===
+                previous
+            )
+          ) {
+            return previous;
+          }
+
+          return (
+            currentEvent?.event_code ||
+            options[0]?.event_code ||
+            ""
+          );
+        }
+      );
+    } catch (error) {
+      console.error(
+        "Closure event history loading error:",
+        error
+      );
+
+      if (!cancelled) {
+        setError(
+          error?.message ||
+            "Impossible de charger les cérémonies de clôture."
+        );
+
+        setLoading(false);
+      }
+    }
+  }
+
+  loadEventOptions();
+
+  return () => {
+    cancelled = true;
+  };
+}, []);
+
   async function loadData() {
-    setLoading(true);
-    setError("");
+  if (!EVENT_CODE) return;
+
+  setLoading(true);
+  setError("");
 
     try {
       const [
@@ -196,7 +464,7 @@ const lastScanTime = useRef(0);
 `)
           .eq(
             "event_code",
-            "cloture-2026-08-29"
+             EVENT_CODE
           )
           .order("created_at", {
             ascending: false,
@@ -243,7 +511,7 @@ const lastScanTime = useRef(0);
           `)
           .eq(
             "event_code",
-            "cloture-2026-08-29"
+            EVENT_CODE
           )
           .order("created_at", {
             ascending: false,
@@ -289,16 +557,26 @@ const lastScanTime = useRef(0);
   }
 
   useEffect(() => {
-    loadData();
-  }, []);
+  if (!EVENT_CODE) return;
+
+  setExpandedId(null);
+  setPaymentModal(null);
+  setScannerOpen(false);
+
+  loadData();
+}, [EVENT_CODE]);
 
   // =========================================================
   // REALTIME
   // =========================================================
 
   useEffect(() => {
-    const channel = supabase
-      .channel("admin-cloture-realtime")
+  if (!EVENT_CODE) return;
+
+  const channel = supabase
+    .channel(
+      `admin-cloture-realtime-${EVENT_CODE}`
+    )
 
       .on(
         "postgres_changes",
@@ -338,7 +616,7 @@ const lastScanTime = useRef(0);
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [EVENT_CODE]);
 
   // =========================================================
   // MERGE DATA
@@ -686,9 +964,11 @@ const totalCollected =
   // =========================================================
 
   async function toggleRegistrationStatus(
-    registration
-  ) {
-    const nextStatus =
+  registration
+) {
+  if (!isCurrentEvent) return;
+
+  const nextStatus =
       registration.status ===
       "cancelled"
         ? "confirmed"
@@ -741,7 +1021,8 @@ const totalCollected =
     }
   }
 
-  async function handleManualPayment() {
+  async function handleManualPayment() {  
+  if (!isCurrentEvent) return;
   if (!paymentModal?.invoice?.id) return;
 
   const amount = Number(paymentAmount);
@@ -942,29 +1223,73 @@ setPaymentModal(null);
       {/* HEADER */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-aquaBlue">
-            🏅 Clôture — 29 août 2026
-          </h2>
+  <h2 className="text-2xl font-bold text-aquaBlue">
+    🏅 Clôture —{" "}
+    {formatEventDate(
+      EVENT_DATE
+    )}
+  </h2>
 
-          <p className="mt-1 text-sm text-gray-500">
-            Gestion des visiteurs,
-            participants et paiements.
-          </p>
-        </div>
+  <p className="mt-1 text-sm text-gray-500">
+    Gestion des visiteurs,
+    participants et paiements.
+  </p>
 
-        <div className="flex gap-2">
-  <button
-    type="button"
-    onClick={() => {
-      setScanError("");
-      setScanResult(null);
-      lastScanTime.current = 0;
-      setScannerOpen(true);
-    }}
-    className="rounded-lg bg-aquaBlue px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+  {!isCurrentEvent && EVENT_CODE && (
+    <p className="mt-1 text-xs font-semibold text-amber-600">
+      📁 Consultation d'une cérémonie antérieure
+    </p>
+  )}
+</div>
+
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+  <select
+    value={
+      selectedEventCode
+    }
+    onChange={(e) =>
+      setSelectedEventCode(
+        e.target.value
+      )
+    }
+    className="input min-w-[190px]"
   >
-    📷 Scanner un QR
-  </button>
+    {eventOptions.map(
+      (event) => (
+        <option
+          key={
+            event.event_code
+          }
+          value={
+            event.event_code
+          }
+        >
+          {event.event_date
+            ? formatEventDate(
+                event.event_date
+              )
+            : event.event_code}
+          {event.event_code ===
+          currentEventCode
+            ? " — Actuelle"
+            : ""}
+        </option>
+      )
+    )}
+  </select>
+  <button
+  type="button"
+  disabled={!isCurrentEvent}
+  onClick={() => {
+    setScanError("");
+    setScanResult(null);
+    lastScanTime.current = 0;
+    setScannerOpen(true);
+  }}
+  className="rounded-lg bg-aquaBlue px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+>
+  📷 Scanner un QR
+</button>
 
   <button
     type="button"
@@ -1282,26 +1607,23 @@ setPaymentModal(null);
                               <button
                                 type="button"
                                 disabled={
-                                  savingId ===
-                                  row.row_key
+                                  !isCurrentEvent ||
+                                  savingId === row.id
                                 }
                                 onClick={() =>
                                   toggleRegistrationStatus(
                                     row
                                   )
                                 }
-                                className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
-                                  row.status ===
-                                  "cancelled"
+                                className={`rounded-lg px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40 ${
+                                  row.status === "cancelled"
                                     ? "bg-green-100 text-green-700 hover:bg-green-200"
                                     : "bg-red-100 text-red-700 hover:bg-red-200"
                                 }`}
                               >
-                                {savingId ===
-                                row.row_key
+                                {savingId === row.id
                                   ? "..."
-                                  : row.status ===
-                                    "cancelled"
+                                  : row.status === "cancelled"
                                   ? "Restaurer"
                                   : "Annuler"}
                               </button>
@@ -1453,40 +1775,41 @@ setPaymentModal(null);
                                         </p>
                                       </div>
                                     )}
-                                    {row.invoice &&
-  paymentStatus !== "paid" &&
-  paymentStatus !== "free_pass" &&
-  Number(row.participant_total || 0) >
-    Number(row.participant_paid || 0) &&
-  row.status !== "cancelled" && (
-    <div className="border-t pt-3">
-      <button
-        type="button"
-        onClick={() => {
-          const balance = Math.max(
-  0,
-  Number(
-    row.participant_total || 0
-  ) -
-    Number(
-      row.participant_paid || 0
-    )
-);
+                                    {isCurrentEvent &&
+                                      row.invoice &&
+                                      paymentStatus !== "paid" &&
+                                      paymentStatus !== "free_pass" &&
+                                      Number(row.participant_total || 0) >
+                                        Number(row.participant_paid || 0) &&
+                                      row.status !== "cancelled" && (
+                                        <div className="border-t pt-3">
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const balance = Math.max(
+                                      0,
+                                      Number(
+                                        row.participant_total || 0
+                                      ) -
+                                        Number(
+                                          row.participant_paid || 0
+                                        )
+                                    );
 
-          setPaymentModal(row);
-          setPaymentAmount(
-            balance.toFixed(2)
-          );
-          setPaymentMethod("cash");
-          setPaymentReference("");
-          setPaymentNotes("");
-        }}
-        className="w-full rounded-lg bg-green-600 px-4 py-2 font-semibold text-white hover:bg-green-700"
-      >
-        💵 Enregistrer un paiement
-      </button>
-    </div>
-)}
+                                              setPaymentModal(row);
+                                              setPaymentAmount(
+                                                balance.toFixed(2)
+                                              );
+                                              setPaymentMethod("cash");
+                                              setPaymentReference("");
+                                              setPaymentNotes("");
+                                            }}
+                                            className="w-full rounded-lg bg-green-600 px-4 py-2 font-semibold text-white hover:bg-green-700"
+                                          >
+                                            💵 Enregistrer un paiement
+                                          </button>
+                                        </div>
+                                    )}
                                   </div>
                                 </div>
                               </div>

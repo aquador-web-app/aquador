@@ -7,16 +7,6 @@ import {
 import { supabase } from "../../lib/supabaseClient";
 
 
-const EVENT_CODE = "cloture-2026-08-29";
-
-// =========================================================
-// MANUAL EVENT OVERRIDES
-// =========================================================
-
-const FORCED_VISITOR_PROFILE_IDS = new Set([
-  "beedd869-f57a-4234-9a62-6fad8437f95f", // Tamara Alexandre
-]);
-
 const EXTRA_GUEST_PRICE = 10;
 
 
@@ -26,6 +16,23 @@ const EXTRA_GUEST_PRICE = 10;
 
 function money(value) {
   return `USD ${Number(value || 0).toFixed(2)}`;
+}
+
+function formatEventDate(value) {
+  if (!value) return "—";
+
+  try {
+    return new Intl.DateTimeFormat("fr-FR", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(
+      new Date(`${value}T12:00:00Z`)
+    );
+  } catch {
+    return value;
+  }
 }
 
 
@@ -71,6 +78,38 @@ function paymentBadge(status) {
 
 
 export default function GestionPresenceCloture() {
+    const [eventOptions, setEventOptions] =
+    useState([]);
+
+  const [selectedEventCode, setSelectedEventCode] =
+    useState("");
+
+  const [currentEventCode, setCurrentEventCode] =
+    useState("");
+
+  const selectedEvent =
+    useMemo(() => {
+      return (
+        eventOptions.find(
+          (event) =>
+            event.event_code === selectedEventCode
+        ) || null
+      );
+    }, [
+      eventOptions,
+      selectedEventCode,
+    ]);
+
+  const EVENT_CODE =
+    selectedEvent?.event_code || null;
+
+  const EVENT_DATE =
+    selectedEvent?.event_date || null;
+
+  const isCurrentEvent =
+    !!EVENT_CODE &&
+    EVENT_CODE === currentEventCode;
+
   const [loading, setLoading] =
     useState(true);
 
@@ -112,14 +151,236 @@ export default function GestionPresenceCloture() {
   const [savingKey, setSavingKey] =
     useState(null);
 
+  useEffect(() => {
+  let cancelled = false;
+
+  async function loadEventOptions() {
+    try {
+      const [
+        currentEventResult,
+        registrationsResult,
+        confirmationsResult,
+        checkinsResult,
+      ] = await Promise.all([
+        supabase.rpc(
+          "get_closure_event_info"
+        ),
+
+        supabase
+          .from(
+            "event_visitor_registrations"
+          )
+          .select(`
+            event_code,
+            event_name,
+            event_date
+          `)
+          .not(
+            "event_code",
+            "is",
+            null
+          ),
+
+        supabase
+          .from(
+            "event_presence_confirmations"
+          )
+          .select("event_code")
+          .not(
+            "event_code",
+            "is",
+            null
+          ),
+
+        supabase
+          .from(
+            "cloture_presence_checkins"
+          )
+          .select("event_code")
+          .not(
+            "event_code",
+            "is",
+            null
+          ),
+      ]);
+
+      if (currentEventResult.error) {
+        throw currentEventResult.error;
+      }
+
+      if (registrationsResult.error) {
+        throw registrationsResult.error;
+      }
+
+      if (confirmationsResult.error) {
+        throw confirmationsResult.error;
+      }
+
+      if (checkinsResult.error) {
+        throw checkinsResult.error;
+      }
+
+      const eventMap = new Map();
+
+      const currentEvent =
+        currentEventResult.data || null;
+
+      if (currentEvent?.event_code) {
+        eventMap.set(
+          currentEvent.event_code,
+          {
+            event_code:
+              currentEvent.event_code,
+            event_name:
+              currentEvent.event_name,
+            event_date:
+              currentEvent.event_date,
+          }
+        );
+      }
+
+      (
+        registrationsResult.data || []
+      ).forEach((row) => {
+        if (!row?.event_code) return;
+
+        eventMap.set(
+          row.event_code,
+          {
+            event_code:
+              row.event_code,
+            event_name:
+              row.event_name ||
+              "Cérémonie de clôture A'QUA D'OR",
+            event_date:
+              row.event_date ||
+              null,
+          }
+        );
+      });
+
+      const addEventCode = (
+        eventCode
+      ) => {
+        if (
+          !eventCode ||
+          eventMap.has(eventCode)
+        ) {
+          return;
+        }
+
+        const match =
+          String(eventCode).match(
+            /^cloture-(\d{4}-\d{2}-\d{2})$/
+          );
+
+        eventMap.set(
+          eventCode,
+          {
+            event_code:
+              eventCode,
+            event_name:
+              "Cérémonie de clôture A'QUA D'OR",
+            event_date:
+              match?.[1] || null,
+          }
+        );
+      };
+
+      (
+        confirmationsResult.data ||
+        []
+      ).forEach((row) => {
+        addEventCode(
+          row.event_code
+        );
+      });
+
+      (
+        checkinsResult.data ||
+        []
+      ).forEach((row) => {
+        addEventCode(
+          row.event_code
+        );
+      });
+
+      const options =
+        Array.from(
+          eventMap.values()
+        ).sort((a, b) =>
+          String(
+            b.event_date || ""
+          ).localeCompare(
+            String(
+              a.event_date || ""
+            )
+          )
+        );
+
+      if (cancelled) return;
+
+      setEventOptions(options);
+
+      setCurrentEventCode(
+        currentEvent?.event_code ||
+          ""
+      );
+
+      setSelectedEventCode(
+        (previous) => {
+          if (
+            previous &&
+            options.some(
+              (event) =>
+                event.event_code ===
+                previous
+            )
+          ) {
+            return previous;
+          }
+
+          return (
+            currentEvent?.event_code ||
+            options[0]?.event_code ||
+            ""
+          );
+        }
+      );
+    } catch (error) {
+      console.error(
+        "Closure presence event loading error:",
+        error
+      );
+
+      if (!cancelled) {
+        setError(
+          error?.message ||
+            "Impossible de charger les cérémonies."
+        );
+
+        setLoading(false);
+      }
+    }
+  }
+
+  loadEventOptions();
+
+  return () => {
+    cancelled = true;
+  };
+}, []);
+
 
   // =========================================================
   // LOAD EVERYTHING
   // =========================================================
 
   async function loadData() {
-    setLoading(true);
-    setError("");
+  if (!EVENT_CODE) return;
+
+  setLoading(true);
+  setError("");
 
     try {
       const [
@@ -328,8 +589,10 @@ setCancelledStudents(
 
 
   useEffect(() => {
-    loadData();
-  }, []);
+  if (!EVENT_CODE) return;
+
+  loadData();
+}, [EVENT_CODE]);
 
 
   // =========================================================
@@ -337,31 +600,32 @@ setCancelledStudents(
   // =========================================================
 
   useEffect(() => {
-    const channel = supabase
-      .channel(
-        "gestion-presence-cloture"
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table:
-            "cloture_presence_checkins",
-          filter:
-            `event_code=eq.${EVENT_CODE}`,
-        },
-        () => {
-          loadData();
-        }
-      )
-      .subscribe();
+  if (!EVENT_CODE) return;
 
+  const channel = supabase
+    .channel(
+      `gestion-presence-cloture-${EVENT_CODE}`
+    )
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table:
+          "cloture_presence_checkins",
+        filter:
+          `event_code=eq.${EVENT_CODE}`,
+      },
+      () => {
+        loadData();
+      }
+    )
+    .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, [EVENT_CODE]);
 
 
   // =========================================================
@@ -398,11 +662,6 @@ setCancelledStudents(
 
   if (!profile?.id) return;
 
-  const isForcedVisitor =
-    FORCED_VISITOR_PROFILE_IDS.has(
-      profile.id
-    );
-
   const checkin = getCheckin(
     "student",
     profile.id
@@ -415,9 +674,7 @@ setCancelledStudents(
         source_type: "student",
         source_id: profile.id,
 
-        person_type: isForcedVisitor
-  ? "visitor"
-  : "student",
+        person_type: "student",
 
         full_name:
           profile.full_name || "—",
@@ -436,9 +693,7 @@ setCancelledStudents(
           confirmation.confirmer?.full_name ||
           null,
 
-        payment_status: isForcedVisitor
-  ? "free_pass"
-  : "student",
+        payment_status: "student",
 
 amount_due: 0,
 amount_paid: 0,
@@ -579,12 +834,7 @@ const isCancelledStudent =
 if (isCancelledStudent) {
   return;
 }
-
-
-if (isCancelledStudent) {
-  return;
-}
-            
+           
             const isFreePass =
               !!visitor.free_for_profile_id;
 
@@ -740,7 +990,9 @@ if (isCancelledStudent) {
   // =========================================================
 
   async function togglePresence(row) {
-    const key = row.row_key;
+  if (!isCurrentEvent) return;
+
+  const key = row.row_key;
 
     setSavingKey(key);
 
@@ -1028,19 +1280,62 @@ if (isCancelledStudent) {
           </h1>
 
           <p className="mt-1 text-sm text-gray-500">
-            29 août 2026 — Contrôle des entrées
-          </p>
+  {formatEventDate(EVENT_DATE)}
+  {" — "}
+  Contrôle des entrées
+</p>
+
+{!isCurrentEvent && EVENT_CODE && (
+  <p className="mt-1 text-xs font-semibold text-amber-600">
+    📁 Consultation d'une cérémonie antérieure
+  </p>
+)}
         </div>
 
 
-        <button
-          type="button"
-          onClick={loadData}
-          disabled={loading}
-          className="rounded-lg border bg-white px-4 py-2 text-sm font-semibold hover:bg-gray-50 disabled:opacity-50"
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+  <select
+    value={selectedEventCode}
+    onChange={(e) =>
+      setSelectedEventCode(
+        e.target.value
+      )
+    }
+    className="input min-w-[190px]"
+  >
+    {eventOptions.map(
+      (event) => (
+        <option
+          key={
+            event.event_code
+          }
+          value={
+            event.event_code
+          }
         >
-          🔄 Actualiser
-        </button>
+          {event.event_date
+            ? formatEventDate(
+                event.event_date
+              )
+            : event.event_code}
+          {event.event_code ===
+          currentEventCode
+            ? " — Actuelle"
+            : ""}
+        </option>
+      )
+    )}
+  </select>
+
+  <button
+    type="button"
+    onClick={loadData}
+    disabled={loading}
+    className="rounded-lg border bg-white px-4 py-2 text-sm font-semibold hover:bg-gray-50 disabled:opacity-50"
+  >
+    🔄 Actualiser
+  </button>
+</div>
       </div>
 
 
@@ -1242,7 +1537,10 @@ if (isCancelledStudent) {
                 <input
                   type="checkbox"
                   checked={row.came}
-                  disabled={savingKey === row.row_key}
+                  disabled={
+                    !isCurrentEvent ||
+                    savingKey === row.row_key
+                  }
                   onChange={() => togglePresence(row)}
                   className="h-6 w-6 cursor-pointer accent-green-600"
                 />
@@ -1386,7 +1684,10 @@ if (isCancelledStudent) {
               <input
                 type="checkbox"
                 checked={row.came}
-                disabled={savingKey === row.row_key}
+                disabled={
+                  !isCurrentEvent ||
+                  savingKey === row.row_key
+                }
                 onChange={() => togglePresence(row)}
                 className="h-7 w-7 cursor-pointer accent-green-600"
               />

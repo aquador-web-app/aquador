@@ -217,12 +217,13 @@ if (parent?.signup_type === "children_only" && kids?.length > 0) {
     if (!selectedProfile) return;
     (async () => {
       const { data: enr } = await supabase
-        .from("enrollments")
-        .select("id, course_id, session_id, plan_id, start_date, status")
-        .eq("profile_id", selectedProfile.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+  .from("enrollments")
+  .select("id, course_id, session_id, plan_id, start_date, status")
+  .eq("profile_id", selectedProfile.id)
+  .eq("status", "active")
+  .order("created_at", { ascending: false })
+  .limit(1)
+  .maybeSingle();
 
       setExistingEnrollment(enr || null);
       // We intentionally DO NOT set startDate here; user must pick it.

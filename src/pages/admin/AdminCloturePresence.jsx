@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 
-const EVENT_CODE = "cloture-2026-08-29";
 
 function formatDateTime(value) {
   if (!value) return "—";
@@ -20,14 +19,213 @@ function formatDateTime(value) {
   }
 }
 
+function formatEventDate(value) {
+  if (!value) return "—";
+
+  try {
+    return new Intl.DateTimeFormat("fr-FR", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(
+      new Date(`${value}T12:00:00Z`)
+    );
+  } catch {
+    return value;
+  }
+}
+
 export default function AdminCloturePresence() {
+    const [eventOptions, setEventOptions] =
+    useState([]);
+
+  const [selectedEventCode, setSelectedEventCode] =
+    useState("");
+
+  const [currentEventCode, setCurrentEventCode] =
+    useState("");
+
+  const selectedEvent =
+    useMemo(() => {
+      return (
+        eventOptions.find(
+          (event) =>
+            event.event_code === selectedEventCode
+        ) || null
+      );
+    }, [
+      eventOptions,
+      selectedEventCode,
+    ]);
+
+  const EVENT_CODE =
+    selectedEvent?.event_code || null;
+
+  const EVENT_DATE =
+    selectedEvent?.event_date || null;
+
+  const isCurrentEvent =
+    !!EVENT_CODE &&
+    EVENT_CODE === currentEventCode;
+
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [error, setError] = useState("");
 
-  async function fetchConfirmations() {
+    useEffect(() => {
+    let cancelled = false;
+
+    async function loadEventOptions() {
+      try {
+        const [
+          currentEventResult,
+          confirmationsResult,
+        ] = await Promise.all([
+          supabase.rpc(
+            "get_closure_event_info"
+          ),
+
+          supabase
+            .from(
+              "event_presence_confirmations"
+            )
+            .select(`
+              event_code,
+              event_name,
+              event_date
+            `)
+            .not(
+              "event_code",
+              "is",
+              null
+            ),
+        ]);
+
+        if (currentEventResult.error) {
+          throw currentEventResult.error;
+        }
+
+        if (confirmationsResult.error) {
+          throw confirmationsResult.error;
+        }
+
+        const eventMap = new Map();
+
+        const currentEvent =
+          currentEventResult.data || null;
+
+        if (currentEvent?.event_code) {
+          eventMap.set(
+            currentEvent.event_code,
+            {
+              event_code:
+                currentEvent.event_code,
+              event_name:
+                currentEvent.event_name,
+              event_date:
+                currentEvent.event_date,
+            }
+          );
+        }
+
+        (
+          confirmationsResult.data || []
+        ).forEach((row) => {
+          if (!row?.event_code) return;
+
+          const match =
+            String(row.event_code).match(
+              /^cloture-(\d{4}-\d{2}-\d{2})$/
+            );
+
+          eventMap.set(
+            row.event_code,
+            {
+              event_code:
+                row.event_code,
+              event_name:
+                row.event_name ||
+                "Cérémonie de clôture A'QUA D'OR",
+              event_date:
+                row.event_date ||
+                match?.[1] ||
+                null,
+            }
+          );
+        });
+
+        const options =
+          Array.from(
+            eventMap.values()
+          ).sort((a, b) =>
+            String(
+              b.event_date || ""
+            ).localeCompare(
+              String(
+                a.event_date || ""
+              )
+            )
+          );
+
+        if (cancelled) return;
+
+        setEventOptions(options);
+
+        setCurrentEventCode(
+          currentEvent?.event_code ||
+            ""
+        );
+
+        setSelectedEventCode(
+          (previous) => {
+            if (
+              previous &&
+              options.some(
+                (event) =>
+                  event.event_code ===
+                  previous
+              )
+            ) {
+              return previous;
+            }
+
+            return (
+              currentEvent?.event_code ||
+              options[0]?.event_code ||
+              ""
+            );
+          }
+        );
+      } catch (error) {
+        console.error(
+          "Closure presence history loading error:",
+          error
+        );
+
+        if (!cancelled) {
+          setError(
+            error?.message ||
+              "Impossible de charger les cérémonies."
+          );
+
+          setLoading(false);
+        }
+      }
+    }
+
+    loadEventOptions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+    async function fetchConfirmations() {
+    if (!EVENT_CODE) return;
+
     setLoading(true);
     setError("");
 
@@ -83,9 +281,11 @@ export default function AdminCloturePresence() {
     }
   }
 
-  useEffect(() => {
+    useEffect(() => {
+    if (!EVENT_CODE) return;
+
     fetchConfirmations();
-  }, []);
+  }, [EVENT_CODE]);
 
   const filteredRows = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -130,22 +330,59 @@ export default function AdminCloturePresence() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-aquaBlue">
-            Présences — Clôture du 29 août 2026
-          </h1>
+  Présences — Clôture du{" "}
+  {formatEventDate(EVENT_DATE)}
+</h1>
+{!isCurrentEvent && EVENT_CODE && (
+  <p className="mt-1 text-xs font-semibold text-amber-600">
+    📁 Consultation d'une cérémonie antérieure
+  </p>
+)}
 
           <p className="text-sm text-gray-500 mt-1">
             Liste des élèves ayant confirmé leur présence.
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={fetchConfirmations}
-          disabled={loading}
-          className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-60"
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+  <select
+    value={selectedEventCode}
+    onChange={(event) =>
+      setSelectedEventCode(
+        event.target.value
+      )
+    }
+    className="border rounded-lg px-3 py-2 min-w-[190px]"
+  >
+    {eventOptions.map(
+      (event) => (
+        <option
+          key={event.event_code}
+          value={event.event_code}
         >
-          Actualiser
-        </button>
+          {event.event_date
+            ? formatEventDate(
+                event.event_date
+              )
+            : event.event_code}
+          {event.event_code ===
+          currentEventCode
+            ? " — Actuelle"
+            : ""}
+        </option>
+      )
+    )}
+  </select>
+
+  <button
+    type="button"
+    onClick={fetchConfirmations}
+    disabled={loading}
+    className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-60"
+  >
+    Actualiser
+  </button>
+</div>
       </div>
 
       {error && (

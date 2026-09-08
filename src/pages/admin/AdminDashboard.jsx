@@ -71,6 +71,7 @@
   import AdminCloture from "./AdminCloture";
   import AdminCloturePayment from "./AdminCloturePayment";
   import AdminClotureGestionPresence from "./AdminClotureGestionPresence";
+  import AdminCompetition from "./AdminCompetition";
 
 
   function SidebarBtn({ id, icon, label, activeTab, setActiveTab, closeSidebar }) {
@@ -1831,6 +1832,8 @@
           return <AdminCloturePayment />;
         case "cloture-gestion-presence":
           return <AdminClotureGestionPresence />;
+        case "cloture-competition":
+          return <AdminCompetition />;
 
         default:
           return <h2 className="text-xl">Sélectionnez une section</h2>
@@ -2642,7 +2645,8 @@
         activeTab !== "cloture" &&
         activeTab !== "event-presence" &&
         activeTab !== "cloture-gestion-presence" &&
-        activeTab !== "cloture-payments"
+        activeTab !== "cloture-payments" &&
+  activeTab !== "cloture-competition"
       ) {
         setActiveTab("cloture");
       }
@@ -2691,14 +2695,20 @@
 />
 
     <SidebarSub
-  id="cloture-payments"
-  label="Paiements"
-  activeTab={activeTab}
-  setActiveTab={setActiveTab}
-  closeSidebar={() =>
-    setSidebarOpen(false)
-  }
-/>
+      id="cloture-payments"
+      label="Paiements"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    />
+
+    <SidebarSub
+      id="cloture-competition"
+      label="Compétitions"
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      closeSidebar={() => setSidebarOpen(false)}
+    />
   </div>
 )}
 

@@ -7,6 +7,7 @@ import UserCourses from "../user/UserCourses";
 import UserInvoices from "../user/UserInvoices";
 import UserEnrollments from "../user/UserEnrollments";
 import UserAttendance from "../user/UserAttendance";
+import UserMiniCompetition from "../user/UserMiniCompetition";
 import UserCommissions from "../user/UserCommissions";
 import UserReferrals from "../user/UserReferrals";
 import UserReports from "../user/UserReports";
@@ -47,6 +48,7 @@ import {
   FaRegistered,
   FaClipboardList,
   FaUserClock,
+  FaTrophy,
 } from "react-icons/fa"
 import { Link, useNavigate } from "react-router-dom"
 import {
@@ -64,10 +66,69 @@ import PaymentPage from "../../components/payments/PaymentPage";
 
 
 export default function UserDashboard() {
-  const EVENT_CODE = "cloture-2026-08-29";
-const EVENT_DATE = "2026-08-29";
-const EVENT_NAME =
-  "Cérémonie de clôture et remise de certificats";
+  const [closureEvent, setClosureEvent] = useState(null);
+
+  const EVENT_CODE =
+    closureEvent?.event_code || null;
+
+  const EVENT_DATE =
+    closureEvent?.event_date || null;
+
+  const EVENT_NAME =
+    closureEvent?.event_name ||
+    "Cérémonie de clôture A'QUA D'OR";
+    const closureYear =
+    closureEvent?.year ||
+    (EVENT_DATE
+      ? Number(EVENT_DATE.slice(0, 4))
+      : null);
+
+  const closureOpeningDate =
+    closureYear
+      ? `${closureYear}-07-01`
+      : null;
+
+  const todayHaiti =
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Port-au-Prince",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+
+  const showClosureSection =
+    !!EVENT_DATE &&
+    !!closureOpeningDate &&
+    todayHaiti >= closureOpeningDate &&
+    todayHaiti <= EVENT_DATE;
+
+  const closureAcademicStartYear =
+    closureYear
+      ? closureYear - 1
+      : null;
+
+  
+  // =========================================================
+// TEMP — MINI COMPETITION TEST MODE
+// Set to false when testing is finished.
+// =========================================================
+const MINI_COMPETITION_TEST_MODE = true;
+
+const miniCompetitionYear =
+  closureYear;
+
+const miniCompetitionEventCode =
+  EVENT_CODE;
+
+const miniCompetitionEventDate =
+  EVENT_DATE;
+
+const showMiniCompetitionTab =
+  MINI_COMPETITION_TEST_MODE ||
+  showClosureSection;
+
+
+
   const { user } = useAuth()
   const [hasUnpaid, setHasUnpaid] = useState(false)
   const navigate = useNavigate()
@@ -457,6 +518,98 @@ const confirmCardReceived = async () => {
   }
 };
 
+useEffect(() => {
+  let cancelled = false;
+
+  async function loadClosureEvent() {
+    try {
+      const today = new Intl.DateTimeFormat(
+        "en-CA",
+        {
+          timeZone:
+            "America/Port-au-Prince",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }
+      ).format(new Date());
+
+      const currentYear =
+        Number(today.slice(0, 4));
+
+      // 1. Get this calendar year's closure event
+      const {
+        data: currentEvent,
+        error: currentError,
+      } = await supabase.rpc(
+        "get_closure_event_info",
+        {
+          p_year: currentYear,
+        }
+      );
+
+      if (currentError) {
+        throw currentError;
+      }
+
+      let eventToUse =
+        currentEvent || null;
+
+      /*
+       * Once this year's ceremony has passed,
+       * immediately switch internally to next year's event.
+       *
+       * The dashboard section itself will STILL remain
+       * hidden until July 1 because showClosureSection
+       * handles visibility separately.
+       */
+      if (
+        currentEvent?.event_date &&
+        today > currentEvent.event_date
+      ) {
+        const {
+          data: nextEvent,
+          error: nextError,
+        } = await supabase.rpc(
+          "get_closure_event_info",
+          {
+            p_year:
+              currentYear + 1,
+          }
+        );
+
+        if (nextError) {
+          throw nextError;
+        }
+
+        eventToUse =
+          nextEvent || null;
+      }
+
+      if (!cancelled) {
+        setClosureEvent(
+          eventToUse
+        );
+      }
+    } catch (error) {
+      console.error(
+        "Closure event loading error:",
+        error
+      );
+
+      if (!cancelled) {
+        setClosureEvent(null);
+      }
+    }
+  }
+
+  loadClosureEvent();
+
+  return () => {
+    cancelled = true;
+  };
+}, []);
+
 // 🎫 Load + realtime refresh card receipt requirement for the selected profile
 useEffect(() => {
   if (!selectedAttendanceProfileId) return;
@@ -547,9 +700,26 @@ useEffect(() => {
   }
 }, [activeTab]);
 
+useEffect(() => {
+  // Wait until the annual closure information has loaded.
+  if (!closureEvent) return;
+
+  // Mini-compétition exists only during the annual closure window.
+  if (
+  activeTab === "mini-competition" &&
+  !showMiniCompetitionTab
+) {
+  setActiveTab("overview");
+}
+}, [
+  activeTab,
+  closureEvent,
+  showMiniCompetitionTab,
+]);
+
 
   useEffect(() => {
-  if (!user?.id) return;
+   if (!user?.id) return;
 
   const checkMemberships = async () => {
     // --- SCHOOL ---
@@ -648,7 +818,13 @@ function togglePresenceParticipant(
 }
 
 useEffect(() => {
-  if (!user?.id) return;
+  if (
+    !user?.id ||
+    !EVENT_CODE ||
+    !showClosureSection
+  ) {
+    return;
+  }
 
   const participantIds =
     eventParticipants
@@ -731,10 +907,21 @@ useEffect(() => {
     };
 
   fetchPresenceConfirmations();
-}, [user?.id, attendanceProfiles]);
+}, [
+  user?.id,
+  attendanceProfiles,
+  EVENT_CODE,
+  showClosureSection,
+]);
 
 async function handleConfirmEventPresence() {
-  if (!user?.id) return;
+  if (
+  !user?.id ||
+  !EVENT_CODE ||
+  !EVENT_DATE
+) {
+  return;
+}
 
   if (!selectedParticipants.length) {
     showAlert?.(
@@ -887,9 +1074,15 @@ async function handleConfirmEventPresence() {
         )
     );
 
-    showAlert?.(
-      "Votre présence pour le 29 août 2026 a été confirmée."
-    );
+    await showAlert?.(
+  `Votre présence pour le ${formatDateFrSafe(
+    EVENT_DATE
+  )} a été confirmée.
+
+Vous allez maintenant pouvoir confirmer les épreuves de la mini-compétition.`
+);
+
+setActiveTab("mini-competition");
   } catch (error) {
     console.error(
       "Presence confirmation error:",
@@ -906,7 +1099,13 @@ async function handleConfirmEventPresence() {
 }
 
 async function handleDeclineEventPresence() {
-  if (!user?.id) return;
+  if (
+  !user?.id ||
+  !EVENT_CODE ||
+  !EVENT_DATE
+) {
+  return;
+}
 
   const reason =
     absenceReason.trim();
@@ -1025,8 +1224,10 @@ async function handleDeclineEventPresence() {
     setAbsenceReason("");
 
     showAlert?.(
-      "Votre absence pour le 29 août 2026 a été enregistrée."
-    );
+  `Votre absence pour le ${formatDateFrSafe(
+    EVENT_DATE
+  )} a été enregistrée.`
+);
   } catch (error) {
     console.error(
       "Presence decline error:",
@@ -1071,10 +1272,18 @@ async function loadMemberGuestData() {
 }
 
 useEffect(() => {
-  if (!user?.id) return;
+  if (
+    !user?.id ||
+    !showClosureSection
+  ) {
+    return;
+  }
 
   loadMemberGuestData();
-}, [user?.id]);
+}, [
+  user?.id,
+  showClosureSection,
+]);
 
 function openFreeGuestModal(student) {
   if (!student?.profile_id) return;
@@ -2421,12 +2630,14 @@ const selectedAttendanceProfile = (attendanceProfiles || []).find(p => p.id === 
     Effectuer un paiement
   </button>
 </div>
-{/* 🎓 CLOTURE 2026 */}
-<div className="mt-5 bg-white rounded-2xl shadow border border-orange-100 overflow-hidden">
+{/* 🎓 CÉRÉMONIE DE CLÔTURE */}
+{showMiniCompetitionTab && (
+  <div className="mt-5 bg-white rounded-2xl shadow border border-orange-100 overflow-hidden">
   <div className="bg-gradient-to-r from-orange-500 to-blue-700 px-5 py-4 text-white">
     <h2 className="text-lg font-bold">
-      Cérémonie de clôture — 29 août 2026
-    </h2>
+  Cérémonie de clôture —{" "}
+  {formatDateFrSafe(EVENT_DATE)}
+</h2>
 
     <p className="text-sm text-white/90 mt-1">
       Remise de certificats et mini-compétition à partir de 9 h 00.
@@ -2435,10 +2646,11 @@ const selectedAttendanceProfile = (attendanceProfiles || []).find(p => p.id === 
 
   <div className="p-5 space-y-4">
     <p className="text-sm text-gray-700">
-      Tous les élèves ayant participé aux activités
-      d’A’QUA D’OR entre septembre 2025 et août 2026
-      sont invités à confirmer leur présence.
-    </p>
+  Tous les élèves ayant participé aux activités
+  d’A’QUA D’OR entre septembre{" "}
+  {closureAcademicStartYear} et août{" "}
+  {closureYear} sont invités à confirmer leur présence.
+</p>
 
     {presenceLoading ? (
       <p className="text-sm text-gray-500">
@@ -2826,6 +3038,7 @@ const selectedAttendanceProfile = (attendanceProfiles || []).find(p => p.id === 
     </div>
   </div>
 </div>
+)}
 
 {showAbsenceReason && (
   <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center px-4">
@@ -2835,9 +3048,10 @@ const selectedAttendanceProfile = (attendanceProfiles || []).find(p => p.id === 
       </h3>
 
       <p className="text-sm text-gray-600 mt-2">
-        Veuillez nous indiquer brièvement pourquoi vous ne pourrez
-        pas être présent le 29 août 2026.
-      </p>
+  Veuillez nous indiquer brièvement pourquoi vous ne pourrez
+  pas être présent le{" "}
+  {formatDateFrSafe(EVENT_DATE)}.
+</p>
 
       <textarea
         value={absenceReason}
@@ -2888,7 +3102,7 @@ const selectedAttendanceProfile = (attendanceProfiles || []).find(p => p.id === 
   </div>
 )}
 
-{showFreeGuestModal && (
+{showMiniCompetitionTab && showFreeGuestModal && (
   <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center px-4">
     <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
       <div className="flex items-start justify-between gap-4">
@@ -3030,7 +3244,7 @@ const selectedAttendanceProfile = (attendanceProfiles || []).find(p => p.id === 
 )}
 </div>
 
-{showExtraGuestModal && (
+{showMiniCompetitionTab && showExtraGuestModal && (
   <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/60 px-4 py-6">
     <div className="flex min-h-full items-start justify-center sm:items-center">
       <div className="relative w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
@@ -3043,8 +3257,9 @@ const selectedAttendanceProfile = (attendanceProfiles || []).find(p => p.id === 
             </h2>
 
             <p className="text-xs text-gray-500">
-              Cérémonie de clôture • 29 août 2026
-            </p>
+  Cérémonie de clôture •{" "}
+  {formatDateFrSafe(EVENT_DATE)}
+</p>
           </div>
 
           <button
@@ -4397,6 +4612,16 @@ case "attendance":
     </div>
   );
 
+case "mini-competition":
+  return (
+    <UserMiniCompetition
+      competitionYear={miniCompetitionYear}
+      eventCode={miniCompetitionEventCode}
+      eventDate={miniCompetitionEventDate}
+      testMode={MINI_COMPETITION_TEST_MODE}
+    />
+  );
+
       case "bulletins":
         return (
           <div>
@@ -4634,6 +4859,21 @@ if (!membershipReady) return <div>Loading...</div>;
 >
   <FaUserClock className="mr-2" /> Présence
 </li>
+{showMiniCompetitionTab && (
+  <li
+    onClick={() =>
+      goToTab("mini-competition")
+    }
+    className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-left ${
+      activeTab === "mini-competition"
+        ? "bg-aquaBlue text-white"
+        : "text-gray-100 hover:bg-orange-700"
+    }`}
+  >
+    <FaTrophy className="mr-2" />
+    Mini-compétition
+  </li>
+)}
 
             <li
               onClick={() => goToTab("bulletins")}

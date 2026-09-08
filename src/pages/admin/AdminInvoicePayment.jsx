@@ -21,7 +21,17 @@ import React, { useEffect, useRef, useState } from "react";
     const [amount, setAmount] = useState("");
     const [method, setMethod] = useState("cash");
     const [notes, setNotes] = useState("");
-    const [loading, setLoading] = useState(false);
+
+const [hasAdvancePayment, setHasAdvancePayment] = useState(false);
+const [advanceAllocations, setAdvanceAllocations] = useState([
+  {
+    targetMonth: "",
+    category: "natation",
+    amount: "",
+  },
+]);
+
+const [loading, setLoading] = useState(false);
     const [stripePaymentOpen, setStripePaymentOpen] = useState(false);
 const [stripeInvoice, setStripeInvoice] = useState(null);
 const [stripeUser, setStripeUser] = useState(null);
@@ -385,244 +395,483 @@ async function openStripePayment() {
   }
 }
 
+// ----------------- ADVANCE PAYMENT HELPERS -----------------
+
+const advanceTotal = advanceAllocations.reduce(
+  (sum, row) => sum + Number(row.amount || 0),
+  0
+);
+
+const currentInvoiceAllocation = Math.max(
+  0,
+  Number(amount || 0) - advanceTotal
+);
+
+function updateAdvanceAllocation(index, field, value) {
+  setAdvanceAllocations((prev) =>
+    prev.map((row, i) =>
+      i === index
+        ? {
+            ...row,
+            [field]: value,
+          }
+        : row
+    )
+  );
+}
+
+function addAdvanceAllocation() {
+  setAdvanceAllocations((prev) => [
+    ...prev,
+    {
+      targetMonth: "",
+      category: "natation",
+      amount: "",
+    },
+  ]);
+}
+
+function removeAdvanceAllocation(index) {
+  setAdvanceAllocations((prev) => {
+    if (prev.length === 1) {
+      return [
+        {
+          targetMonth: "",
+          category: "natation",
+          amount: "",
+        },
+      ];
+    }
+
+    return prev.filter((_, i) => i !== index);
+  });
+}
+
+function resetAdvancePaymentForm() {
+  setHasAdvancePayment(false);
+  setAdvanceAllocations([
+    {
+      targetMonth: "",
+      category: "natation",
+      amount: "",
+    },
+  ]);
+}
+
     // ----------------- HANDLE PAYMENT -----------------
     async function handlePayment() {
   if (!selectedInvoiceId) {
     return showAlert("Veuillez choisir une facture.");
   }
 
-  // Card payments MUST go through Stripe.
-  // Do not insert anything manually into payments.
+  // Card payments continue through Stripe only.
   if (method === "card") {
     await openStripePayment();
     return;
   }
 
-  // Manual methods still require an entered amount.
-  if (!amount) {
-    return showAlert("Veuillez entrer un montant.");
+  if (!amount || Number(amount) <= 0) {
+    return showAlert("Veuillez entrer un montant valide.");
   }
 
-    setLoading(true);
-    const invoice = invoices.find((inv) => inv.id === selectedInvoiceId);
-    if (!invoice) {
-      setLoading(false);
-      return showAlert("Facture introuvable.");
+  const invoice = invoices.find(
+    (inv) => inv.id === selectedInvoiceId
+  );
+
+  if (!invoice) {
+    return showAlert("Facture introuvable.");
+  }
+
+  if (method === "transfer" && !proofUrl) {
+    return showAlert("Veuillez joindre une preuve de virement.");
+  }
+
+  const validAdvanceAllocations = hasAdvancePayment
+    ? advanceAllocations.filter(
+        (row) =>
+          row.targetMonth &&
+          Number(row.amount || 0) > 0
+      )
+    : [];
+
+  if (hasAdvancePayment) {
+    if (validAdvanceAllocations.length === 0) {
+      return showAlert(
+        "Veuillez ajouter au moins un mois de paiement anticipé."
+      );
     }
 
-    if (method === "transfer" && !proofUrl) {
-  setLoading(false);
-  return showAlert("Veuillez joindre une preuve de virement.");
-}
+    if (
+      validAdvanceAllocations.length !==
+      advanceAllocations.length
+    ) {
+      return showAlert(
+        "Veuillez compléter le mois et le montant de chaque paiement anticipé."
+      );
+    }
 
-    // Determine if payment should be pending approval
+    const invoiceMonth = String(invoice.month || "").slice(0, 7);
+
+    for (const row of validAdvanceAllocations) {
+      if (row.targetMonth <= invoiceMonth) {
+        return showAlert(
+          "Chaque paiement anticipé doit viser un mois postérieur à celui de la facture sélectionnée."
+        );
+      }
+    }
+
+    if (advanceTotal > Number(amount)) {
+      return showAlert(
+        "Le total des paiements anticipés ne peut pas dépasser le montant reçu."
+      );
+    }
+
+    const duplicateKeys = validAdvanceAllocations.map(
+      (row) => `${row.targetMonth}|${row.category}`
+    );
+
+    if (new Set(duplicateKeys).size !== duplicateKeys.length) {
+      return showAlert(
+        "Le même mois et la même catégorie ne peuvent pas être ajoutés deux fois."
+      );
+    }
+  }
+
+  setLoading(true);
+
+  try {
     const isPending =
-      (method === "cash" || method === "transfer") && role !== "admin";
+      (method === "cash" || method === "transfer") &&
+      role !== "admin";
 
-    // Insert the payment
-    const { error: payError } = await supabase.from("payments").insert([
-      {
-        invoice_id: selectedInvoiceId,
-        amount: Number(amount),
-        method,
-        notes,
-        paid_at: new Date().toISOString(),
-        approved: !isPending, // true if admin, false if assistant cash/transfer
-        created_by: (await supabase.auth.getUser()).data.user.id,
-        role: role,
-      },
-    ]);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-    if (payError) {
-      setLoading(false);
-      return showAlert("Erreur enregistrement paiement: " + payError.message);
+    if (!user) {
+      throw new Error("Utilisateur connecté introuvable.");
     }
 
+    /*
+     * Create ONE real payment and retrieve its UUID.
+     */
+    const { data: insertedPayment, error: payError } =
+      await supabase
+        .from("payments")
+        .insert([
+          {
+            invoice_id: selectedInvoiceId,
+            amount: Number(amount),
+            method,
+            notes,
+            paid_at: new Date().toISOString(),
+            approved: !isPending,
+            created_by: user.id,
+            role,
+          },
+        ])
+        .select("id")
+        .single();
+
+    if (payError) throw payError;
+
+    if (!insertedPayment?.id) {
+      throw new Error(
+        "Le paiement a été créé mais son identifiant est introuvable."
+      );
+    }
+
+    const paymentId = insertedPayment.id;
+
+    /*
+     * Store/apply future allocations.
+     */
+    if (hasAdvancePayment) {
+      for (const allocation of validAdvanceAllocations) {
+        const targetDate =
+          `${allocation.targetMonth}-01`;
+
+        if (isPending) {
+          /*
+           * Assistant payment:
+           * store instructions only until admin approval.
+           */
+          const { error: allocationErr } =
+            await supabase.rpc(
+              "create_pending_advance_allocation",
+              {
+                p_payment_id: paymentId,
+                p_target_month: targetDate,
+                p_amount: Number(allocation.amount),
+                p_category: allocation.category || null,
+              }
+            );
+
+          if (allocationErr) throw allocationErr;
+        } else {
+          /*
+           * Admin payment:
+           * approved immediately, so reserve now.
+           */
+          const { error: allocationErr } =
+            await supabase.rpc(
+              "allocate_advance_payment",
+              {
+                p_payment_id: paymentId,
+                p_target_month: targetDate,
+                p_amount: Number(allocation.amount),
+                p_category: allocation.category || null,
+                p_reason:
+                  `Paiement anticipé - ${allocation.targetMonth}`,
+              }
+            );
+
+          if (allocationErr) throw allocationErr;
+        }
+      }
+    }
+
+    /*
+     * Save transfer proof.
+     */
     if (method === "transfer" && proofUrl) {
-  const { error: proofErr } = await supabase
-    .from("invoices")
-    .update({ proof_url: proofUrl })
-    .eq("id", selectedInvoiceId);
+      const { error: proofErr } = await supabase
+        .from("invoices")
+        .update({ proof_url: proofUrl })
+        .eq("id", selectedInvoiceId);
 
-  if (proofErr) {
-    setLoading(false);
-    return showAlert("Erreur enregistrement preuve: " + proofErr.message);
-  }
-}
+      if (proofErr) throw proofErr;
+    }
 
-    // Only update invoice totals immediately if payment is auto-approved
+    /*
+     * Do NOT manually add payment.amount to paid_total anymore.
+     *
+     * The database must calculate the invoice after reservations
+     * have been created.
+     */
     let updatedInvoiceForOverview = null;
 
-if (!isPending) {
-  const newPaidTotal = Number(invoice.paid_total || 0) + Number(amount || 0);
-  const invoiceTotal = Number(invoice.total || 0);
+    if (!isPending) {
+      const { error: recomputeErr } = await supabase.rpc(
+        "recompute_invoice_paid_total",
+        {
+          p_invoice_id: selectedInvoiceId,
+        }
+      );
 
-  const newStatus =
-    newPaidTotal <= 0
-      ? "pending"
-      : newPaidTotal < invoiceTotal
-      ? "partial"
-      : "paid";
+      if (recomputeErr) throw recomputeErr;
 
-  const { error: invError } = await supabase
-    .from("invoices")
-    .update({
-      paid_total: newPaidTotal,
-      status: newStatus,
-    })
-    .eq("id", selectedInvoiceId);
+      const {
+        data: refreshedInvoice,
+        error: refreshedInvoiceErr,
+      } = await supabase
+        .from("invoices")
+        .select(
+          "id, full_name, total, paid_total, status, signup_type, month, credit"
+        )
+        .eq("id", selectedInvoiceId)
+        .single();
 
-  if (invError) {
-    setLoading(false);
-    return showAlert("Erreur mise à jour facture: " + invError.message);
-  }
+      if (refreshedInvoiceErr) {
+        throw refreshedInvoiceErr;
+      }
 
-  const { data: refreshedInvoice, error: refreshedInvoiceErr } = await supabase
-    .from("invoices")
-    .select("id, full_name, total, paid_total, status, signup_type, month")
-    .eq("id", selectedInvoiceId)
-    .single();
-
-  if (refreshedInvoiceErr) {
-    setLoading(false);
-    return showAlert("Erreur lecture facture mise à jour: " + refreshedInvoiceErr.message);
-  }
-
-  console.log("✅ refreshed invoice from DB after payment:", refreshedInvoice);
-
-  updatedInvoiceForOverview = refreshedInvoice;
-}
-
-        setLoading(false);
+      updatedInvoiceForOverview = refreshedInvoice;
+    }
 
     if (isPending) {
-      showAlert("💸 Paiement soumis pour approbation par l’administrateur.");
+      showAlert(
+        hasAdvancePayment
+          ? "💸 Paiement soumis pour approbation. Les paiements anticipés seront activés après approbation."
+          : "💸 Paiement soumis pour approbation par l’administrateur."
+      );
     } else {
-      showAlert("✅ Paiement enregistré et approuvé automatiquement !");
+      showAlert(
+        hasAdvancePayment
+          ? "✅ Paiement enregistré et répartition anticipée effectuée !"
+          : "✅ Paiement enregistré et approuvé automatiquement !"
+      );
     }
 
     setAmount("");
     setNotes("");
     setSelectedInvoiceId("");
     setProofUrl(null);
-    localStorage.removeItem("admin_payment_proof_url");
+    resetAdvancePaymentForm();
 
-    console.log("💳 handlePayment updatedInvoiceForOverview:", updatedInvoiceForOverview);
-console.log("💳 handlePayment onPaymentChange exists:", !!onPaymentChange);
-console.log("💳 handlePayment isPending:", isPending);
+    localStorage.removeItem(
+      "admin_payment_proof_url"
+    );
 
-    // ✅ refresh parent overview immediately after payment/invoice update
-    // ✅ instant parent UI update first
-if (onPaymentChange && !isPending && updatedInvoiceForOverview) {
-  onPaymentChange({
-    type: "invoice-updated",
-    invoice: updatedInvoiceForOverview,
-  });
-} else if (onPaymentChange) {
-  onPaymentChange();
-}
+    if (
+      onPaymentChange &&
+      !isPending &&
+      updatedInvoiceForOverview
+    ) {
+      onPaymentChange({
+        type: "invoice-updated",
+        invoice: updatedInvoiceForOverview,
+      });
+    } else if (onPaymentChange) {
+      onPaymentChange();
+    }
 
-// ✅ then refresh local page data in background of this same action
-Promise.all([
-  fetchInvoices(),
-  fetchPayments(),
-  fetchPendingPayments(),
-  refreshLiveSummary(selectedLiveMonth),
-]).catch((err) => {
-  console.error("Post-payment refresh error:", err);
-});
+    Promise.all([
+      fetchInvoices(),
+      fetchPayments(),
+      fetchPendingPayments(),
+      refreshLiveSummary(selectedLiveMonth),
+    ]).catch((err) => {
+      console.error(
+        "Post-payment refresh error:",
+        err
+      );
+    });
+  } catch (err) {
+    console.error("handlePayment error:", err);
+
+    showAlert(
+      "Erreur enregistrement paiement: " +
+        err.message
+    );
+  } finally {
+    setLoading(false);
   }
+}
 
 
     // ----------------- APPROVE / REJECT -----------------
     async function approvePayment(id) {
-    const confirmed = await showConfirm("Confirmer ce paiement ?");
-    if (!confirmed) return;
+  const confirmed = await showConfirm(
+    "Confirmer ce paiement ?"
+  );
 
-    try {
-      // 1️⃣ Get payment + its invoice
-      const { data: payment, error: fetchErr } = await supabase
-  .from("payments")
-  .select(`
-    id,
-    amount,
-    invoice_id,
-    invoices (
-      id,
-      full_name,
-      total,
-      paid_total,
-      status,
-      signup_type,
-      month
-    )
-  `)
-  .eq("id", id)
-  .single();
+  if (!confirmed) return;
 
-      if (fetchErr) throw fetchErr;
-      if (!payment) throw new Error("Paiement introuvable.");
-
-      // 2️⃣ Update invoice totals
-      const invoice = payment.invoices;
-      const newPaidTotal = (invoice.paid_total || 0) + payment.amount;
-
-      const newStatus =
-        newPaidTotal <= 0
-          ? "pending"
-          : newPaidTotal < invoice.total
-          ? "partial"
-          : "paid";
-
-      const { error: invError } = await supabase
-        .from("invoices")
-        .update({
-          paid_total: newPaidTotal,
-          status: newStatus,
-        })
-        .eq("id", payment.invoice_id);
-
-      if (invError) throw invError;
-
-      // 3️⃣ Mark payment as approved
-      const { error: payErr } = await supabase
+  try {
+    /*
+     * Fetch payment + invoice information.
+     */
+    const { data: payment, error: fetchErr } =
+      await supabase
         .from("payments")
-        .update({ approved: true })
-        .eq("id", id);
+        .select(`
+          id,
+          amount,
+          invoice_id,
+          approved,
+          invoices (
+            id,
+            full_name,
+            total,
+            paid_total,
+            status,
+            signup_type,
+            month
+          )
+        `)
+        .eq("id", id)
+        .single();
 
-      if (payErr) throw payErr;
+    if (fetchErr) throw fetchErr;
 
-            await showAlert("✅ Paiement approuvé et facture mise à jour !");
-
-      // ✅ refresh overview first
-      if (onPaymentChange) {
-  onPaymentChange({
-    type: "invoice-updated",
-    invoice: {
-      id: payment.invoice_id,
-      full_name: payment.invoices?.full_name,
-      total: Number(payment.invoices?.total || 0),
-      paid_total: Number(newPaidTotal || 0),
-      status: newStatus,
-      signup_type: payment.invoices?.signup_type,
-      month: payment.invoices?.month,
-    },
-  });
-}
-
-// ✅ then refresh local data without blocking UI
-Promise.all([
-  fetchInvoices(),
-  fetchPayments(),
-  fetchPendingPayments(),
-  refreshLiveSummary(selectedLiveMonth),
-]).catch((err) => {
-  console.error("Post-approval refresh error:", err);
-});
-    } catch (err) {
-      await showAlert("❌ Erreur lors de l’approbation : " + err.message);
+    if (!payment) {
+      throw new Error("Paiement introuvable.");
     }
+
+    /*
+     * Approve the real payment first.
+     */
+    const { error: payErr } = await supabase
+      .from("payments")
+      .update({
+        approved: true,
+      })
+      .eq("id", id);
+
+    if (payErr) throw payErr;
+
+    /*
+     * Activate any future allocations that were entered
+     * by the assistant while this payment was pending.
+     */
+    const {
+      data: activatedCount,
+      error: allocationErr,
+    } = await supabase.rpc(
+      "activate_pending_advance_allocations",
+      {
+        p_payment_id: id,
+      }
+    );
+
+    if (allocationErr) throw allocationErr;
+
+    /*
+     * Recalculate the source invoice AFTER future amounts
+     * have been removed/reserved.
+     */
+    const { error: recomputeErr } =
+      await supabase.rpc(
+        "recompute_invoice_paid_total",
+        {
+          p_invoice_id: payment.invoice_id,
+        }
+      );
+
+    if (recomputeErr) throw recomputeErr;
+
+    /*
+     * Read the real result from the DB.
+     */
+    const {
+      data: updatedInvoice,
+      error: updatedInvoiceErr,
+    } = await supabase
+      .from("invoices")
+      .select(
+        "id, full_name, total, paid_total, status, signup_type, month, credit"
+      )
+      .eq("id", payment.invoice_id)
+      .single();
+
+    if (updatedInvoiceErr) {
+      throw updatedInvoiceErr;
+    }
+
+    await showAlert(
+      Number(activatedCount || 0) > 0
+        ? `✅ Paiement approuvé. ${activatedCount} paiement(s) anticipé(s) activé(s).`
+        : "✅ Paiement approuvé et facture mise à jour !"
+    );
+
+    if (onPaymentChange) {
+      onPaymentChange({
+        type: "invoice-updated",
+        invoice: updatedInvoice,
+      });
+    }
+
+    Promise.all([
+      fetchInvoices(),
+      fetchPayments(),
+      fetchPendingPayments(),
+      refreshLiveSummary(selectedLiveMonth),
+    ]).catch((err) => {
+      console.error(
+        "Post-approval refresh error:",
+        err
+      );
+    });
+  } catch (err) {
+    console.error("approvePayment error:", err);
+
+    await showAlert(
+      "❌ Erreur lors de l’approbation : " +
+        err.message
+    );
   }
+}
 
 
 
@@ -647,113 +896,81 @@ await fetchPendingPayments();
   const confirmed = await showConfirm(
     "Annuler ce paiement et le remettre en attente d’approbation ?"
   );
+
   if (!confirmed) return;
 
   try {
-    // 1️⃣ Set payment back to pending
-const { error: revertErr } = await supabase
-  .from("payments")
-  .update({ approved: false })
-  .eq("id", paymentId);
-
-if (revertErr) throw revertErr;
-
-// 1️⃣b Mark the corresponding invoice_item as reverted (latest matching amount)
-const { data: item, error: itemErr } = await supabase
-  .from("invoice_items")
-  .select("id")
-  .eq("invoice_id", invoiceId)
-  .eq("reverted", false)
-  .eq("paid", true)
-  .eq("amount", Number(paymentAmount || 0))
-  .order("created_at", { ascending: false })
-  .limit(1)
-  .maybeSingle();
-
-if (itemErr) throw itemErr;
-
-if (item?.id) {
-  const { error: updErr } = await supabase
-    .from("invoice_items")
-    .update({ reverted: true })
-    .eq("id", item.id);
-
-  if (updErr) throw updErr;
-}
-
-
-
-    // 2️⃣ Recalculate approved total
-    const { data: approvedPayments, error: payErr } = await supabase
-      .from("payments")
-      .select("amount")
-      .eq("invoice_id", invoiceId)
-      .eq("approved", true);
-
-    if (payErr) throw payErr;
-
-    const newPaidTotal = (approvedPayments || []).reduce(
-      (sum, p) => sum + Number(p.amount),
-      0
+    /*
+     * The database owns the reversal logic.
+     *
+     * It will:
+     * - block the operation if reserved credit was already used;
+     * - restore unused advance allocations to pending;
+     * - cancel the corresponding active reservations;
+     * - set the payment back to approved = false;
+     * - recompute the source invoice.
+     */
+    const {
+      data: restoredAllocations,
+      error: revertErr,
+    } = await supabase.rpc(
+      "revert_payment_to_pending",
+      {
+        p_payment_id: paymentId,
+      }
     );
 
-    // 3️⃣ Fetch invoice total
-    const { data: invoice, error: invErr } = await supabase
+    if (revertErr) throw revertErr;
+
+    /*
+     * Read the invoice after the database recomputation.
+     */
+    const {
+      data: updatedInvoice,
+      error: updatedInvoiceErr,
+    } = await supabase
       .from("invoices")
-      .select("total")
+      .select(
+        "id, full_name, total, paid_total, status, signup_type, month, credit"
+      )
       .eq("id", invoiceId)
       .single();
 
-    if (invErr) throw invErr;
+    if (updatedInvoiceErr) {
+      throw updatedInvoiceErr;
+    }
 
-    const newStatus =
-      newPaidTotal === 0
-        ? "pending"
-        : newPaidTotal < invoice.total
-        ? "partial"
-        : "paid";
+    await showAlert(
+      Number(restoredAllocations || 0) > 0
+        ? `🔄 Paiement remis en attente. ${restoredAllocations} paiement(s) anticipé(s) également remis en attente.`
+        : "🔄 Paiement remis en attente d’approbation."
+    );
 
-    // 4️⃣ Update invoice
-    const { error: updateInvoiceErr } = await supabase
-  .from("invoices")
-  .update({
-    paid_total: newPaidTotal,
-    status: newStatus,
-  })
-  .eq("id", invoiceId);
+    if (onPaymentChange) {
+      onPaymentChange({
+        type: "invoice-updated",
+        invoice: updatedInvoice,
+      });
+    }
 
-if (updateInvoiceErr) throw updateInvoiceErr;
-
-const { data: updatedInvoice, error: updatedInvoiceErr } = await supabase
-  .from("invoices")
-  .select("id, full_name, total, paid_total, status, signup_type, month")
-  .eq("id", invoiceId)
-  .single();
-
-if (updatedInvoiceErr) throw updatedInvoiceErr;
-
-        await showAlert("🔄 Paiement remis en attente d’approbation.");
-
-    // ✅ refresh overview first
-   if (onPaymentChange) {
-  onPaymentChange({
-    type: "invoice-updated",
-    invoice: updatedInvoice,
-  });
-}
-
-// ✅ then refresh local data without blocking UI
-Promise.all([
-  fetchInvoices(),
-  fetchPayments(),
-  fetchPendingPayments(),
-  refreshLiveSummary(selectedLiveMonth),
-]).catch((err) => {
-  console.error("Post-revert refresh error:", err);
-});
+    Promise.all([
+      fetchInvoices(),
+      fetchPayments(),
+      fetchPendingPayments(),
+      refreshLiveSummary(selectedLiveMonth),
+    ]).catch((err) => {
+      console.error(
+        "Post-revert refresh error:",
+        err
+      );
+    });
   } catch (err) {
-    console.error(err);
-    await showAlert("❌ Erreur : " + err.message);
+    console.error("handleRevertPayment error:", err);
+
+    await showAlert(
+      "❌ Impossible de remettre le paiement en attente : " +
+        err.message
+    );
   }
 }
 
@@ -1403,10 +1620,158 @@ async function fetchRevertedPaymentsLive(monthInput = selectedLiveMonth) {
 
     <input
       type="number"
+      min="0"
+      step="0.01"
       value={amount}
       onChange={(e) => setAmount(e.target.value)}
-      className="w-full border px-2 py-1 rounded mb-4"
+      className="w-full border px-2 py-1 rounded mb-3"
     />
+
+    <label className="flex items-center gap-2 mb-4 cursor-pointer">
+      <input
+        type="checkbox"
+        checked={hasAdvancePayment}
+        onChange={(e) => {
+          const checked = e.target.checked;
+          setHasAdvancePayment(checked);
+
+          if (!checked) {
+            resetAdvancePaymentForm();
+          }
+        }}
+      />
+
+      <span className="font-medium">
+        Ce paiement comprend un paiement anticipé
+      </span>
+    </label>
+
+    {hasAdvancePayment && (
+      <div className="mb-4 border border-blue-200 bg-blue-50 rounded-lg p-4">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div>
+            <p className="font-semibold text-blue-900">
+              Répartition du paiement
+            </p>
+
+            <p className="text-xs text-blue-700">
+              Indiquez les montants destinés aux mois futurs.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={addAdvanceAllocation}
+            className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700"
+          >
+            + Ajouter un mois
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          {advanceAllocations.map((row, index) => (
+            <div
+              key={index}
+              className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end bg-white border rounded-lg p-3"
+            >
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Mois
+                </label>
+
+                <input
+                  type="month"
+                  value={row.targetMonth}
+                  onChange={(e) =>
+                    updateAdvanceAllocation(
+                      index,
+                      "targetMonth",
+                      e.target.value
+                    )
+                  }
+                  className="w-full border rounded px-2 py-1"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Catégorie
+                </label>
+
+                <select
+                  value={row.category}
+                  onChange={(e) =>
+                    updateAdvanceAllocation(
+                      index,
+                      "category",
+                      e.target.value
+                    )
+                  }
+                  className="w-full border rounded px-2 py-1"
+                >
+                  <option value="natation">Natation</option>
+                  <option value="aquafitness">Aquafitness</option>
+                  <option value="annual_fee">Frais annuel</option>
+                  <option value="other">Autre</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Montant
+                </label>
+
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={row.amount}
+                  onChange={(e) =>
+                    updateAdvanceAllocation(
+                      index,
+                      "amount",
+                      e.target.value
+                    )
+                  }
+                  className="w-full border rounded px-2 py-1"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => removeAdvanceAllocation(index)}
+                className="bg-red-100 text-red-700 px-3 py-1 rounded hover:bg-red-200"
+              >
+                Retirer
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 border-t border-blue-200 pt-3 space-y-1 text-sm">
+          <div className="flex justify-between">
+            <span>Paiement reçu</span>
+            <b>{formatCurrencyUSD(Number(amount || 0))}</b>
+          </div>
+
+          <div className="flex justify-between">
+            <span>Montant anticipé</span>
+            <b>{formatCurrencyUSD(advanceTotal)}</b>
+          </div>
+
+          <div className="flex justify-between">
+            <span>Affecté à cette facture</span>
+            <b>{formatCurrencyUSD(currentInvoiceAllocation)}</b>
+          </div>
+
+          {advanceTotal > Number(amount || 0) && (
+            <p className="text-red-600 font-semibold mt-2">
+              Le montant anticipé dépasse le paiement reçu.
+            </p>
+          )}
+        </div>
+      </div>
+    )}
   </>
 ) : (
   <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3">
