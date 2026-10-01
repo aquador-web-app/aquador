@@ -115,11 +115,12 @@ const signedFr = formatDateFrLongSafe(new Date());
       "{{TEACHER_ID_NUMBER}}": t?.teacher_id_number || "—",
       "{{teacher_id_number}}": t?.teacher_id_number || "—",
 
-      "{{SCHOOL_YEAR_START}}": t?.school_year_start ? formatDateFrLongSafe(t.school_year_start) : "—",
-      "{{school_year_start}}": t?.school_year_start ? formatDateFrLongSafe(t.school_year_start) : "—",
+      "{{SCHOOL_YEAR_START}}": startFr,
+"{{school_year_start}}": startFr,
 
-      "{{SCHOOL_YEAR_END}}": t?.school_year_end ? formatDateFrLongSafe(t.school_year_end) : "—",
-      "{{school_year_end}}": t?.school_year_end ? formatDateFrLongSafe(t.school_year_end) : "—",
+"{{SCHOOL_YEAR_END}}": endFr,
+"{{school_year_end}}": endFr,
+
 
       "{{SALARY_BASE_HTG}}": t?.salary_base_htg != null ? formatHTG(t.salary_base_htg) : "—",
       "{{salary_base_htg}}": t?.salary_base_htg != null ? formatHTG(t.salary_base_htg) : "—",
@@ -160,7 +161,15 @@ const signedFr = formatDateFrLongSafe(new Date());
 
 
     return wrapPreview(h);
-    }, [html, showPlaceholders, selectedTeacherId, teachers, salarySettings]);
+    }, [
+  html,
+  showPlaceholders,
+  selectedTeacherId,
+  teachers,
+  salarySettings,
+  contractStartOverride,
+  contractEndOverride,
+]);
 
   function wrapPreview(inner) {
     return `<!doctype html>
@@ -255,7 +264,7 @@ ${inner || `<div class="muted"><i>(Aucun HTML)</i></div>`}
   // 1) Read contracts (include created_at so we can pick latest per teacher)
   const { data: contracts, error } = await supabase
     .from("teacher_contracts")
-    .select("teacher_id, status, school_year_start, school_year_end, teacher_id_number, teacher_nif_cin, payload, created_at")
+    .select("id, teacher_id, status, school_year_start, school_year_end, teacher_id_number, teacher_nif_cin, payload, created_at")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -306,9 +315,17 @@ for (const c of contracts || []) {
  
   if (teacherIds.length) {
     const { data: assigns, error: aErr } = await supabase
-      .from("teacher_salary_assignments")
-      .select("profile_id, category_id, category_name")
-      .in("profile_id", teacherIds);
+  .from("teacher_salary_assignments")
+  .select(`
+    profile_id,
+    category_id,
+    category_name,
+    teacher_salary_categories (
+      name,
+      base_salary
+    )
+  `)
+  .in("profile_id", teacherIds);
 
     if (!aErr && assigns?.length) {
       assignmentByTeacherId = Object.fromEntries(
@@ -322,7 +339,22 @@ for (const c of contracts || []) {
   const seen = new Set();
   const rows = [];
 
-  for (const r of contracts || []) {
+  const orderedContracts = [...(contracts || [])].sort((a, b) => {
+  // Current editable draft always comes before historical contracts
+  if (a.status === "draft" && b.status !== "draft") return -1;
+  if (a.status !== "draft" && b.status === "draft") return 1;
+
+  // Within the same status, newest school year first
+  const yearCompare = String(b.school_year_start || "").localeCompare(
+    String(a.school_year_start || "")
+  );
+  if (yearCompare !== 0) return yearCompare;
+
+  // Final fallback: newest creation date
+  return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+});
+
+for (const r of orderedContracts) {
     if (!r?.teacher_id) continue;
     if (seen.has(r.teacher_id)) continue; // ✅ dedupe (keep first = latest because sorted desc)
     seen.add(r.teacher_id);
@@ -331,6 +363,7 @@ for (const c of contracts || []) {
     const prof = profilesById[r.teacher_id] || {};
 
     rows.push({
+      contract_id: r.id,
       teacher_id: r.teacher_id,
       status: r.status,
       school_year_start: r.school_year_start,
@@ -346,15 +379,15 @@ for (const c of contracts || []) {
       teacher_phone: prof.phone || p.teacher_phone || "",
 
 salary_base_htg:
-  p.salary_base_htg ?? lastNonNullBaseByTeacher[r.teacher_id] ?? null,
+  assignmentByTeacherId[r.teacher_id]?.teacher_salary_categories?.base_salary ??
+  null,
 
       salary_category_id: assignmentByTeacherId[r.teacher_id]?.category_id || null,
 
       salary_category_name:
-        assignmentByTeacherId[r.teacher_id]?.category_name ||
-        p.salary_category_name ||
-        lastNonEmptyCategoryByTeacher[r.teacher_id] ||
-        "",
+  assignmentByTeacherId[r.teacher_id]?.teacher_salary_categories?.name ||
+  assignmentByTeacherId[r.teacher_id]?.category_name ||
+  "",
 
 
     });
@@ -439,6 +472,63 @@ useEffect(() => {
   setContractStartOverride(selectedTeacher.school_year_start || "");
   setContractEndOverride(selectedTeacher.school_year_end || "");
 }, [selectedTeacherId]); // eslint-disable-line
+
+
+async function handleSaveContractDates() {
+  setUiError("");
+  setUiOk("");
+
+  if (!contractStartOverride || !contractEndOverride) {
+    setUiError("Veuillez saisir les deux dates.");
+    return;
+  }
+
+  if (contractEndOverride < contractStartOverride) {
+    setUiError("La date de fin doit être postérieure à la date de début.");
+    return;
+  }
+
+  try {
+    setSaving(true);
+
+    const { data, error } = await supabase
+      .from("teacher_contracts")
+      .update({
+        school_year_start: contractStartOverride,
+        school_year_end: contractEndOverride,
+      })
+      .eq("status", "draft")
+      .select("id, teacher_id, school_year_start, school_year_end, status");
+
+    if (error) throw error;
+
+    const updatedById = Object.fromEntries(
+      (data || []).map((contract) => [contract.id, contract])
+    );
+
+    setTeachers((current) =>
+      current.map((teacher) => {
+        const updated = updatedById[teacher.contract_id];
+
+        if (!updated) return teacher;
+
+        return {
+          ...teacher,
+          school_year_start: updated.school_year_start,
+          school_year_end: updated.school_year_end,
+        };
+      })
+    );
+
+    setUiOk(
+      `Dates sauvegardées pour ${data?.length || 0} contrat(s) en brouillon.`
+    );
+  } catch (e) {
+    setUiError(e?.message || String(e));
+  } finally {
+    setSaving(false);
+  }
+}
 
 
   function isDirty() {
@@ -743,6 +833,19 @@ useEffect(() => {
   value={contractEndOverride}
   onChange={(e) => setContractEndOverride(e.target.value)}
 />
+
+<button
+  type="button"
+  onClick={handleSaveContractDates}
+  disabled={
+  saving ||
+  !contractStartOverride ||
+  !contractEndOverride
+}
+  className="px-3 py-1.5 rounded-lg bg-aquaBlue text-white text-sm hover:opacity-90 disabled:opacity-50"
+>
+  {saving ? "Sauvegarde..." : "Sauvegarder les dates"}
+</button>
 
 
   <label className="text-xs text-gray-600 flex items-center gap-2">

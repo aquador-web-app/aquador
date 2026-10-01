@@ -66,6 +66,16 @@ async function objectExistsPublicUrl(publicUrl) {
     }
   }
 
+  function parseISODateLocal(iso) {
+  if (!iso) return null;
+
+  const [year, month, day] = String(iso).split("-").map(Number);
+
+  if (!year || !month || !day) return null;
+
+  return new Date(year, month - 1, day);
+}
+
   // Haiti school-year: Sep 1 → Aug 31 (based on Haiti timezone)
   function getHaitiNow() {
     return new Date(
@@ -224,23 +234,26 @@ function replaceAllTokens(html, replacements) {
     const [signature, setSignature] = useState(null);
 
     const nowDate = useMemo(() => formatDateFrSafe(), []);
-    const schoolYearOptions = useMemo(
-  () => makeSchoolYearOptions({ startYear: 2025, count: 6 }),
-  []
+    const [schoolYearStartISO, setSchoolYearStartISO] = useState("");
+const [schoolYearEndISO, setSchoolYearEndISO] = useState("");
+
+const yearStart = useMemo(
+  () => parseISODateLocal(schoolYearStartISO),
+  [schoolYearStartISO]
 );
 
-// default = 2025–2026
-const [schoolYearStartISO, setSchoolYearStartISO] = useState(defaultSchoolYearStartISO);
+const yearEnd = useMemo(
+  () => parseISODateLocal(schoolYearEndISO),
+  [schoolYearEndISO]
+);
 
-const selectedYear = useMemo(() => {
-  return (
-    schoolYearOptions.find((o) => o.startISO === schoolYearStartISO) ||
-    schoolYearOptions[0]
-  );
-}, [schoolYearOptions, schoolYearStartISO]);
+const currentSchoolYearLabel = useMemo(() => {
+  if (!schoolYearStartISO) return "—";
 
-const yearStart = selectedYear.start;
-const yearEnd = selectedYear.end;
+  const startYear = Number(schoolYearStartISO.slice(0, 4));
+
+  return `${startYear}–${startYear + 1}`;
+}, [schoolYearStartISO]);
 
 
     const safeName = useMemo(() => {
@@ -249,10 +262,13 @@ const yearEnd = selectedYear.end;
     }, [teacherFullName, teacher?.full_name]);
 
     const schoolYearFolder = useMemo(() => {
-  const startISO = String(selectedYear?.startISO || schoolYearStartISO || "2025-09-01");
-  const y = Number(startISO.slice(0, 4));
-  return `${y}-${y + 1}`; // ex: "2025-2026"
-}, [selectedYear?.startISO, schoolYearStartISO]);
+  if (!schoolYearStartISO || !schoolYearEndISO) return "current";
+
+  const startYear = Number(schoolYearStartISO.slice(0, 4));
+  const endYear = Number(schoolYearEndISO.slice(0, 4));
+
+  return `${startYear}-${endYear}`;
+}, [schoolYearStartISO, schoolYearEndISO]);
 
 const teacherFolder = useMemo(() => {
   // ✅ signed_docs/PROFESSEURS/2025-2026/Teacher_Full_Name/
@@ -468,17 +484,22 @@ if (!tplId) {
 
 // ...
 
-const selected = schoolYearOptions.find((o) => o.startISO === schoolYearStartISO) || schoolYearOptions[0];
-const startISO = selected.startISO;
-const endISO = selected.endISO;
-
-
 const { data: existing, error: exErr } = await supabase
   .from("teacher_contracts")
-  .select("id, status, pdf_url, teacher_nif_cin, teacher_id_upload_url, template_id, teacher_signature_dataurl")
+  .select(`
+    id,
+    status,
+    school_year_start,
+    school_year_end,
+    pdf_url,
+    teacher_nif_cin,
+    teacher_id_upload_url,
+    template_id,
+    teacher_signature_dataurl
+  `)
   .eq("teacher_id", teacherId)
-  .eq("school_year_start", startISO)
-  .eq("school_year_end", endISO)
+  .eq("status", "draft")
+  .order("school_year_start", { ascending: false })
   .order("created_at", { ascending: false })
   .limit(1);
 
@@ -489,6 +510,9 @@ if (exErr) {
 
 if (existing?.length) {
   const row = existing[0];
+
+  setSchoolYearStartISO(row.school_year_start || "");
+setSchoolYearEndISO(row.school_year_end || "");
 
   // Fix old rows missing template_id
   if (!row.template_id) {
@@ -636,7 +660,7 @@ if (existing?.length) {
 
       })();
       // eslint-disable-next-line react-hooks/exhaustive-deps
-      }, [teacherId, schoolYearStartISO]);
+      }, [teacherId]);
 
     // Build salary values for placeholders (fallback to contract text defaults)
     const salaryBaseHTG = useMemo(() => {
@@ -648,6 +672,7 @@ if (existing?.length) {
     // Render HTML by injecting placeholders into the DB template
     function renderContractHTML() {
   if (!template?.html_template) return "";
+  if (!yearStart || !yearEnd) return "";
 
   const startStr = yearStart.toLocaleDateString("fr-FR", {
     day: "2-digit",
@@ -722,6 +747,7 @@ const replacements = {
     // For in-modal preview (keep it light like SignupDocsModal)
     function renderPreviewHTML() {
   if (!template?.html_template) return wrapHTMLPreview("<p>—</p>");
+  if (!yearStart || !yearEnd) return "";
 
   const startStr = yearStart.toLocaleDateString("fr-FR", {
     day: "2-digit",
@@ -926,17 +952,14 @@ if (upErr) throw upErr;
     Année académique <span className="text-red-500">*</span>
   </label>
   <select
-    className="w-full border rounded-md px-3 py-2"
-    value={schoolYearStartISO}
-    onChange={(e) => setSchoolYearStartISO(e.target.value)}
-    disabled={saving}
-  >
-    {schoolYearOptions.map((o) => (
-      <option key={o.startISO} value={o.startISO}>
-        {o.label}
-      </option>
-    ))}
-  </select>
+  className="w-full border rounded-md px-3 py-2 bg-gray-50"
+  value={currentSchoolYearLabel}
+  disabled
+>
+  <option value={currentSchoolYearLabel}>
+    {currentSchoolYearLabel}
+  </option>
+</select>
 </div>
 
                 <label className="block text-sm text-gray-600 mb-1">
@@ -1014,9 +1037,12 @@ if (upErr) throw upErr;
 </div>
 
               <div className="sm:col-span-2 text-xs text-gray-600">
-                Durée: <b>{yearStart.toLocaleDateString("fr-FR")}</b> →{" "}
-                <b>{yearEnd.toLocaleDateString("fr-FR")}</b> (automatique)
-              </div>
+  Durée:{" "}
+  <b>{yearStart ? yearStart.toLocaleDateString("fr-FR") : "—"}</b>
+  {" → "}
+  <b>{yearEnd ? yearEnd.toLocaleDateString("fr-FR") : "—"}</b>
+  {" "}(définie par l'administration)
+</div>
             </div>
 
             {/* Preview */}
