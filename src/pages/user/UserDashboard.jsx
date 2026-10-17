@@ -112,7 +112,7 @@ export default function UserDashboard() {
 // TEMP — MINI COMPETITION TEST MODE
 // Set to false when testing is finished.
 // =========================================================
-const MINI_COMPETITION_TEST_MODE = true;
+const MINI_COMPETITION_TEST_MODE = false;
 
 const miniCompetitionYear =
   closureYear;

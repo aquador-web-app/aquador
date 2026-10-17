@@ -4,6 +4,7 @@ import {
   Fragment,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { supabase } from "../../lib/supabaseClient";
@@ -109,8 +110,9 @@ export default function AdminCompetition() {
   const [activeSection, setActiveSection] = useState("overview");
 
   const [competitions, setCompetitions] = useState([]);
-  const [selectedYear, setSelectedYear] = useState(null);
-
+const [selectedCompetitionId, setSelectedCompetitionId] =
+  useState(null);
+const activeCompetitionIdRef = useRef(null);
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
@@ -189,8 +191,8 @@ const [
   setEventEvaluationLoading,
 ] = useState(false);
 
-async function loadEventConfig(year) {
-  if (!year) {
+async function loadEventConfig(competitionId) {
+  if (!competitionId) {
     setCompetitionPhases([]);
     return;
   }
@@ -202,12 +204,17 @@ async function loadEventConfig(year) {
       await supabase.rpc(
         "get_admin_competition_event_config",
         {
-          p_competition_year:
-            Number(year),
+          p_competition_id: competitionId,
         }
       );
 
-    if (error) throw error;
+        if (error) throw error;
+
+    if (
+      activeCompetitionIdRef.current !== competitionId
+    ) {
+      return;
+    }
 
     setCompetitionPhases(
       data?.phases || []
@@ -217,8 +224,8 @@ async function loadEventConfig(year) {
   }
 }
 
-async function loadEventEvaluationConfig(year) {
-  if (!year) {
+async function loadEventEvaluationConfig(competitionId) {
+  if (!competitionId) {
     setCompetitionEventGroups([]);
     setCompetitionEventEvaluation([]);
     return;
@@ -231,12 +238,17 @@ async function loadEventEvaluationConfig(year) {
       await supabase.rpc(
         "get_admin_competition_event_evaluation_config",
         {
-          p_competition_year:
-            Number(year),
+          p_competition_id: competitionId,
         }
       );
 
-    if (error) throw error;
+        if (error) throw error;
+
+    if (
+      activeCompetitionIdRef.current !== competitionId
+    ) {
+      return;
+    }
 
     setCompetitionEventGroups(
       data?.event_groups || []
@@ -250,8 +262,8 @@ async function loadEventEvaluationConfig(year) {
   }
 }
 
-async function loadCategories(year) {
-  if (!year) {
+async function loadCategories(competitionId) {
+  if (!competitionId) {
     setCategories([]);
     setCompetitionCourses([]);
     return;
@@ -264,12 +276,17 @@ async function loadCategories(year) {
       await supabase.rpc(
         "get_admin_competition_category_config",
         {
-          p_competition_year:
-            Number(year),
+          p_competition_id: competitionId,
         }
       );
 
-    if (error) throw error;
+        if (error) throw error;
+
+    if (
+      activeCompetitionIdRef.current !== competitionId
+    ) {
+      return;
+    }
 
     setCategories(
       data?.categories || []
@@ -284,13 +301,16 @@ async function loadCategories(year) {
 }
 
   const selectedCompetition = useMemo(
-    () =>
-      competitions.find(
-        (competition) =>
-          Number(competition.competition_year) === Number(selectedYear)
-      ) || null,
-    [competitions, selectedYear]
-  );
+  () =>
+    competitions.find(
+      (competition) =>
+        competition.id === selectedCompetitionId
+    ) || null,
+  [competitions, selectedCompetitionId]
+);
+
+const selectedYear =
+  selectedCompetition?.competition_year ?? null;
 
   const isHistorical = useMemo(() => {
     if (!selectedCompetition) return false;
@@ -317,7 +337,7 @@ async function loadCategories(year) {
     setCompetitions(rows);
 
     if (!rows.length) {
-      setSelectedYear(null);
+      setSelectedCompetitionId(null);
       return;
     }
 
@@ -347,11 +367,21 @@ async function loadCategories(year) {
       );
 
     const competitionToUse =
-      upcoming[0] || rows[0];
+  upcoming[0] || rows[0];
 
-    setSelectedYear(
-      competitionToUse.competition_year
-    );
+setSelectedCompetitionId((previousId) => {
+  if (
+    previousId &&
+    rows.some(
+      (competition) =>
+        competition.id === previousId
+    )
+  ) {
+    return previousId;
+  }
+
+  return competitionToUse.id;
+});
   }
 
   async function handleLevelChange(
@@ -415,7 +445,7 @@ async function loadCategories(year) {
      * - removes event entries that are no longer eligible
      */
     await loadAssignments(
-      selectedYear
+      selectedCompetitionId
     );
 
     if (
@@ -452,8 +482,8 @@ async function loadCategories(year) {
   }
 }
 
-  async function loadAssignments(year) {
-  if (!year) {
+  async function loadAssignments(competitionId) {
+  if (!competitionId) {
     setAssignments([]);
     return;
   }
@@ -461,11 +491,17 @@ async function loadCategories(year) {
   const { data, error } = await supabase.rpc(
     "get_admin_competition_participants",
     {
-      p_competition_year: Number(year),
+      p_competition_id: competitionId,
     }
   );
 
-  if (error) throw error;
+    if (error) throw error;
+
+  if (
+    activeCompetitionIdRef.current !== competitionId
+  ) {
+    return;
+  }
 
   const rows = (data || []).map((row) => ({
     id: row.assignment_id,
@@ -560,7 +596,7 @@ async function loadCategories(year) {
 
 async function handleSyncParticipants() {
   if (
-    !selectedYear ||
+    !selectedCompetitionId ||
     isHistorical ||
     syncingParticipants
   ) {
@@ -577,8 +613,7 @@ async function handleSyncParticipants() {
   await supabase.rpc(
     "sync_competition_student_assignments",
     {
-      p_year:
-        Number(selectedYear),
+      p_competition_id: selectedCompetitionId,
     }
   );
 
@@ -600,7 +635,7 @@ async function handleSyncParticipants() {
      * Reload the roster after synchronization.
      */
     await loadAssignments(
-      selectedYear
+      selectedCompetitionId
     );
 
     const eligible =
@@ -761,17 +796,36 @@ async function handleToggleAssignment(
   }, []);
 
   useEffect(() => {
-  if (!selectedYear) return;
+  activeCompetitionIdRef.current = selectedCompetitionId;
+
+  setAssignments([]);
+  setCategories([]);
+  setCompetitionCourses([]);
+  setCompetitionPhases([]);
+  setCompetitionEventGroups([]);
+  setCompetitionEventEvaluation([]);
+  setAssignmentEvents({});
+  setExpandedAssignmentId(null);
 
   setErrorMessage("");
   setSuccessMessage("");
 
+  if (!selectedCompetitionId) return;
+
+  const requestedCompetitionId = selectedCompetitionId;
+
   Promise.all([
-    loadAssignments(selectedYear),
-    loadCategories(selectedYear),
-    loadEventConfig(selectedYear),
-    loadEventEvaluationConfig(selectedYear),
+    loadAssignments(requestedCompetitionId),
+    loadCategories(requestedCompetitionId),
+    loadEventConfig(requestedCompetitionId),
+    loadEventEvaluationConfig(requestedCompetitionId),
   ]).catch((error) => {
+    if (
+      activeCompetitionIdRef.current !== requestedCompetitionId
+    ) {
+      return;
+    }
+
     console.error(
       "Competition data error:",
       error
@@ -782,7 +836,15 @@ async function handleToggleAssignment(
         "Impossible de charger les données de la compétition."
     );
   });
-}, [selectedYear]);
+
+  return () => {
+    if (
+      activeCompetitionIdRef.current === requestedCompetitionId
+    ) {
+      activeCompetitionIdRef.current = null;
+    }
+  };
+}, [selectedCompetitionId, selectedYear]);
 
   const stats = useMemo(() => {
     const total = assignments.length;
@@ -854,22 +916,24 @@ async function handleToggleAssignment(
 
             {competitions.length > 0 && (
               <select
-                value={selectedYear || ""}
-                onChange={(event) =>
-                  setSelectedYear(
-                    Number(event.target.value)
-                  )
-                }
+  value={selectedCompetitionId || ""}
+  onChange={(event) =>
+    setSelectedCompetitionId(
+      event.target.value
+    )
+  }
                 className="rounded-xl border border-white/30 bg-white px-4 py-2 font-semibold text-gray-800"
               >
                 {competitions.map((competition) => (
                   <option
                     key={competition.id}
-                    value={
-                      competition.competition_year
-                    }
-                  >
-                    {competition.competition_year}
+                    value={competition.id}
+>
+  {competition.competition_type === "closure"
+    ? `Clôture annuelle — ${competition.competition_year}`
+    : `${competition.name} — ${formatDateFrSafe(
+        competition.event_date
+      )}`}
                   </option>
                 ))}
               </select>
@@ -994,13 +1058,14 @@ async function handleToggleAssignment(
       {/* CATEGORIES */}
       {activeSection === "categories" && (
   <CategoriesSection
+    competitionId={selectedCompetitionId}
     categories={categories}
     courses={competitionCourses}
     competitionYear={selectedYear}
     isHistorical={isHistorical}
     loading={categoryConfigLoading}
     onReload={() =>
-      loadCategories(selectedYear)
+      loadCategories(selectedCompetitionId)
     }
     onSuccess={setSuccessMessage}
     onError={setErrorMessage}
@@ -1015,6 +1080,7 @@ async function handleToggleAssignment(
   levels={levels}
   eventGroups={competitionEventGroups}
   eventEvaluation={competitionEventEvaluation}
+  competitionId={selectedCompetitionId}
   competitionYear={selectedYear}
   isHistorical={isHistorical}
   loading={
@@ -1024,16 +1090,16 @@ async function handleToggleAssignment(
   onReload={async () => {
     await Promise.all([
       loadEventConfig(
-        selectedYear
+        selectedCompetitionId
       ),
 
       loadEventEvaluationConfig(
-        selectedYear
+        selectedCompetitionId
       ),
 
       loadAssignments(
-        selectedYear
-      ),
+  selectedCompetitionId
+),
     ]);
 
     setAssignmentEvents({});
@@ -1119,6 +1185,7 @@ function Placeholder({ title, text }) {
 function CategoriesSection({
   categories,
   courses,
+  competitionId,
   competitionYear,
   isHistorical,
   loading,
@@ -1247,10 +1314,7 @@ function CategoriesSection({
         await supabase.rpc(
           "admin_save_competition_category",
           {
-            p_competition_year:
-              Number(
-                competitionYear
-              ),
+            p_competition_id: competitionId,
 
             p_category_id:
               form.id || null,
@@ -1338,10 +1402,7 @@ function CategoriesSection({
         await supabase.rpc(
           "admin_set_competition_age_based_courses",
           {
-            p_competition_year:
-              Number(
-                competitionYear
-              ),
+            p_competition_id: competitionId,
 
             p_course_ids:
               next,
@@ -1862,6 +1923,7 @@ function EventsSection({
   eventGroups,
   eventEvaluation,
 
+  competitionId,
   competitionYear,
   isHistorical,
   loading,
@@ -1874,6 +1936,11 @@ function EventsSection({
 
   const [eventEditor, setEventEditor] =
     useState(null);
+
+    async function refreshAfterCriterionChange() {
+    await onReload();
+    setEventEditor(null);
+  }
 
   const [
   collapsedPhases,
@@ -2013,10 +2080,7 @@ async function saveEventGroup() {
       await supabase.rpc(
         "admin_save_competition_event_group",
         {
-          p_competition_year:
-            Number(
-              competitionYear
-            ),
+          p_competition_id: competitionId,
 
           p_event_group_id:
             eventGroupEditor.id ||
@@ -2274,10 +2338,7 @@ async function toggleEventGroupActive(
         await supabase.rpc(
           "admin_save_competition_phase",
           {
-            p_competition_year:
-              Number(
-                competitionYear
-              ),
+            p_competition_id: competitionId,
 
             p_phase_id:
               phaseEditor.id ||
@@ -2339,14 +2400,16 @@ async function toggleEventGroupActive(
         Number(b.sort_order || 0)
     );
 
-  const size = Number(teamSize || 0);
+  const size = Number(teamSize);
 
-  if (
-    !selectedCategories.length ||
-    size < selectedCategories.length
-  ) {
-    return [];
-  }
+if (
+  !selectedCategories.length ||
+  !Number.isInteger(size) ||
+  size < 2 ||
+  size < selectedCategories.length
+) {
+  return [];
+}
 
   /*
    * Every category gets at least 1 member.
@@ -2489,14 +2552,14 @@ if (
   "individual"
 ) {
   if (
-    !eventEditor.team_size ||
-    Number(eventEditor.team_size) < 2
-  ) {
-    onError(
-      "Indiquez le nombre de membres par équipe (minimum 2)."
-    );
-    return;
-  }
+  !Number.isInteger(Number(eventEditor.team_size)) ||
+  Number(eventEditor.team_size) < 2
+) {
+  onError(
+    "Le nombre de membres par équipe doit être un nombre entier (minimum 2)."
+  );
+  return;
+}
 
   if (
     !eventEditor.team_scoring_method
@@ -2552,13 +2615,10 @@ try {
       onSuccess("");
 
       const { data, error } =
-        await supabase.rpc(
-          "admin_save_competition_event",
+                await supabase.rpc(
+          "admin_save_competition_event_atomic",
           {
-            p_competition_year:
-              Number(
-                competitionYear
-              ),
+            p_competition_id: competitionId,
 
             p_event_id:
               eventEditor.id ||
@@ -2623,43 +2683,19 @@ try {
                 ? null
                 : eventEditor.team_scoring_method,
 
-            p_team_requirements:
+                        p_team_requirements:
               eventEditor.participation_mode ===
               "team_mixed_categories"
                 ? eventEditor.team_requirements
                 : [],
+
+            p_event_group_id:
+              eventEditor.event_group_id ||
+              null,
           }
         );
 
       if (error) throw error;
-
-const savedEventId =
-  data?.event_id ||
-  eventEditor.id;
-
-if (!savedEventId) {
-  throw new Error(
-    "L'identifiant de l'épreuve enregistrée est introuvable."
-  );
-}
-
-const {
-  error: groupError,
-} = await supabase.rpc(
-  "admin_set_competition_event_group",
-  {
-    p_event_id:
-      savedEventId,
-
-    p_event_group_id:
-      eventEditor.event_group_id ||
-      null,
-  }
-);
-
-if (groupError) {
-  throw groupError;
-}
 
 await onReload();
 
@@ -2759,14 +2795,14 @@ async function generateTeams(event) {
   }
 
   if (
-    !event.team_size ||
-    Number(event.team_size) < 2
-  ) {
-    onError(
-      "Configurez d'abord la taille souhaitée de la formation."
-    );
-    return;
-  }
+  !Number.isInteger(Number(event.team_size)) ||
+  Number(event.team_size) < 2
+) {
+  onError(
+    "La taille de l'équipe doit être un nombre entier (minimum 2) avant de générer les équipes."
+  );
+  return;
+}
 
   const alreadyGenerated =
     (eventTeams[event.id]?.teams?.length ||
@@ -3293,6 +3329,7 @@ if (loading) {
                             className="md:col-span-2 xl:col-span-3 2xl:col-span-4"
                           >
                             <EventEditor
+                            buildAutomaticTeamRequirements={buildAutomaticTeamRequirements}
                               event={
                                 eventEditor
                               }
@@ -3323,6 +3360,9 @@ if (loading) {
                               onSave={
                                 saveEvent
                               }
+                              onCriteriaChanged={
+  refreshAfterCriterionChange
+}
                               onCancel={() =>
                                 setEventEditor(
                                   null
@@ -3389,6 +3429,7 @@ if (loading) {
                     !phaseEventEditor.id && (
                       <div className="md:col-span-2 xl:col-span-3 2xl:col-span-4">
                         <EventEditor
+                        buildAutomaticTeamRequirements={buildAutomaticTeamRequirements}
                           event={
                             phaseEventEditor
                           }
@@ -3419,6 +3460,9 @@ if (loading) {
                           onSave={
                             saveEvent
                           }
+                          onCriteriaChanged={
+  refreshAfterCriterionChange
+}
                           onCancel={() =>
                             setEventEditor(
                               null
@@ -4081,7 +4125,9 @@ const teamScoringLabel =
 }
 
 function EventEditor({
+  buildAutomaticTeamRequirements,
   event,
+  onCriteriaChanged,
   setEvent,
   phases,
   categories,
@@ -4141,14 +4187,29 @@ function EventEditor({
 
   async function saveCriterion() {
     if (
-      !event.id ||
-      !criterionEditor?.name?.trim()
-    ) {
-      return;
-    }
+  !event.id ||
+  !criterionEditor?.name?.trim()
+) {
+  return;
+}
 
-    try {
-      setSavingCriterion(true);
+const maxPoints = Number(criterionEditor.max_points);
+
+if (
+  criterionEditor.max_points === "" ||
+  criterionEditor.max_points === null ||
+  criterionEditor.max_points === undefined ||
+  !Number.isFinite(maxPoints) ||
+  maxPoints <= 0
+) {
+  window.alert(
+    "Le nombre maximum de points doit être supérieur à zéro."
+  );
+  return;
+}
+
+try {
+  setSavingCriterion(true);
 
       const { error } =
         await supabase.rpc(
@@ -4168,10 +4229,7 @@ function EventEditor({
               criterionEditor.description ||
               null,
 
-            p_max_points:
-              Number(
-                criterionEditor.max_points
-              ),
+            p_max_points: maxPoints,
 
             p_sort_order:
               Number(
@@ -4189,7 +4247,7 @@ function EventEditor({
 
       if (error) throw error;
 
-      window.location.reload();
+            await onCriteriaChanged();
     } catch (error) {
       console.error(
         "Criterion save error:",
@@ -4233,7 +4291,7 @@ function EventEditor({
       return;
     }
 
-    window.location.reload();
+    await onCriteriaChanged();
   }
 
   return (
@@ -4567,8 +4625,13 @@ function EventEditor({
         </label>
       </div>
 
-      {event.scoring_type ===
-  "technical_score" && (
+      {(
+  event.scoring_type === "technical_score" ||
+  (
+    event.scoring_type === "team" &&
+    event.team_scoring_method === "direct_technical_score"
+  )
+) && (
   <div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
@@ -4750,11 +4813,12 @@ function EventEditor({
         </span>
 
         <input
-          type="number"
-          min="2"
-          value={
-            event.team_size
-          }
+  type="number"
+  min="2"
+  step="1"
+  value={
+    event.team_size
+  }
           onChange={(e) => {
   const teamSize =
     e.target.value;
@@ -4825,29 +4889,38 @@ function EventEditor({
 
           <button
             type="button"
-            onClick={() =>
-              setEvent({
-                ...event,
+            onClick={() => {
+  const allCategoriesSelected =
+  categories.length > 0 &&
+  categories.every((category) =>
+    event.category_ids.includes(category.id)
+  );
 
-                category_ids:
-                  event
-                    .category_ids
-                    .length ===
-                  categories.length
-                    ? []
-                    : categories.map(
-                        (category) =>
-                          category.id
-                      ),
-              })
-            }
+const nextCategoryIds =
+  allCategoriesSelected
+    ? []
+    : categories.map((category) => category.id);
+
+  setEvent((previous) => ({
+    ...previous,
+    category_ids: nextCategoryIds,
+    team_requirements:
+      previous.participation_mode === "team_mixed_categories"
+        ? buildAutomaticTeamRequirements(
+            nextCategoryIds,
+            previous.team_size
+          )
+        : previous.team_requirements,
+  }));
+}}
             className="text-xs font-semibold text-aquaBlue"
           >
-            {event.category_ids
-              .length ===
-            categories.length
-              ? "Tout décocher"
-              : "Tout sélectionner"}
+            {categories.length > 0 &&
+categories.every((category) =>
+  event.category_ids.includes(category.id)
+)
+  ? "Tout décocher"
+  : "Tout sélectionner"}
           </button>
         </div>
 
@@ -4983,30 +5056,30 @@ function EventEditor({
           </p>
 
           <button
-            type="button"
-            onClick={() =>
-              setEvent({
-                ...event,
+  type="button"
+  onClick={() => {
+    const allLevelsSelected =
+      levels.length > 0 &&
+      levels.every((level) =>
+        event.level_ids.includes(level.id)
+      );
 
-                level_ids:
-                  event.level_ids
-                    .length ===
-                  levels.length
-                    ? []
-                    : levels.map(
-                        (level) =>
-                          level.id
-                      ),
-              })
-            }
-            className="text-xs font-semibold text-aquaBlue"
-          >
-            {event.level_ids
-              .length ===
-            levels.length
-              ? "Tout décocher"
-              : "Tout sélectionner"}
-          </button>
+    setEvent((previous) => ({
+      ...previous,
+      level_ids: allLevelsSelected
+        ? []
+        : levels.map((level) => level.id),
+    }));
+  }}
+  className="text-xs font-semibold text-aquaBlue"
+>
+  {levels.length > 0 &&
+  levels.every((level) =>
+    event.level_ids.includes(level.id)
+  )
+    ? "Tout décocher"
+    : "Tout sélectionner"}
+</button>
         </div>
 
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
@@ -5680,79 +5753,21 @@ function ParticipantsSection({
                                           "—"}
                                       </td>
 
-                                      {/* EDITABLE LEVEL */}
-                                      <td className="px-4 py-3">
-                                        <div className="min-w-[190px]">
-                                          <select
-                                            value={
-                                              row.level_id ||
-                                              ""
-                                            }
-                                            disabled={
-                                              isHistorical ||
-                                              savingLevelId ===
-                                              row.id
-                                            }
-                                            onChange={(
-                                              event
-                                            ) =>
-                                              onLevelChange(
-                                                row,
-                                                event
-                                                  .target
-                                                  .value
-                                              )
-                                            }
-                                            className={`w-full rounded-lg border px-3 py-2 text-sm font-medium outline-none transition ${
-                                              row.level_id
-                                                ? "border-gray-300 bg-white text-gray-800 focus:border-aquaBlue"
-                                                : "border-orange-300 bg-orange-50 text-orange-700 focus:border-orange-500"
-                                            } ${
-                                                isHistorical
-                                                  ? "cursor-not-allowed opacity-60"
-                                                  : savingLevelId ===
-                                                    row.id
-                                                  ? "cursor-wait opacity-60"
-                                                  : ""
-                                              }`}
-                                          >
-                                            <option
-                                              value=""
-                                              disabled
-                                            >
-                                              Niveau
-                                              à
-                                              déterminer
-                                            </option>
-
-                                            {levels.map(
-                                              (
-                                                level
-                                              ) => (
-                                                <option
-                                                  key={
-                                                    level.id
-                                                  }
-                                                  value={
-                                                    level.id
-                                                  }
-                                                >
-                                                  {
-                                                    level.name
-                                                  }
-                                                </option>
-                                              )
-                                            )}
-                                          </select>
-
-                                          {savingLevelId ===
-                                            row.id && (
-                                            <p className="mt-1 text-xs text-gray-500">
-                                              Enregistrement…
-                                            </p>
-                                          )}
-                                        </div>
-                                      </td>
+                                      {/* READ-ONLY LEVEL */}
+<td className="px-4 py-3">
+  <span
+    className={`inline-flex rounded-lg border px-3 py-2 text-sm font-medium ${
+      row.level_id
+        ? "border-gray-200 bg-gray-50 text-gray-800"
+        : "border-orange-200 bg-orange-50 text-orange-700"
+    }`}
+  >
+    {row.level?.name ||
+      row.level_name_snapshot ||
+      levels.find((level) => level.id === row.level_id)?.name ||
+      "Niveau à déterminer"}
+  </span>
+</td>
 
                                       {/* PARTICIPATION */}
                                       <td className="px-4 py-3">

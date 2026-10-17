@@ -99,6 +99,14 @@ const [schoolYearFilter, setSchoolYearFilter] = useState(
 const [series, setSeries] = useState([]);
   const [expanded, setExpanded] = useState({}); // { [seriesId]: true|false }
   const [sessionsBySeries, setSessionsBySeries] = useState({}); // { [seriesId]: Session[] }
+
+  // Manual day management: cancel / restore / reproduce selected sessions
+const [dayManagementDate, setDayManagementDate] = useState("");
+const [dayManagementSessions, setDayManagementSessions] = useState([]);
+const [selectedDaySessionIds, setSelectedDaySessionIds] = useState([]);
+const [replacementDate, setReplacementDate] = useState("");
+const [dayManagementLoading, setDayManagementLoading] = useState(false);
+const [dayManagementActionLoading, setDayManagementActionLoading] = useState(false);
   
 
   // courses for display in list and in form
@@ -199,22 +207,110 @@ useEffect(() => {
 
   // Load sessions that belong to a series signature
   async function loadSessionsForSeries(s) {
+  // First find the normal sessions that belong to this series.
+  const { data: normalSessions, error: normalError } = await supabase
+    .from("sessions")
+    .select(`
+      id,
+      course_id,
+      start_date,
+      academic_date,
+      start_time,
+      duration_hours,
+      capacity,
+      booking_mode,
+      status,
+      day_of_week,
+      session_group,
+      session_type,
+      replaces_session_id,
+      counts_academically,
+      courses(name)
+    `)
+    .eq("course_id", s.course_id)
+    .eq("start_time", s.start_time)
+    .gte("start_date", s.start_date)
+    .lte("start_date", s.end_date)
+    .in("day_of_week", s.days_of_week || [])
+    .order("start_date", { ascending: true });
+
+  if (normalError) {
+    console.error("sessions fetch error", normalError);
+    return;
+  }
+
+  const sessionGroups = [
+    ...new Set(
+      (normalSessions || [])
+        .map((session) => session.session_group)
+        .filter(Boolean)
+    ),
+  ];
+
+  let replacementSessions = [];
+
+  if (sessionGroups.length > 0) {
     const { data, error } = await supabase
       .from("sessions")
-      .select("id, start_date, start_time, duration_hours, capacity, booking_mode, status, day_of_week, courses(name)")
-      .eq("course_id", s.course_id)
-      .eq("start_time", s.start_time)
-      .gte("start_date", s.start_date)
-      .lte("start_date", s.end_date)
-      .in("day_of_week", s.days_of_week || [])
+      .select(`
+        id,
+        course_id,
+        start_date,
+        academic_date,
+        start_time,
+        duration_hours,
+        capacity,
+        booking_mode,
+        status,
+        day_of_week,
+        session_group,
+        session_type,
+        replaces_session_id,
+        counts_academically,
+        courses(name)
+      `)
+      .in("session_group", sessionGroups)
+      .eq("session_type", "replacement")
+      .gte("academic_date", s.start_date)
+      .lte("academic_date", s.end_date)
       .order("start_date", { ascending: true });
 
     if (error) {
-      console.error("sessions fetch error", error);
+      console.error("replacement sessions fetch error", error);
       return;
     }
-    setSessionsBySeries((old) => ({ ...old, [s.id]: data || [] }));
+
+    replacementSessions = data || [];
   }
+
+  const merged = [
+    ...(normalSessions || []),
+    ...replacementSessions,
+  ];
+
+  // Remove duplicates in case a replacement also happens to match
+  // the normal series signature.
+  const uniqueSessions = Array.from(
+    new Map(
+      merged.map((session) => [session.id, session])
+    ).values()
+  ).sort((a, b) => {
+    const dateCompare = String(a.start_date).localeCompare(
+      String(b.start_date)
+    );
+
+    if (dateCompare !== 0) return dateCompare;
+
+    return String(a.start_time).localeCompare(
+      String(b.start_time)
+    );
+  });
+
+  setSessionsBySeries((old) => ({
+    ...old,
+    [s.id]: uniqueSessions,
+  }));
+}
 
   // Cancel a single session
   async function cancelSession(sessionId, seriesId, e) {
@@ -321,6 +417,220 @@ async function restoreSession(sessionId, seriesId, e) {
   alert("Séance restaurée avec succès ✅");
 }
 
+// ============================================================
+// MANUAL DAY MANAGEMENT
+// Cancel / restore / reproduce selected sessions
+// ============================================================
+
+async function loadSessionsForDate(date = dayManagementDate) {
+  if (!date) {
+    await showAlert("Veuillez choisir une date.");
+    return;
+  }
+
+  setDayManagementLoading(true);
+
+  try {
+    const { data, error } = await supabase
+      .from("sessions")
+      .select(`
+        id,
+        course_id,
+        start_date,
+        academic_date,
+        start_time,
+        duration_hours,
+        capacity,
+        booking_mode,
+        status,
+        day_of_week,
+        session_group,
+        session_type,
+        replaces_session_id,
+        counts_academically,
+        courses(name)
+      `)
+      .eq("start_date", date)
+      .order("start_time", { ascending: true });
+
+    if (error) throw error;
+
+    setDayManagementSessions(data || []);
+    setSelectedDaySessionIds([]);
+    setReplacementDate("");
+  } catch (error) {
+    console.error("loadSessionsForDate error:", error);
+    await showAlert(
+      "❌ Erreur lors du chargement des séances : " + error.message
+    );
+  } finally {
+    setDayManagementLoading(false);
+  }
+}
+
+function toggleDaySessionSelection(sessionId) {
+  setSelectedDaySessionIds((current) =>
+    current.includes(sessionId)
+      ? current.filter((id) => id !== sessionId)
+      : [...current, sessionId]
+  );
+}
+
+function toggleAllDaySessions() {
+  if (
+    dayManagementSessions.length > 0 &&
+    selectedDaySessionIds.length === dayManagementSessions.length
+  ) {
+    setSelectedDaySessionIds([]);
+    return;
+  }
+
+  setSelectedDaySessionIds(
+    dayManagementSessions.map((session) => session.id)
+  );
+}
+
+async function refreshAfterDayManagement() {
+  await fetchSeries();
+
+  // Avoid showing stale child-session data after a manual operation.
+  setExpanded({});
+  setSessionsBySeries({});
+
+  if (dayManagementDate) {
+    await loadSessionsForDate(dayManagementDate);
+  }
+}
+
+async function handleBulkSessionStatus(status) {
+  if (!selectedDaySessionIds.length) {
+    await showAlert("Veuillez sélectionner au moins une séance.");
+    return;
+  }
+
+  const label =
+    status === "cancelled" ? "annuler" : "restaurer";
+
+  const confirmed = await showConfirm(
+    `Voulez-vous ${label} les ${selectedDaySessionIds.length} séance(s) sélectionnée(s) ?`
+  );
+
+  if (!confirmed) return;
+
+  setDayManagementActionLoading(true);
+
+  try {
+    const { data, error } = await supabase.rpc(
+      "admin_set_sessions_status",
+      {
+        p_session_ids: selectedDaySessionIds,
+        p_status: status,
+      }
+    );
+
+    if (error) throw error;
+
+    await refreshAfterDayManagement();
+
+    await showAlert(
+      status === "cancelled"
+        ? `✅ ${data ?? selectedDaySessionIds.length} séance(s) annulée(s).`
+        : `✅ ${data ?? selectedDaySessionIds.length} séance(s) restaurée(s).`
+    );
+  } catch (error) {
+    console.error("handleBulkSessionStatus error:", error);
+    await showAlert(
+      "❌ Erreur lors de la modification des séances : " + error.message
+    );
+  } finally {
+    setDayManagementActionLoading(false);
+  }
+}
+
+async function handleReproduceSessions() {
+  if (!selectedDaySessionIds.length) {
+    await showAlert("Veuillez sélectionner au moins une séance à reproduire.");
+    return;
+  }
+
+  if (!replacementDate) {
+    await showAlert("Veuillez choisir la nouvelle date.");
+    return;
+  }
+
+  if (replacementDate === dayManagementDate) {
+    await showAlert(
+      "La nouvelle date doit être différente de la date d'origine."
+    );
+    return;
+  }
+
+  const selectedSessions = dayManagementSessions.filter((session) =>
+    selectedDaySessionIds.includes(session.id)
+  );
+
+  const nonCancelledSessions = selectedSessions.filter(
+    (session) => session.status !== "cancelled"
+  );
+
+  if (nonCancelledSessions.length > 0) {
+    await showAlert(
+      "Toutes les séances à reproduire doivent d'abord être annulées."
+    );
+    return;
+  }
+
+  const confirmed = await showConfirm(
+    `Reproduire ${selectedDaySessionIds.length} séance(s) du ${formatDateFrSafe(
+      dayManagementDate
+    )} au ${formatDateFrSafe(replacementDate)} ?`
+  );
+
+  if (!confirmed) return;
+
+  setDayManagementActionLoading(true);
+
+  try {
+    const { data, error } = await supabase.rpc(
+      "admin_reproduce_sessions",
+      {
+        p_source_session_ids: selectedDaySessionIds,
+        p_target_date: replacementDate,
+      }
+    );
+
+    if (error) throw error;
+
+    const createdCount = data?.length ?? selectedDaySessionIds.length;
+
+    await refreshAfterDayManagement();
+
+    await showAlert(
+      `✅ ${createdCount} séance(s) reproduite(s) au ${formatDateFrSafe(
+        replacementDate
+      )}.`
+    );
+  } catch (error) {
+    console.error("handleReproduceSessions error:", error);
+
+    let message = error.message || "Erreur inconnue.";
+
+    if (
+      message.includes("sessions_course_id_start_date_start_time") ||
+      message.includes("ux_sessions_unique") ||
+      message.includes("duplicate key")
+    ) {
+      message =
+        "Une ou plusieurs séances existent déjà à cette date et à cette heure.";
+    }
+
+    await showAlert(
+      "❌ Impossible de reproduire les séances : " + message
+    );
+  } finally {
+    setDayManagementActionLoading(false);
+  }
+}
 
 
   async function handleSave(e) {
@@ -392,8 +702,9 @@ async function restoreSession(sessionId, seriesId, e) {
       .eq("start_time", start_time)
       .gte("start_date", todayISO)
       .gte("start_date", regenFrom)
-      .lte("start_date", end_date)          // ✅ critical
-      .in("day_of_week", days);
+      .lte("start_date", end_date)
+.in("day_of_week", days)
+.eq("session_type", "normal");
     if (delErr) {
       console.error(delErr);
       alert("Série mise à jour (partielle). Erreur pendant la régénération des séances : " + delErr.message);
@@ -443,16 +754,19 @@ for (const d of eachDay(start, end)) {
 
   // OK → create a real session
   newRows.push({
-    course_id,
-    start_date: iso,
-    end_date: iso,
-    day_of_week: dow,
-    start_time,
-    duration_hours,
-    capacity,
-    booking_mode,
-    status: "active",
-  });
+  course_id,
+  start_date: iso,
+  end_date: iso,
+  academic_date: iso,
+  day_of_week: dow,
+  start_time,
+  duration_hours,
+  capacity,
+  booking_mode,
+  status: "active",
+  session_type: "normal",
+  counts_academically: true,
+});
 }
 
 
@@ -488,7 +802,8 @@ for (const d of eachDay(start, end)) {
     .eq("start_time", row.start_time)
     .gte("start_date", row.start_date)
     .lte("start_date", row.end_date)
-    .in("day_of_week", row.days_of_week || []);
+.in("day_of_week", row.days_of_week || [])
+.eq("session_type", "normal");
 
   if (delSessErr) {
     console.error(delSessErr);
@@ -689,6 +1004,246 @@ const filteredSeries = useMemo(() => {
             </button>
           )}
         </div>
+      </div>
+
+            {/* =====================================================
+          Manual day management
+          ===================================================== */}
+      <div className="bg-white border p-4 rounded shadow mb-6">
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+          <div>
+            <h3 className="font-semibold text-lg">
+              Gestion des journées de cours
+            </h3>
+
+            <p className="text-sm text-gray-500 mt-1">
+              Annuler, restaurer ou reproduire certaines séances d'une journée.
+            </p>
+          </div>
+        </div>
+
+        {/* Source date */}
+        <div className="flex flex-wrap items-end gap-3 mb-4">
+          <label className="min-w-[220px]">
+            <span className="block text-sm font-medium mb-1">
+              Date des séances
+            </span>
+
+            <input
+              type="date"
+              value={dayManagementDate}
+              onChange={(e) => {
+                setDayManagementDate(e.target.value);
+                setDayManagementSessions([]);
+                setSelectedDaySessionIds([]);
+                setReplacementDate("");
+              }}
+              className="border p-2 rounded w-full"
+            />
+          </label>
+
+          <button
+            type="button"
+            onClick={() => loadSessionsForDate()}
+            disabled={!dayManagementDate || dayManagementLoading}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {dayManagementLoading
+              ? "Chargement..."
+              : "Charger les séances"}
+          </button>
+        </div>
+
+        {/* Sessions found */}
+        {dayManagementSessions.length > 0 && (
+          <>
+            <div className="border rounded overflow-x-auto">
+              <table className="min-w-full">
+                <thead className="bg-gray-100">
+                  <tr>
+                    <th className="p-2 text-center w-12">
+                      <input
+                        type="checkbox"
+                        checked={
+                          dayManagementSessions.length > 0 &&
+                          selectedDaySessionIds.length ===
+                            dayManagementSessions.length
+                        }
+                        onChange={toggleAllDaySessions}
+                      />
+                    </th>
+
+                    <th className="p-2 text-left">Cours</th>
+                    <th className="p-2 text-left">Heure</th>
+                    <th className="p-2 text-left">Durée</th>
+                    <th className="p-2 text-left">Statut</th>
+                    <th className="p-2 text-left">Type</th>
+                    <th className="p-2 text-left">Période académique</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {dayManagementSessions.map((session) => {
+                    const selected =
+                      selectedDaySessionIds.includes(session.id);
+
+                    return (
+                      <tr
+                        key={session.id}
+                        className={`border-t ${
+                          selected ? "bg-blue-50" : ""
+                        }`}
+                      >
+                        <td className="p-2 text-center">
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            onChange={() =>
+                              toggleDaySessionSelection(session.id)
+                            }
+                          />
+                        </td>
+
+                        <td className="p-2">
+                          {session.courses?.name ||
+                            courseNameById.get(session.course_id) ||
+                            "—"}
+                        </td>
+
+                        <td className="p-2">
+                          {session.start_time?.slice(0, 5) || "—"}
+                        </td>
+
+                        <td className="p-2">
+                          {session.duration_hours}h
+                        </td>
+
+                        <td className="p-2">
+                          <span
+                            className={`px-2 py-1 rounded text-xs ${
+                              session.status === "active"
+                                ? "bg-green-100 text-green-700"
+                                : "bg-red-100 text-red-700"
+                            }`}
+                          >
+                            {session.status === "active"
+                              ? "Active"
+                              : "Annulée"}
+                          </span>
+                        </td>
+
+                        <td className="p-2">
+                          {session.session_type === "replacement"
+                            ? "Remplacement"
+                            : session.session_type === "exceptional"
+                            ? "Exceptionnelle"
+                            : "Normale"}
+                        </td>
+
+                        <td className="p-2">
+                          {formatDateFrSafe(session.academic_date)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-3 text-sm text-gray-600">
+              {selectedDaySessionIds.length} séance(s) sélectionnée(s)
+            </div>
+
+            {/* Cancel / restore */}
+            <div className="flex flex-wrap gap-2 mt-3">
+              <button
+                type="button"
+                onClick={() =>
+                  handleBulkSessionStatus("cancelled")
+                }
+                disabled={
+                  !selectedDaySessionIds.length ||
+                  dayManagementActionLoading
+                }
+                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Annuler la sélection
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  handleBulkSessionStatus("active")
+                }
+                disabled={
+                  !selectedDaySessionIds.length ||
+                  dayManagementActionLoading
+                }
+                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Restaurer la sélection
+              </button>
+            </div>
+
+            {/* Reproduction */}
+            <div className="mt-5 pt-4 border-t">
+              <h4 className="font-semibold mb-1">
+                Reproduire les séances du{" "}
+                {formatDateFrSafe(dayManagementDate)}
+              </h4>
+
+              <p className="text-sm text-gray-500 mb-3">
+                Sélectionnez les séances annulées à déplacer vers une
+                nouvelle date.
+              </p>
+
+              <div className="flex flex-wrap items-end gap-3">
+                <label className="min-w-[220px]">
+                  <span className="block text-sm font-medium mb-1">
+                    Nouvelle date
+                  </span>
+
+                  <input
+                    type="date"
+                    value={replacementDate}
+                    onChange={(e) =>
+                      setReplacementDate(e.target.value)
+                    }
+                    className="border p-2 rounded w-full"
+                  />
+                </label>
+
+                <button
+                  type="button"
+                  onClick={handleReproduceSessions}
+                  disabled={
+                    !selectedDaySessionIds.length ||
+                    !replacementDate ||
+                    dayManagementActionLoading
+                  }
+                  className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {dayManagementActionLoading
+                    ? "Traitement..."
+                    : "Reproduire la sélection"}
+                </button>
+              </div>
+
+              <p className="text-xs text-gray-500 mt-2">
+                La nouvelle séance conservera la période académique et
+                le groupe d'élèves de la séance d'origine.
+              </p>
+            </div>
+          </>
+        )}
+
+        {!dayManagementLoading &&
+          dayManagementDate &&
+          dayManagementSessions.length === 0 && (
+            <p className="text-sm text-gray-500 mt-3">
+              Chargez cette date pour afficher les séances disponibles.
+            </p>
+          )}
       </div>
 
       {/* Series list */}
@@ -933,6 +1488,7 @@ if (!error && data) {
                   <th className="p-2">Heure</th>
                   <th className="p-2">Durée</th>
                   <th className="p-2">Mode</th>
+                  <th className="p-2">Type</th>
                   <th className="p-2">Statut</th>
                   <th className="p-2">Action</th>
                 </tr>
@@ -981,6 +1537,31 @@ if (!error && data) {
                     <td className="p-2">{s.start_time}</td>
                     <td className="p-2">{s.duration_hours}h</td>
                     <td className="p-2">{s.booking_mode}</td>
+                    <td className="p-2">
+  {s.session_type === "replacement" ? (
+    <div>
+      <span className="px-2 py-1 rounded text-xs bg-purple-100 text-purple-700">
+        Remplacement
+      </span>
+
+      {s.academic_date &&
+        s.academic_date !== s.start_date && (
+          <div className="text-xs text-gray-500 mt-1">
+            Compte pour le{" "}
+            {formatDateFrSafe(s.academic_date)}
+          </div>
+        )}
+    </div>
+  ) : s.session_type === "exceptional" ? (
+    <span className="px-2 py-1 rounded text-xs bg-orange-100 text-orange-700">
+      Exceptionnelle
+    </span>
+  ) : (
+    <span className="text-xs text-gray-500">
+      Normale
+    </span>
+  )}
+</td>
                     <td className="p-2">
                       <span
                         className={`px-2 py-1 rounded text-xs ${

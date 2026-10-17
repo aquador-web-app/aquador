@@ -91,7 +91,7 @@ function ClosureVisitorRegistration() {
       999
     );
 
-  const showClosureSection =
+  const showClosureSection = false;
     now >= closureDisplayStart &&
     now <= closureDisplayEnd;
 
