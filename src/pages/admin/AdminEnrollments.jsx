@@ -67,19 +67,21 @@ function addHoursToTimeStr(timeStr, hoursToAdd) {
 function canonicalSession(row, seriesByCourse) {
   const list = seriesByCourse?.[row.course_id] || [];
 
-  // ✅ Prefer schedule via session_group when available (stable "series" source)
+  // The assigned session group determines the student's regular schedule.
   if (row.session_group != null) {
     const byGroup = list.find(
       (s) => String(s.session_group) === String(row.session_group)
     );
+
     if (byGroup) return byGroup;
   }
 
-  // fallback: joined session_id
-  if (row.sessions) return row.sessions;
+  // Use the linked session only when it is a normal session
+  // belonging to the selected academic-year schedule list.
+  const byId = list.find(
+    (s) => String(s.id) === String(row.session_id)
+  );
 
-  // last fallback: try by session_id in the preloaded list
-  const byId = list.find((s) => String(s.id) === String(row.session_id));
   return byId || null;
 }
 
@@ -332,12 +334,20 @@ useEffect(() => {
 const seriesMap = {};
 if (crs && crs.length) {
   for (const c of crs) {
+        const currentAcademicYear = getCurrentAcademicYear();
+    const academicStartYear = Number(
+      String(currentAcademicYear).slice(0, 4)
+    );
+
     const { data: s, error: sErr } = await supabase
       .from("sessions")
-      .select("id, course_id, session_group, start_time, duration_hours, day_of_week, status")
+      .select("id, course_id, session_group, start_time, duration_hours, day_of_week, status, start_date")
       .eq("course_id", c.id)
       .eq("status", "active")
-      .order("day_of_week", { ascending: true })
+      .eq("session_type", "normal")
+      .gte("academic_date", `${academicStartYear}-09-01`)
+      .lt("academic_date", `${academicStartYear + 1}-09-01`)
+      .order("start_date", { ascending: true })
       .order("start_time", { ascending: true });
 
     if (sErr) {
@@ -349,7 +359,7 @@ if (crs && crs.length) {
       const seen = new Set();
       const grouped = [];
       for (const sess of s) {
-  const key = `${sess.day_of_week}-${sess.start_time.slice(0,5)}`; // e.g. "7-08:00"
+    const key = String(sess.session_group);
   if (!seen.has(key)) {
     seen.add(key);
     grouped.push({
@@ -908,9 +918,11 @@ const filteredEnrollments = useMemo(() => {
 
     // Day
     if (dayFilter !== "") {
+            const regularSession = canonicalSession(e, seriesByCourse);
+
       const dowDb =
-        e.sessions?.day_of_week != null
-          ? Number(e.sessions.day_of_week) - 1
+        regularSession?.day_of_week != null
+          ? Number(regularSession.day_of_week) - 1
           : null;
 
       const dowJs = e.start_date
@@ -1403,13 +1415,20 @@ const Pager = () => (
                 <td className="px-3 py-2">
   {isAdminUser ? (
     <select
-  value={`${(canonicalSession(e, seriesByCourse)?.id || e.session_id)}|${getEffectiveSlot(e, publicPlans)}`}
+  value={
+  canonicalSession(e, seriesByCourse)
+    ? `${canonicalSession(e, seriesByCourse).id}|${getEffectiveSlot(e, publicPlans)}`
+    : ""
+}
   onChange={async (ev) => {
     const hourValue = ev.target.value;
     await updateEnrollmentCourseAndHour(e, e.course_id, hourValue);
   }}
   className="border rounded px-2 py-1 text-sm"
 >
+            <option value="" disabled>
+        — Sélectionner un horaire —
+      </option>
       {buildHourOptionsForCourse(e.course_id).map((opt) => (
         <option key={opt.value} value={opt.value}>{opt.label}</option>
       ))}
@@ -1467,6 +1486,7 @@ const { error } = await supabase
                   <td className="px-3 py-2">
                   <select
                     value={e.plan_id || ""}
+                    disabled={!isAdminUser}
                     onChange={async (ev) => {
                   const newPlanId = ev.target.value;
 
@@ -1543,6 +1563,7 @@ const { error } = await supabase
                   </span>
                 </td>
                 <td className="px-3 py-2">
+                  {isAdminUser && (
                   <button
                     onClick={() => handleDelete(e)}
                     className="px-2 py-1 rounded text-xs bg-red-600 text-white hover:bg-red-700"
@@ -1550,6 +1571,7 @@ const { error } = await supabase
                   >
                     Supprimer
                   </button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -1701,6 +1723,9 @@ function EnrollmentCard({
   }}
   className="w-full min-w-0 border rounded px-2 py-1 text-sm bg-white truncate"
 >
+      <option value="" disabled>
+        — Sélectionner un horaire —
+      </option>
       {buildHourOptionsForCourse(e.course_id).map((opt) => (
         <option key={opt.value} value={opt.value}>{opt.label}</option>
       ))}
@@ -1770,7 +1795,7 @@ const { error } = await supabase
   <div className="min-w-0">
     <select
       value={e.plan_id || ""}
-      disabled={savingPlan}
+      disabled={savingPlan || !isAdminUser}
       onChange={async (ev) => {
         const newPlanId = ev.target.value;
 
@@ -1836,13 +1861,15 @@ const { error } = await supabase
 </div>
       </div>
 
-      <button
-        type="button"
-        onClick={() => onDelete(e)}
-        className="w-full mt-2 bg-red-600 text-white py-2 rounded-lg text-sm"
-      >
-        Supprimer
-      </button>
+      {isAdminUser && (
+  <button
+    type="button"
+    onClick={() => onDelete(e)}
+    className="w-full mt-2 bg-red-600 text-white py-2 rounded-lg text-sm"
+  >
+    Supprimer
+  </button>
+)}
     </div>
   );
 }

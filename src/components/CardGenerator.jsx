@@ -8,8 +8,8 @@ export default function CardGenerator({ users }) {
     if (selected === "all") {
       await exportAllCardsPDF(users);
     } else {
-      const chosen = users.find((u) => u.id === selected);
-      if (chosen) await exportAllCardsPDF(chosen);
+      const chosen = users.find((u) => String(u.id) === String(selected));
+if (chosen) await exportAllCardsPDF([chosen]);
     }
   };
 

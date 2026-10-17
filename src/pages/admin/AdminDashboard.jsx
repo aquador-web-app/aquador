@@ -1962,6 +1962,18 @@
 
       )}
 
+            {/* Assistant — Inscriptions only */}
+      {role === "assistant" && (
+        <SidebarBtn
+          id="classes-enrollments"
+          icon={<FaClipboardList />}
+          label="Inscriptions"
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          closeSidebar={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* Classes */}
       {!isHidden("classes") && (
         <SubGroup
@@ -2204,6 +2216,18 @@
       )}
     </SubGroup>
   )}
+
+        {/* Assistant — Cartes (Impressions) only */}
+      {role === "assistant" && (
+        <SidebarBtn
+          id="reports-cards"
+          icon={<FaFileAlt />}
+          label="Cartes (Impressions)"
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          closeSidebar={() => setSidebarOpen(false)}
+        />
+      )}
 
 
       {/* Rapports */}
@@ -2635,6 +2659,9 @@
   {/* Admin + Assistant         */}
   {/* ========================= */}
 
+  {role !== "assistant" && (
+<>
+
   <button
   onClick={() => {
     setOpenCloture((prev) => {
@@ -2711,7 +2738,8 @@
     />
   </div>
 )}
-
+</>
+)}
   </nav>
 
 

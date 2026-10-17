@@ -2,7 +2,7 @@
 // @ts-nocheck
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
-import jsPDF from "jspdf";
+import { exportAllCardsPDF } from "../../components/ExportAllCardsPDF";
 
 function safeText(v) {
   return String(v ?? "").trim();
@@ -113,8 +113,13 @@ export default function AdminCardImpressions() {
         status,
         profiles:profile_id (
           id,
-          full_name,
-          referral_code
+  first_name,
+  middle_name,
+  last_name,
+  full_name,
+  birth_date,
+  sex,
+  referral_code
         )
       `
       )
@@ -141,10 +146,16 @@ export default function AdminCardImpressions() {
       if (!pid) continue;
       if (!map.has(pid)) {
         map.set(pid, {
-          profile_id: pid,
-          full_name: p?.full_name || pid,
-          referral_code: p?.referral_code || "",
-        });
+  id: pid,
+  profile_id: pid,
+  first_name: p?.first_name || "",
+  middle_name: p?.middle_name || "",
+  last_name: p?.last_name || "",
+  full_name: p?.full_name || pid,
+  birth_date: p?.birth_date || null,
+  sex: p?.sex || "",
+  referral_code: p?.referral_code || "",
+});
       }
     }
 
@@ -247,30 +258,32 @@ export default function AdminCardImpressions() {
   };
 
   const handleGenerate = async (student) => {
-    try {
-      setSavingId(student.profile_id);
+  try {
+    setSavingId(student.profile_id);
 
-      // 1) Generate PDF locally
-      const doc = generateStudentCardPDF(student);
-      const fileName = makeFileName(student.full_name, student.profile_id);
+    // Generate the correct PDF for this student only
+    await exportAllCardsPDF([student]);
 
-      // 2) Save local file (browser download)
-      doc.save(fileName);
+    // Record generation in the database
+    const fileName = `carte_${student.first_name || "utilisateur"}.pdf`;
 
-      // 3) Immediately mark as generated in DB
-      const saved = await upsertGenerated({
-        profile_id: student.profile_id,
-        fileName,
-      });
+    const saved = await upsertGenerated({
+      profile_id: student.profile_id,
+      fileName,
+    });
 
-      setImpressions((prev) => ({ ...prev, [student.profile_id]: saved }));
-    } catch (e) {
-      console.error(e);
-      alert("Erreur: impossible de générer / enregistrer le statut de la carte.");
-    } finally {
-      setSavingId(null);
-    }
-  };
+    setImpressions((prev) => ({
+      ...prev,
+      [student.profile_id]: saved,
+    }));
+
+  } catch (e) {
+    console.error(e);
+    alert("Erreur lors de la génération de la carte.");
+  } finally {
+    setSavingId(null);
+  }
+};
 
   if (loading) return <div className="p-6">Chargement...</div>;
 
@@ -371,12 +384,12 @@ export default function AdminCardImpressions() {
                   <td className="p-2 border">
                     <div className="flex gap-2 justify-center">
                       <button
-                        onClick={() => handleGenerate(s)}
-                        disabled={savingId === s.profile_id}
-                        className="bg-aquaOrange text-white px-3 py-1.5 rounded hover:bg-orange-500 text-xs disabled:opacity-60"
-                      >
-                        {savingId === s.profile_id ? "Generating..." : "🪪 Generate"}
-                      </button>
+  onClick={() => handleGenerate(s)}
+  disabled={savingId === s.profile_id}
+  className="bg-aquaOrange text-white px-3 py-1.5 rounded hover:bg-orange-500 text-xs disabled:opacity-60"
+>
+  {savingId === s.profile_id ? "Generating..." : "🪪 Generate"}
+</button>
 
                       <button
                         onClick={() => toggleGiven(s.profile_id, !given)}
