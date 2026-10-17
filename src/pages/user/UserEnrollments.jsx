@@ -120,7 +120,7 @@ if (parent?.signup_type === "children_only" && kids?.length > 0) {
     })();
   }, [userId]);
 
-  // 2) Load ALL courses & plans (no is_public filter) + group active sessions
+  // 2) Load courses, plans, and public normal sessions for the selected academic year
   useEffect(() => {
     (async () => {
       const [{ data: crs }, { data: pls }] = await Promise.all([
@@ -137,13 +137,36 @@ if (parent?.signup_type === "children_only" && kids?.length > 0) {
       const seriesMap = {};
       if (crs?.length) {
         for (const c of crs) {
-          const { data: s } = await supabase
+                    const referenceDate = startDate || new Intl.DateTimeFormat("en-CA", {
+            timeZone: "America/Port-au-Prince",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+          }).format(new Date());
+
+          const year = Number(referenceDate.slice(0, 4));
+          const month = Number(referenceDate.slice(5, 7));
+          const academicStartYear = month >= 9 ? year : year - 1;
+
+          const { data: s, error: sessionsError } = await supabase
             .from("sessions")
             .select("id, course_id, day_of_week, start_time, duration_hours, status")
             .eq("course_id", c.id)
             .eq("status", "active")
-            .order("day_of_week", { ascending: true })
+            .eq("booking_mode", "allow")
+            .eq("session_type", "normal")
+            .eq("booking_mode", "allow")
+            .gte("academic_date", `${academicStartYear}-09-01`)
+            .lt("academic_date", `${academicStartYear + 1}-09-01`)
+            .gte("start_date", referenceDate)
+            .order("start_date", { ascending: true })
             .order("start_time", { ascending: true });
+
+          if (sessionsError) {
+            console.error("Error loading public sessions:", sessionsError);
+            seriesMap[c.id] = [];
+            continue;
+          }
 
           if (!s?.length) {
             seriesMap[c.id] = [];
@@ -163,7 +186,7 @@ if (parent?.signup_type === "children_only" && kids?.length > 0) {
       }
       setSeriesByCourse(seriesMap);
     })();
-  }, []);
+    }, [startDate]);
 
     // 3) Auto-detect & preselect course when profile or courses change
   useEffect(() => {
@@ -682,7 +705,10 @@ const price2h = useMemo(() => {
             <input
               type="date"
               value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
+              onChange={(e) => {
+  setStartDate(e.target.value);
+  setSelectedHours([]);
+}}
               onClick={(e) => e.target.showPicker && e.target.showPicker()} // ✅ forces dialog open
               className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-teal-400"
             />

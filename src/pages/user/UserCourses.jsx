@@ -2,6 +2,10 @@ import { useEffect, useState, Fragment } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { formatDateFrSafe } from "../../lib/dateUtils";
 import { useGlobalAlert } from "../../components/GlobalAlert";
+import {
+  getAcademicYearFromDate,
+  getCurrentAcademicYear,
+} from "../../lib/academicYear";
 
 
 export default function UserCourses({ userId }) {
@@ -10,6 +14,9 @@ export default function UserCourses({ userId }) {
   const [selectedProfile, setSelectedProfile] = useState(null);
   const [enrollments, setEnrollments] = useState([]);
   const [expandedCourse, setExpandedCourse] = useState(null);
+  const [academicYearFilter, setAcademicYearFilter] = useState(
+  getCurrentAcademicYear()
+);
   const [loading, setLoading] = useState(true);
   const { showConfirm, showAlert, showInput } = useGlobalAlert();
   const [daysByGroup, setDaysByGroup] = useState({}); // { [session_group]: "Lundi, Jeudi, Vendredi" }
@@ -95,11 +102,11 @@ useEffect(() => {
       return;
     }
 
-    const { data, error } = await supabase
+        const { data, error } = await supabase
       .from("sessions")
-      .select("session_group, day_of_week, status")
+      .select("session_group, day_of_week")
       .in("session_group", groups)
-      .neq("status", "deleted");
+      .eq("session_type", "normal");
 
     if (error) {
       console.error("Error loading group days:", error);
@@ -157,9 +164,29 @@ useEffect(() => {
     ).padStart(2, "0")}`;
   };
 
-  const toggleExpand = (courseId) => {
-    setExpandedCourse(expandedCourse === courseId ? null : courseId);
-  };
+  const toggleExpand = (enrollmentId) => {
+  setExpandedCourse((current) =>
+    current === enrollmentId ? null : enrollmentId
+  );
+};
+
+const availableAcademicYears = Array.from(
+  new Set(
+    enrollments
+      .map((e) => e.start_date && getAcademicYearFromDate(e.start_date))
+      .filter(Boolean)
+      .concat(getCurrentAcademicYear())
+  )
+).sort().reverse();
+
+const filteredEnrollments = enrollments.filter((e) => {
+  if (!academicYearFilter) return true;
+
+  return (
+    e.start_date &&
+    getAcademicYearFromDate(e.start_date) === academicYearFilter
+  );
+});
 
   if (loading) return <div className="p-6">Chargement…</div>;
   if (!profile)
@@ -211,6 +238,33 @@ useEffect(() => {
 
       </div>
 
+      <div className="flex flex-wrap items-center justify-between gap-3">
+  <h3 className="text-lg font-semibold text-gray-800">
+    Mes inscriptions
+  </h3>
+
+  <label className="flex items-center gap-2 text-sm font-medium">
+    Année académique
+
+    <select
+      value={academicYearFilter}
+      onChange={(e) => {
+        setAcademicYearFilter(e.target.value);
+        setExpandedCourse(null);
+      }}
+      className="border border-gray-300 rounded-lg px-3 py-2 bg-white"
+    >
+      <option value="">Toutes les années</option>
+
+      {availableAcademicYears.map((year) => (
+        <option key={year} value={year}>
+          {year}
+        </option>
+      ))}
+    </select>
+  </label>
+</div>
+
       {/* Enrollment Table */}
       <div className="hidden md:block bg-white p-4 rounded-lg shadow overflow-x-auto">
         <table className="min-w-[900px] text-sm border-collapse">
@@ -225,12 +279,12 @@ useEffect(() => {
           </tr>
         </thead>
         <tbody>
-          {enrollments.map((e) => (
+          {filteredEnrollments.map((e) => (
             <Fragment key={e.id}>
         <tr
           key={e.id}
           className="border-t hover:bg-gray-50 cursor-pointer"
-          onClick={() => toggleExpand(e.course_id)}
+          onClick={() => toggleExpand(e.id)}
         >
           <td className="px-4 py-2 font-semibold text-blue-700">
             {e.courses?.name || "—"}
@@ -291,7 +345,7 @@ useEffect(() => {
                       .select(
                         `
                         id, status, start_date, enrolled_at, profile_id,
-                        session_id, course_id, plan_id,
+                        session_id, session_group, course_id, plan_id,
                         profiles:profile_id ( full_name ),
                         courses:course_id ( name ),
                         plans:plan_id ( id, name, price, duration_hours ),
@@ -312,11 +366,12 @@ useEffect(() => {
         </tr>
 
         {/* Expanded sessions */}
-        {expandedCourse === e.course_id && (
+        {expandedCourse === e.id && (
           <tr className="bg-gray-50">
             <td colSpan={6} className="p-0">
               <SessionsList
                 sessionGroup={e.session_group}
+                academicYear={academicYearFilter}
                 enrollmentStart={e.start_date}
                 planDuration={e.plans?.duration_hours}
                 userStartTime={e.sessions?.start_time}
@@ -331,7 +386,7 @@ useEffect(() => {
       </Fragment>
     ))}
 
-    {!enrollments.length && (
+    {!filteredEnrollments.length && (
       <tr>
         <td colSpan={6} className="text-center py-4 text-gray-500 italic">
           Aucune inscription trouvée
@@ -344,8 +399,8 @@ useEffect(() => {
       </div>
       {/* 📱 Mobile cards */}
 <div className="md:hidden space-y-4">
-  {enrollments.map((e) => {
-    const isExpanded = expandedCourse === e.course_id;
+  {filteredEnrollments.map((e) => {
+    const isExpanded = expandedCourse === e.id;
 
     return (
       <div
@@ -355,7 +410,7 @@ useEffect(() => {
         {/* Header */}
         <div
           className="flex justify-between items-start cursor-pointer"
-          onClick={() => toggleExpand(e.course_id)}
+          onClick={() => toggleExpand(e.id)}
         >
           <div>
             <p className="text-sm font-semibold text-blue-700">
@@ -442,6 +497,7 @@ useEffect(() => {
           <div className="border-t pt-3">
             <SessionsList
               sessionGroup={e.session_group}
+              academicYear={academicYearFilter}
               enrollmentStart={e.start_date}
               planDuration={e.plans?.duration_hours}
               userStartTime={e.sessions?.start_time}
@@ -456,7 +512,7 @@ useEffect(() => {
     );
   })}
 
-  {!enrollments.length && (
+  {!filteredEnrollments.length && (
     <p className="text-center text-gray-500 italic">
       Aucune inscription trouvée
     </p>
@@ -470,6 +526,7 @@ useEffect(() => {
 // 📋 Updated UI ONLY
 function SessionsList({
   sessionGroup,
+  academicYear,
   enrollmentStart,
   planDuration,
   userStartTime,
@@ -504,13 +561,34 @@ function SessionsList({
     const fetchSessions = async () => {
       if (!sessionGroup) return;
 
-      const { data, error } = await supabase
-        .from("sessions")
-        .select("id, day_of_week, start_time, duration_hours, start_date, status")
-        .eq("session_group", sessionGroup)
-        .neq("status", "deleted")
-        .gte("start_date", enrollmentStart)
-        .order("start_date", { ascending: true });
+      let query = supabase
+  .from("sessions")
+  .select(`
+    id,
+    day_of_week,
+    start_time,
+    duration_hours,
+    start_date,
+    academic_date,
+    session_type,
+    status
+  `)
+  .eq("session_group", sessionGroup)
+  .gte("start_date", enrollmentStart)
+  .order("start_date", { ascending: true });
+
+if (academicYear) {
+  const [startYearText] = academicYear.split("-");
+  const startYear = Number(startYearText);
+
+  if (Number.isInteger(startYear)) {
+    query = query
+      .gte("academic_date", `${startYear}-09-01`)
+      .lt("academic_date", `${startYear + 1}-09-01`);
+  }
+}
+
+const { data, error } = await query;
 
       if (error) {
         console.error("Error fetching sessions:", error);
@@ -528,7 +606,15 @@ function SessionsList({
     };
 
     fetchSessions();
-  }, [sessionGroup, enrollmentStart, planDurationUnit, planDurationValue, courseName, planName]);
+  }, [
+  sessionGroup,
+  academicYear,
+  enrollmentStart,
+  planDurationUnit,
+  planDurationValue,
+  courseName,
+  planName,
+]);
 
   const dayLabel = (d) =>
     ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"][
@@ -541,6 +627,38 @@ function SessionsList({
     const base = new Date(2000, 0, 1, h, m);
     base.setHours(base.getHours() + (hoursToAdd || 1));
     return `${String(base.getHours()).padStart(2, "0")}:${String(base.getMinutes()).padStart(2, "0")}`;
+  };
+
+    // Current date in Haiti (YYYY-MM-DD)
+  const todayHaiti = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Port-au-Prince",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+
+  const getSessionDisplayStatus = (session) => {
+    // Explicitly cancelled sessions take priority
+    if (session.status === "cancelled") {
+      return {
+        label: "Session annulée",
+        className: "bg-red-100 text-red-700",
+      };
+    }
+
+    // Past sessions, regardless of student attendance
+    if (session.start_date < todayHaiti) {
+      return {
+        label: "Terminée",
+        className: "bg-gray-200 text-gray-700",
+      };
+    }
+
+    // Current or future active sessions
+    return {
+      label: "À venir",
+      className: "bg-green-100 text-green-700",
+    };
   };
 
   return (
@@ -561,22 +679,27 @@ function SessionsList({
               <td className="px-6 py-2"></td>
               <td className="px-6 py-2">{dayLabel(s.day_of_week)}</td>
               <td className="px-6 py-2">
-                {userStartTime?.slice(0, 5)}–
-                {addHoursToTimeStr(userStartTime, planDuration)}
+                {s.start_time?.slice(0, 5)}–
+{addHoursToTimeStr(
+  s.start_time,
+  s.duration_hours || planDuration
+)}
               </td>
               <td className="px-6 py-2">
                 {formatDateFrSafe(s.start_date)}
               </td>
-              <td className="px-6 py-2">
-                <span
-                  className={`px-3 py-1 rounded-full text-xs font-medium ${
-                    s.status === "cancelled"
-                      ? "bg-red-100 text-red-700"
-                      : "bg-green-100 text-green-700"
-                  }`}
-                >
-                  {s.status === "cancelled" ? "Session annulée" : "Active"}
-                </span>
+                            <td className="px-6 py-2">
+                {(() => {
+                  const displayStatus = getSessionDisplayStatus(s);
+
+                  return (
+                    <span
+                      className={`px-3 py-1 rounded-full text-xs font-medium ${displayStatus.className}`}
+                    >
+                      {displayStatus.label}
+                    </span>
+                  );
+                })()}
               </td>
             </tr>
           ))}
