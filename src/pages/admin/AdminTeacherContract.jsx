@@ -125,6 +125,18 @@ const signedFr = formatDateFrLongSafe(new Date());
       "{{SALARY_BASE_HTG}}": t?.salary_base_htg != null ? formatHTG(t.salary_base_htg) : "—",
       "{{salary_base_htg}}": t?.salary_base_htg != null ? formatHTG(t.salary_base_htg) : "—",
 
+      "{{SALARY_MID_HTG}}":
+  t?.salary_mid_htg != null ? formatHTG(t.salary_mid_htg) : "—",
+
+"{{salary_mid_htg}}":
+  t?.salary_mid_htg != null ? formatHTG(t.salary_mid_htg) : "—",
+
+"{{SALARY_MIN_HTG}}":
+  t?.salary_min_htg != null ? formatHTG(t.salary_min_htg) : "—",
+
+"{{salary_min_htg}}":
+  t?.salary_min_htg != null ? formatHTG(t.salary_min_htg) : "—",
+
       "{{SALARY_CATEGORY_NAME}}": t?.salary_category_name || "—",
       "{{salary_category_name}}": t?.salary_category_name || "—",
 
@@ -322,7 +334,9 @@ for (const c of contracts || []) {
     category_name,
     teacher_salary_categories (
       name,
-      base_salary
+      base_salary,
+      salary_mid_htg,
+      salary_min_htg
     )
   `)
   .in("profile_id", teacherIds);
@@ -380,6 +394,14 @@ for (const r of orderedContracts) {
 
 salary_base_htg:
   assignmentByTeacherId[r.teacher_id]?.teacher_salary_categories?.base_salary ??
+  null,
+
+salary_mid_htg:
+  assignmentByTeacherId[r.teacher_id]?.teacher_salary_categories?.salary_mid_htg ??
+  null,
+
+salary_min_htg:
+  assignmentByTeacherId[r.teacher_id]?.teacher_salary_categories?.salary_min_htg ??
   null,
 
       salary_category_id: assignmentByTeacherId[r.teacher_id]?.category_id || null,
@@ -900,7 +922,7 @@ async function handleSaveContractDates() {
               <div className="text-xs text-gray-500 mt-2">
                 Placeholders suggérés:{" "}
                 <span className="font-mono">
-                  {"{{TEACHER_FULL_NAME}} {{TEACHER_ADDRESS}} {{TEACHER_NIF_CIN}} {{TEACHER_ID_NUMBER}} {{SCHOOL_YEAR_START}} {{SCHOOL_YEAR_END}} {{SALARY_BASE_HTG}} {{SALARY_CATEGORY_NAME}} {{REFERENCE_STUDENTS}} {{SIGNATURE_TEACHER}} {{DATE_SIGNATURE}}"}
+                  {"{{TEACHER_FULL_NAME}} {{TEACHER_ADDRESS}} {{TEACHER_NIF_CIN}} {{TEACHER_ID_NUMBER}} {{SCHOOL_YEAR_START}} {{SCHOOL_YEAR_END}} {{SALARY_BASE_HTG}} {{SALARY_MID_HTG}} {{SALARY_MIN_HTG}} {{SALARY_CATEGORY_NAME}} {{REFERENCE_STUDENTS}} {{SIGNATURE_TEACHER}} {{DATE_SIGNATURE}}"}
                 </span>
               </div>
             </div>

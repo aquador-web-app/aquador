@@ -625,13 +625,19 @@ setSchoolYearEndISO(row.school_year_end || "");
       });
     } else {
       // pick the right amount column (no crash even if column name differs)
-      const raw = cat?.base_salary ?? null;
-
       setSalary({
-        salary_category_id: a.category_id,
-        salary_category_name: cat?.name || a.category_name || "",
-        salary_base_htg: raw != null ? Number(raw) : null,
-      });
+  salary_category_id: a.category_id,
+  salary_category_name: cat?.name || a.category_name || "",
+
+  salary_base_htg:
+    cat?.base_salary != null ? Number(cat.base_salary) : null,
+
+  salary_mid_htg:
+    cat?.salary_mid_htg != null ? Number(cat.salary_mid_htg) : null,
+
+  salary_min_htg:
+    cat?.salary_min_htg != null ? Number(cat.salary_min_htg) : null,
+});
     }
   }
 }
@@ -668,6 +674,22 @@ setSchoolYearEndISO(row.school_year_end || "");
   return Number.isFinite(n) ? n : null;
 }, [salary]);
 
+const salaryMidHTG = useMemo(() => {
+  const value = salary?.salary_mid_htg;
+  if (value == null) return null;
+
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}, [salary]);
+
+const salaryMinHTG = useMemo(() => {
+  const value = salary?.salary_min_htg;
+  if (value == null) return null;
+
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}, [salary]);
+
 
     // Render HTML by injecting placeholders into the DB template
     function renderContractHTML() {
@@ -700,6 +722,18 @@ const replacements = {
   "{{SALARY_BASE_HTG}}": escapeHtml(
   salaryBaseHTG != null && salaryBaseHTG > 0
     ? formatCurrencyHTG(salaryBaseHTG)
+    : "—"
+),
+
+"{{SALARY_MID_HTG}}": escapeHtml(
+  salaryMidHTG != null
+    ? formatCurrencyHTG(salaryMidHTG)
+    : "—"
+),
+
+"{{SALARY_MIN_HTG}}": escapeHtml(
+  salaryMinHTG != null
+    ? formatCurrencyHTG(salaryMinHTG)
     : "—"
 ),
 
@@ -774,6 +808,18 @@ const replacements = {
   "{{SALARY_BASE_HTG}}": escapeHtml(
   salaryBaseHTG != null && salaryBaseHTG > 0
     ? formatCurrencyHTG(salaryBaseHTG)
+    : "—"
+),
+
+"{{SALARY_MID_HTG}}": escapeHtml(
+  salaryMidHTG != null
+    ? formatCurrencyHTG(salaryMidHTG)
+    : "—"
+),
+
+"{{SALARY_MIN_HTG}}": escapeHtml(
+  salaryMinHTG != null
+    ? formatCurrencyHTG(salaryMinHTG)
     : "—"
 ),
 
