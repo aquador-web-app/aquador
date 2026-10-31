@@ -62,7 +62,24 @@ async function openSignedUrlFromPath(path) {
 // ---------- Component ----------
 export default function AdminTeacherSignedContracts() {
   const schoolYearOptions = useMemo(() => makeSchoolYearOptions({ startYear: 2025, count: 8 }), []);
-  const [schoolYearStartISO, setSchoolYearStartISO] = useState(schoolYearOptions[0]?.startISO || "2025-09-01");
+  const [schoolYearStartISO, setSchoolYearStartISO] = useState(() => {
+  const now = new Date();
+
+  // Use Haiti's local date
+  const haitiDate = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Port-au-Prince",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(now);
+
+  const year = Number(haitiDate.find((p) => p.type === "year")?.value);
+  const month = Number(haitiDate.find((p) => p.type === "month")?.value);
+
+  // Academic year begins September 1
+  const academicStartYear = month >= 9 ? year : year - 1;
+
+  return `${academicStartYear}-09-01`;
+});
   const selectedYear = useMemo(
     () => schoolYearOptions.find((o) => o.startISO === schoolYearStartISO) || schoolYearOptions[0],
     [schoolYearOptions, schoolYearStartISO]
@@ -94,6 +111,8 @@ export default function AdminTeacherSignedContracts() {
             "id",
             "teacher_id",
             "status",
+            "school_year_start",
+            "school_year_end",
             "signed_at",
             "pdf_url",
             "teacher_nif_cin",
@@ -102,9 +121,10 @@ export default function AdminTeacherSignedContracts() {
             "created_at",
           ].join(",")
         )
-        .eq("school_year_start", startISO)
-        .eq("school_year_end", endISO)
-        .order("created_at", { ascending: false });
+        .gte("school_year_start", startISO)
+.lte("school_year_end", endISO)
+.order("school_year_start", { ascending: false })
+.order("created_at", { ascending: false });
 
       if (!showUnsignedToo) {
         // keep only signed (status='signed' OR has pdf_url OR signed_at)
@@ -115,15 +135,9 @@ export default function AdminTeacherSignedContracts() {
       const { data: contracts, error: cErr } = await q;
       if (cErr) throw cErr;
 
-      // Keep ONLY the latest contract per teacher for that year
-      const seen = new Set();
-      const latest = [];
-      for (const c of contracts || []) {
-        if (!c?.teacher_id) continue;
-        if (seen.has(c.teacher_id)) continue;
-        seen.add(c.teacher_id);
-        latest.push(c);
-      }
+      // Keep every contract for the selected academic year.
+// A teacher may have multiple contracts covering separate periods.
+const latest = (contracts || []).filter((c) => !!c.teacher_id);
 
       const teacherIds = Array.from(new Set(latest.map((c) => c.teacher_id).filter(Boolean)));
       const templateIds = Array.from(new Set(latest.map((c) => c.template_id).filter(Boolean)));
@@ -163,6 +177,8 @@ export default function AdminTeacherSignedContracts() {
           teacher_email: prof.email || "—",
           teacher_phone: prof.phone || "—",
           status: normalizeStatus(c.status),
+          school_year_start: c.school_year_start,
+          school_year_end: c.school_year_end,
           signed_at: c.signed_at,
           created_at: c.created_at,
           pdf_url: c.pdf_url || "",
@@ -290,6 +306,7 @@ export default function AdminTeacherSignedContracts() {
                 <tr className="text-left text-gray-600 border-b">
                   <th className="py-2 pr-3">Teacher</th>
                   <th className="py-2 pr-3">Status</th>
+                  <th className="py-2 pr-3">Période du contrat</th>
                   <th className="py-2 pr-3">Signed</th>
                   <th className="py-2 pr-3">Template</th>
                   <th className="py-2 pr-3">NIF/CIN</th>
@@ -323,6 +340,13 @@ export default function AdminTeacherSignedContracts() {
                           {r.status || "—"}
                         </span>
                       </td>
+
+                      <td className="py-2 pr-3 whitespace-nowrap">
+  {fmtDateFrLong(r.school_year_start)}
+  <div className="text-xs text-gray-500">
+    au {fmtDateFrLong(r.school_year_end)}
+  </div>
+</td>
 
                       <td className="py-2 pr-3">
                         {r.signed_at ? (
@@ -404,8 +428,8 @@ export default function AdminTeacherSignedContracts() {
         )}
 
         <div className="text-xs text-gray-500">
-          Note: This page reads from <span className="font-mono">teacher_contracts</span> filtered by{" "}
-          <span className="font-mono">school_year_start/end</span>. It keeps only the latest row per teacher for the selected year.
+          Note: Contracts are grouped by academic year according to their actual
+contract periods. Multiple contracts per teacher are displayed separately.
         </div>
       </div>
     </div>
