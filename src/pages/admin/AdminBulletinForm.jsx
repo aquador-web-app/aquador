@@ -5,6 +5,20 @@ import { formatMonth, formatDateFrSafe } from "../../lib/dateUtils";
 
 const SCALE = ["N/A", "E", "TB", "B", "AB", "A", "P"];
 
+const getTodayHaitiISO = () => {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Port-au-Prince",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+
+  const getPart = (type) =>
+    parts.find((part) => part.type === type)?.value;
+
+  return `${getPart("year")}-${getPart("month")}-${getPart("day")}`;
+};
+
 const FIELDS = {
   HABILITE: ["respiration", "flottage", "battement", "posture"],
   COMPORTEMENT: ["attentif", "maitrise", "reaction"],
@@ -512,50 +526,74 @@ setSessionRows(mergedRows);
 
   const evaluationFields = Object.values(FIELDS).flat();
 
-  const completedCount = sessionRows.filter((row) => {
-  if (!row.date || !sessionEligibility[row.date]?.eligible) return false;
+  const getAttendanceStatus = (row, eligibility = sessionEligibility) =>
+  String(eligibility[row.date]?.attendance_status ?? "")
+    .trim()
+    .toLowerCase();
 
-  const allFieldsCompleted = evaluationFields.every(
-    (field) => String(row[field] ?? "").trim() !== ""
+const isRequiredSession = (
+  row,
+  eligibility = sessionEligibility,
+  todayISO = getTodayHaitiISO()
+) => {
+  if (!row.date || row.date > todayISO) return false;
+
+  if (!eligibility[row.date]?.eligible) return false;
+
+  return ["present", "late", "absent"].includes(
+    getAttendanceStatus(row, eligibility)
   );
-
-  const notesCompleted = String(row.notes ?? "").trim() !== "";
-
-  const validAbsence =
-    sessionEligibility[row.date]?.attendance_status !== "absent" ||
-    evaluationFields.every((field) => row[field] === "N/A");
-
-  return allFieldsCompleted && notesCompleted && validAbsence;
-}).length;
-
-const missingCount = sessionRows.filter(
-  (row) =>
-    row.date &&
-    sessionEligibility[row.date]?.eligible &&
-    !(
-      evaluationFields.every(
-        (field) => String(row[field] ?? "").trim() !== ""
-      ) &&
-      String(row.notes ?? "").trim() !== "" &&
-      (
-        sessionEligibility[row.date]?.attendance_status !== "absent" ||
-        evaluationFields.every((field) => row[field] === "N/A")
-      )
-    )
-).length;
-
-const isMissing = (row, field) => {
-  return !String(row[field] ?? "").trim();
 };
 
-const rowHasErrors = (row) => {
-  if (!row.date) return false;
+const isMissing = (row, field) =>
+  !String(row[field] ?? "").trim();
+
+const rowHasErrors = (row, eligibility = sessionEligibility) => {
+  if (!isRequiredSession(row, eligibility)) return false;
+
+  const attendance = getAttendanceStatus(row, eligibility);
+
+  if (attendance === "absent") {
+    return (
+      evaluationFields.some((field) => row[field] !== "N/A") ||
+      isMissing(row, "notes")
+    );
+  }
 
   return (
-    evaluationFields.some((field) => isMissing(row, field)) ||
+    evaluationFields.some(
+      (field) =>
+        isMissing(row, field) ||
+        !SCALE.includes(row[field])
+    ) ||
     isMissing(row, "notes")
   );
 };
+
+const fieldHasError = (row, field) => {
+  if (!isRequiredSession(row)) return false;
+
+  if (
+    field !== "notes" &&
+    getAttendanceStatus(row) === "absent"
+  ) {
+    return row[field] !== "N/A";
+  }
+
+  return isMissing(row, field);
+};
+
+const completedCount = sessionRows.filter(
+  (row) =>
+    isRequiredSession(row) &&
+    !rowHasErrors(row)
+).length;
+
+const missingCount = sessionRows.filter(
+  (row) =>
+    isRequiredSession(row) &&
+    rowHasErrors(row)
+).length;
 
   // === Save data to bulletin_sessions ===
   const saveAll = async () => {
@@ -566,73 +604,64 @@ const rowHasErrors = (row) => {
     setShowValidation(true);
   setGlobalErreur("");
 
-  const rowsToSubmit = sessionRows.filter((row) => {
-    if (!row.date) return false;
+  const todayISO = getTodayHaitiISO();
 
-    return (
-      evaluationFields.some(
-        (field) => String(row[field] ?? "").trim() !== ""
-      ) ||
-      String(row.notes ?? "").trim() !== ""
-    );
+// Only check sessions dated today or earlier.
+// Future sessions are ignored completely.
+const pastRows = sessionRows.filter(
+  (row) => row.date && row.date <= todayISO
+);
+
+if (pastRows.length === 0) {
+  setGlobalErreur(
+    "Aucune séance passée ou prévue aujourd'hui à enregistrer."
+  );
+  return;
+}
+
+// Refresh attendance and eligibility before saving.
+const eligibility = await fetchEligibility(
+  studentId,
+  pastRows.map((row) => row.date)
+);
+
+if (!eligibility) return;
+
+// Present, late and eligible absent sessions only.
+const rowsToSubmit = pastRows.filter((row) =>
+  isRequiredSession(row, eligibility, todayISO)
+);
+
+if (rowsToSubmit.length === 0) {
+  setGlobalErreur(
+    "Aucune séance admissible à enregistrer pour cet élève."
+  );
+  return;
+}
+
+// All required fields must be completed for each
+// eligible past session, including completely empty rows.
+const incompleteRows = rowsToSubmit.filter((row) =>
+  rowHasErrors(row, eligibility)
+);
+
+if (incompleteRows.length > 0) {
+  const details = incompleteRows.map((row) => {
+    const date = formatDateFrSafe(row.date);
+    const attendance = getAttendanceStatus(row, eligibility);
+
+    return attendance === "absent"
+      ? `${date} : toutes les évaluations doivent être N/A et les notes obligatoires`
+      : `${date} : toutes les évaluations et les notes sont obligatoires`;
   });
 
-  if (rowsToSubmit.length === 0) {
-    setGlobalErreur("Aucune séance remplie à enregistrer.");
-    return;
-  }
-
-  const incompleteRows = rowsToSubmit.filter(rowHasErrors);
-
-  if (incompleteRows.length > 0) {
-    setGlobalErreur(
-      `Impossible d'enregistrer : ${incompleteRows.length} séance(s) incomplète(s). Veuillez remplir tous les champs en rouge, y compris les notes.`
-    );
-    return;
-  }
-
-  // Refresh eligibility immediately before saving.
-  const eligibility = await fetchEligibility(
-    studentId,
-    rowsToSubmit.map((row) => row.date)
+  setGlobalErreur(
+    "Impossible d'enregistrer. Séance(s) incomplète(s) : " +
+    details.join(" ; ")
   );
 
-  if (!eligibility) return;
-
-  const blockedRows = rowsToSubmit.filter(
-    (row) => !eligibility[row.date]?.eligible
-  );
-
-  if (blockedRows.length > 0) {
-    setGlobalErreur(
-      "Enregistrement refusé : " +
-      blockedRows
-        .map(
-          (row) =>
-            `${formatDateFrSafe(row.date)} — ${
-              eligibility[row.date]?.reason ?? "Non autorisé"
-            }`
-        )
-        .join(" ; ")
-    );
-    return;
-  }
-
-   const invalidAbsentRows = rowsToSubmit.filter(
-    (row) =>
-      eligibility[row.date]?.attendance_status === "absent" &&
-      evaluationFields.some((field) => row[field] !== "N/A")
-  );
-
-  if (invalidAbsentRows.length > 0) {
-    setGlobalErreur(
-      "Pour une absence autorisée, toutes les évaluations doivent être N/A : " +
-        invalidAbsentRows
-          .map((row) => formatDateFrSafe(row.date))
-          .join(", ")
-    );
-    return;
-  }
+  return;
+}
 
   const records = rowsToSubmit
     .map((r) => ({
@@ -917,7 +946,7 @@ const label = rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1);
                 <SelectScale
   value={row[f] || ""}
   onChange={(v) => updateCell(idx, f, v)}
-  invalid={showValidation && !!row.date && isMissing(row, f)}
+  invalid={showValidation && fieldHasError(row, f)}
 />
               </td>
             ))}
@@ -925,7 +954,7 @@ const label = rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1);
           <td className="border border-gray-300 p-1 align-top">
             <textarea
   className={`border rounded px-2 py-2 w-full text-sm min-h-[80px] resize-y ${
-    showValidation && row.date && isMissing(row, "notes")
+    showValidation && fieldHasError(row, "notes")
       ? "border-red-500 bg-red-50 ring-2 ring-red-200"
       : "border-gray-300"
   }`}
@@ -1003,7 +1032,7 @@ const label = rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1);
                   <SelectScale
   value={row[f] || ""}
   onChange={(v) => updateCell(idx, f, v)}
-  invalid={showValidation && !!row.date && isMissing(row, f)}
+  invalid={showValidation && fieldHasError(row, f)}
 />
                 </div>
               ))}
@@ -1014,7 +1043,7 @@ const label = rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1);
           <label className="text-xs text-gray-600">Notes</label>
           <textarea
   className={`border rounded px-3 py-2 w-full text-sm min-h-[90px] resize-y ${
-    showValidation && row.date && isMissing(row, "notes")
+    showValidation && fieldHasError(row, "notes")
       ? "border-red-500 bg-red-50 ring-2 ring-red-200"
       : "border-gray-300"
   }`}
