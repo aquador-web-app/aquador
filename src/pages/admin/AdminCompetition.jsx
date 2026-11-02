@@ -117,6 +117,18 @@ const activeCompetitionIdRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+    const [showCreateCompetition, setShowCreateCompetition] = useState(false);
+  const [creatingCompetition, setCreatingCompetition] = useState(false);
+  const [loadingCompetitionClasses, setLoadingCompetitionClasses] = useState(false);
+  const [competitionClasses, setCompetitionClasses] = useState([]);
+
+  const [newCompetition, setNewCompetition] = useState({
+    name: "",
+    event_date: "",
+    competition_year: new Date().getFullYear(),
+    type: "general",
+    session_series_id: "",
+  });
 
   const [levels, setLevels] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -324,6 +336,106 @@ const selectedYear =
 
     return today > selectedCompetition.event_date;
   }, [selectedCompetition]);
+
+    async function loadCompetitionClasses(eventDate) {
+    setCompetitionClasses([]);
+
+    if (!eventDate) return;
+
+    try {
+      setLoadingCompetitionClasses(true);
+
+      const { data, error } = await supabase.rpc(
+        "get_admin_competition_classes_for_date",
+        { p_event_date: eventDate }
+      );
+
+      if (error) throw error;
+
+      setCompetitionClasses(data || []);
+    } catch (error) {
+      setErrorMessage(
+        error.message || "Impossible de charger les classes."
+      );
+    } finally {
+      setLoadingCompetitionClasses(false);
+    }
+  }
+
+  async function handleCreateCompetition(event) {
+    event.preventDefault();
+
+    if (creatingCompetition) return;
+
+    const name = newCompetition.name.trim();
+    const eventDate = newCompetition.event_date;
+    const year = Number(newCompetition.competition_year);
+
+    if (!name || !eventDate || !Number.isInteger(year)) {
+      setErrorMessage("Veuillez remplir tous les champs obligatoires.");
+      return;
+    }
+
+    if (
+      newCompetition.type === "class" &&
+      !newCompetition.session_series_id
+    ) {
+      setErrorMessage("Veuillez sélectionner une classe.");
+      return;
+    }
+
+    try {
+      setCreatingCompetition(true);
+      setErrorMessage("");
+      setSuccessMessage("");
+
+      const params = {
+        p_name: name,
+        p_event_date: eventDate,
+        p_competition_year: year,
+      };
+
+      if (newCompetition.type === "class") {
+        params.p_session_series_id =
+          newCompetition.session_series_id;
+      }
+
+      const { data, error } = await supabase.rpc(
+        "admin_create_competition",
+        params
+      );
+
+      if (error) throw error;
+      if (!data?.id) {
+        throw new Error("La compétition créée ne possède pas d'identifiant.");
+      }
+
+      await loadCompetitions();
+
+      setSelectedCompetitionId(data.id);
+      setActiveSection("overview");
+      setShowCreateCompetition(false);
+      setNewCompetition({
+        name: "",
+        event_date: "",
+        competition_year: new Date().getFullYear(),
+        type: "general",
+        session_series_id: "",
+      });
+      setCompetitionClasses([]);
+
+      setSuccessMessage(
+        `La compétition « ${data.name} » a été créée avec succès.`
+      );
+    } catch (error) {
+      console.error("Competition creation error:", error);
+      setErrorMessage(
+        error.message || "Impossible de créer la compétition."
+      );
+    } finally {
+      setCreatingCompetition(false);
+    }
+  }
 
   async function loadCompetitions() {
     const { data, error } = await supabase.rpc(
@@ -914,6 +1026,19 @@ async function handleToggleAssignment(
               )}
             </div>
 
+                        <button
+              type="button"
+              onClick={() => {
+                setShowCreateCompetition((previous) => !previous);
+                setErrorMessage("");
+              }}
+              className="rounded-xl border border-white/40 bg-white/15 px-4 py-2 font-semibold text-white transition hover:bg-white/25"
+            >
+              {showCreateCompetition
+                ? "Fermer"
+                : "+ Créer une compétition"}
+            </button>
+
             {competitions.length > 0 && (
               <select
   value={selectedCompetitionId || ""}
@@ -983,6 +1108,170 @@ async function handleToggleAssignment(
           </div>
         )}
       </div>
+
+            {showCreateCompetition && (
+        <form
+          onSubmit={handleCreateCompetition}
+          className="space-y-5 rounded-2xl border border-blue-200 bg-white p-6 shadow-sm"
+        >
+          <h3 className="text-lg font-bold text-gray-900">
+            Nouvelle compétition
+          </h3>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <label className="space-y-1 text-sm font-medium">
+              <span>Nom de la compétition *</span>
+              <input
+                type="text"
+                required
+                value={newCompetition.name}
+                onChange={(e) =>
+                  setNewCompetition((previous) => ({
+                    ...previous,
+                    name: e.target.value,
+                  }))
+                }
+                className="w-full rounded-lg border p-3"
+                placeholder="Ex. Compétition de natation"
+              />
+            </label>
+
+            <label className="space-y-1 text-sm font-medium">
+              <span>Type de compétition *</span>
+              <select
+                value={newCompetition.type}
+                onChange={(e) => {
+                  const type = e.target.value;
+
+                  setNewCompetition((previous) => ({
+                    ...previous,
+                    type,
+                    session_series_id: "",
+                  }));
+
+                  setCompetitionClasses([]);
+
+                  if (type === "class") {
+                    loadCompetitionClasses(newCompetition.event_date);
+                  }
+                }}
+                className="w-full rounded-lg border p-3"
+              >
+                <option value="general">Compétition générale</option>
+                <option value="class">Compétition de classe</option>
+              </select>
+            </label>
+
+            <label className="space-y-1 text-sm font-medium">
+              <span>Date de la compétition *</span>
+              <input
+                type="date"
+                required
+                value={newCompetition.event_date}
+                onChange={(e) => {
+                  const date = e.target.value;
+
+                  setNewCompetition((previous) => ({
+                    ...previous,
+                    event_date: date,
+                    session_series_id: "",
+                  }));
+
+                  if (newCompetition.type === "class") {
+                    loadCompetitionClasses(date);
+                  }
+                }}
+                className="w-full rounded-lg border p-3"
+              />
+            </label>
+
+            <label className="space-y-1 text-sm font-medium">
+              <span>Année académique *</span>
+              <input
+                type="number"
+                required
+                min="2020"
+                max="2100"
+                value={newCompetition.competition_year}
+                onChange={(e) =>
+                  setNewCompetition((previous) => ({
+                    ...previous,
+                    competition_year: e.target.value,
+                  }))
+                }
+                className="w-full rounded-lg border p-3"
+              />
+            </label>
+          </div>
+
+          {newCompetition.type === "class" && (
+            <label className="block space-y-1 text-sm font-medium">
+              <span>Classe concernée *</span>
+              <select
+                required
+                disabled={
+                  loadingCompetitionClasses ||
+                  !newCompetition.event_date
+                }
+                value={newCompetition.session_series_id}
+                onChange={(e) =>
+                  setNewCompetition((previous) => ({
+                    ...previous,
+                    session_series_id: e.target.value,
+                  }))
+                }
+                className="w-full rounded-lg border p-3"
+              >
+                <option value="">
+                  {loadingCompetitionClasses
+                    ? "Chargement des classes..."
+                    : "Sélectionner une classe"}
+                </option>
+
+                {competitionClasses.map((item) => (
+                  <option
+                    key={item.session_series_id}
+                    value={item.session_series_id}
+                  >
+                    {item.course_name} — {item.start_time?.slice(0, 5)}
+                    {" à "}
+                    {item.end_time?.slice(0, 5)}
+                  </option>
+                ))}
+              </select>
+
+              {newCompetition.event_date &&
+                !loadingCompetitionClasses &&
+                competitionClasses.length === 0 && (
+                  <p className="text-sm text-amber-700">
+                    Aucune classe active prévue à cette date.
+                  </p>
+                )}
+            </label>
+          )}
+
+          <div className="flex flex-wrap justify-end gap-3">
+            <button
+              type="button"
+              disabled={creatingCompetition}
+              onClick={() => setShowCreateCompetition(false)}
+              className="rounded-lg border px-5 py-2 font-semibold"
+            >
+              Annuler
+            </button>
+
+            <button
+              type="submit"
+              disabled={creatingCompetition || loadingCompetitionClasses}
+              className="rounded-lg bg-blue-700 px-5 py-2 font-semibold text-white disabled:opacity-50"
+            >
+              {creatingCompetition
+                ? "Création en cours..."
+                : "Créer la compétition"}
+            </button>
+          </div>
+        </form>
+      )}
 
       {errorMessage && (
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
@@ -1348,7 +1637,9 @@ function CategoriesSection({
               ),
 
             p_course_ids:
-              form.course_ids,
+  Array.isArray(form.course_ids)
+    ? form.course_ids
+    : [],
           }
         );
 

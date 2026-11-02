@@ -7,8 +7,6 @@ import {
 
 import { supabase } from "../../lib/supabaseClient";
 
-const ACADEMIC_YEAR = "2025-2026";
-
 function formatDateTime(value) {
   if (!value) return "—";
 
@@ -261,20 +259,15 @@ export default function TeacherNiveauAssignment() {
       error: assignmentError,
     } = await supabase
       .from("student_swim_levels")
-      .select(`
+            .select(`
         id,
         profile_id,
         level_id,
-        academic_year,
         assigned_by,
         assigned_at,
         notes,
         created_at
       `)
-      .eq(
-        "academic_year",
-        ACADEMIC_YEAR
-      )
       .order("assigned_at", {
         ascending: false,
       });
@@ -620,7 +613,7 @@ export default function TeacherNiveauAssignment() {
         String(level.id)
       ) {
         message +=
-          "\n\n⚠️ Ce niveau est identique au niveau actuel. Une nouvelle évaluation sera tout de même enregistrée.";
+            "\n\nCe niveau est identique au niveau actuel. Les informations de l'évaluation seront mises à jour.";
       }
     }
 
@@ -638,36 +631,20 @@ export default function TeacherNiveauAssignment() {
     setSuccess("");
 
     try {
-      const {
-        error: insertError,
-      } = await supabase
-        .from(
-          "student_swim_levels"
-        )
-        .insert({
-          profile_id:
-            student.id,
-
-          level_id:
-            levelId,
-
-          academic_year:
-            ACADEMIC_YEAR,
-
-          assigned_by:
-            currentUser?.id,
-
-          assigned_at:
-            new Date().toISOString(),
-
-          notes:
-            notes[
-              String(
-                student.id
-              )
-            ]?.trim() ||
-            null,
-        });
+            const { error: insertError } = await supabase
+        .from("student_swim_levels")
+        .upsert(
+          {
+            profile_id: student.id,
+            level_id: levelId,
+            assigned_by: currentUser?.id || null,
+            assigned_at: new Date().toISOString(),
+            notes: notes[String(student.id)]?.trim() || null,
+          },
+          {
+            onConflict: "profile_id",
+          }
+        );
 
       if (insertError) {
         throw insertError;
@@ -769,9 +746,7 @@ export default function TeacherNiveauAssignment() {
         </h2>
 
         <p className="mt-1 text-sm text-gray-500">
-          Évaluation des niveaux de
-          natation — année académique{" "}
-          {ACADEMIC_YEAR}.
+                    Gestion du niveau actuel de natation des élèves.
         </p>
       </div>
 
@@ -1158,7 +1133,7 @@ export default function TeacherNiveauAssignment() {
                                 .length ===
                               0 ? (
                                 <p className="text-sm text-gray-500">
-                                  Aucun niveau attribué pour cette année académique.
+                                  Aucun niveau attribué à cet élève.
                                 </p>
                               ) : (
                                 <div className="space-y-2">

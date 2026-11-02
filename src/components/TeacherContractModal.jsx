@@ -262,13 +262,15 @@ const currentSchoolYearLabel = useMemo(() => {
     }, [teacherFullName, teacher?.full_name]);
 
     const schoolYearFolder = useMemo(() => {
-  if (!schoolYearStartISO || !schoolYearEndISO) return "current";
+  if (!schoolYearStartISO) return "current";
 
-  const startYear = Number(schoolYearStartISO.slice(0, 4));
-  const endYear = Number(schoolYearEndISO.slice(0, 4));
+  const year = Number(schoolYearStartISO.slice(0, 4));
+  const month = Number(schoolYearStartISO.slice(5, 7));
 
-  return `${startYear}-${endYear}`;
-}, [schoolYearStartISO, schoolYearEndISO]);
+  const academicStartYear = month >= 9 ? year : year - 1;
+
+  return `${academicStartYear}-${academicStartYear + 1}`;
+}, [schoolYearStartISO]);
 
 const teacherFolder = useMemo(() => {
   // ✅ signed_docs/PROFESSEURS/2025-2026/Teacher_Full_Name/
@@ -482,97 +484,39 @@ if (!tplId) {
 }
 
 
-// ...
+// Load contract dates from administration settings.
+const { data: settings, error: settingsError } = await supabase
+  .from("teacher_contract_settings")
+  .select("teacher_id, contract_start, contract_end")
+  .or(`teacher_id.is.null,teacher_id.eq.${teacherId}`);
 
-const { data: existing, error: exErr } = await supabase
-  .from("teacher_contracts")
-  .select(`
-    id,
-    status,
-    school_year_start,
-    school_year_end,
-    pdf_url,
-    teacher_nif_cin,
-    teacher_id_upload_url,
-    template_id,
-    teacher_signature_dataurl
-  `)
-  .eq("teacher_id", teacherId)
-  .eq("status", "draft")
-  .order("school_year_start", { ascending: false })
-  .order("created_at", { ascending: false })
-  .limit(1);
+if (settingsError) throw settingsError;
 
-if (exErr) {
-  setUiError(exErr.message || String(exErr));
+const individualSetting = (settings || []).find(
+  (row) => row.teacher_id === teacherId
+);
+
+const globalSetting = (settings || []).find(
+  (row) => row.teacher_id === null
+);
+
+const applicableSetting = individualSetting || globalSetting;
+
+if (!applicableSetting) {
+  setUiError("Aucune période de contrat définie par l'administration.");
   return;
 }
 
-if (existing?.length) {
-  const row = existing[0];
+setSchoolYearStartISO(applicableSetting.contract_start);
+setSchoolYearEndISO(applicableSetting.contract_end);
 
-  setSchoolYearStartISO(row.school_year_start || "");
-setSchoolYearEndISO(row.school_year_end || "");
-
-  // Fix old rows missing template_id
-  if (!row.template_id) {
-    await supabase
-      .from("teacher_contracts")
-      .update({ template_id: tplId })
-      .eq("id", row.id);
-  }
-
-  setContractId(row.id);
-  setNifCin(row.teacher_nif_cin || "");
-  setIdUploadPath(row.teacher_id_upload_url || "");
-  setIdUploadUrl("");
-  setSavedTeacherSig(row.teacher_signature_dataurl || "");
-  setSignature(null); // ✅ always force a fresh signature on open
-
-  // ✅ VALIDATE PDF EXISTS
-  if (row.pdf_url) {
-    const ok = await objectExistsPublicUrl(row.pdf_url);
-    setPdfExists(ok);
-
-    if (!ok) {
-      // auto-clean stale DB reference
-      await supabase
-        .from("teacher_contracts")
-        .update({
-          pdf_url: null,
-          status: "draft",
-          signed_at: null,
-        })
-        .eq("id", row.id);
-    }
-  } else {
-    setPdfExists(false);
-  }
-} else {
-  const { data: ins, error: insErr } = await supabase
-    .from("teacher_contracts")
-    .insert([
-      {
-        teacher_id: teacherId,
-        school_year_start: startISO,
-        school_year_end: endISO,
-        status: "draft",
-        template_id: tplId, // ✅ REQUIRED (NOT NULL)
-      },
-    ])
-    .select("id")
-    .single();
-
-  if (insErr) {
-    setUiError(insErr.message || String(insErr));
-    return;
-  }
-
-  setContractId(ins.id);
-  setNifCin("");
-  setIdUploadPath("");
-  setIdUploadUrl("");
-}
+setContractId(null);
+setNifCin("");
+setIdUploadPath("");
+setIdUploadUrl("");
+setSavedTeacherSig("");
+setSignature(null);
+setPdfExists(false);
 
 
         // 2) Teacher profile
@@ -863,99 +807,173 @@ const replacements = {
 
 
 
-    async function saveAndGenerate() {
+
+async function saveAndGenerate() {
   setUiError("");
 
-  if (!template?.id) return setUiError("Template introuvable.");
-  if (!teacherId) return setUiError("Professeur introuvable.");
-  if (!contractId) return setUiError("Contrat introuvable (création échouée).");
+  if (saving) return;
+
+  if (!template?.id) {
+    return setUiError("Template introuvable.");
+  }
+
+  if (!teacherId) {
+    return setUiError("Professeur introuvable.");
+  }
+
+  if (!schoolYearStartISO || !schoolYearEndISO) {
+    return setUiError("Période du contrat introuvable.");
+  }
+
+  if (schoolYearEndISO <= schoolYearStartISO) {
+    return setUiError("La période du contrat est invalide.");
+  }
 
   if (!idUploadPath && !idFile) {
     return setUiError("Veuillez téléverser votre pièce d'identité.");
   }
-  if (!nifCin.trim()) return setUiError("Veuillez saisir votre NIF/CIN.");
-  if (!signature) return setUiError("Veuillez signer le contrat.");
+
+  if (!nifCin.trim()) {
+    return setUiError("Veuillez saisir votre NIF/CIN.");
+  }
+
+  if (!signature) {
+    return setUiError("Veuillez signer le contrat.");
+  }
 
   try {
     setSaving(true);
 
-    let uploadPath = idUploadPath;
+    // 1. Confirm the configured period has not changed.
+    const { data: settings, error: settingsError } = await supabase
+      .from("teacher_contract_settings")
+      .select("teacher_id, contract_start, contract_end")
+      .or(`teacher_id.is.null,teacher_id.eq.${teacherId}`);
 
-    // Upload if needed
-    if (!uploadPath && idFile) {
-      const up = await uploadTeacherIdFile(idFile);
-      uploadPath = up.path;
+    if (settingsError) throw settingsError;
 
-      setIdUploadPath(uploadPath);
-      setIdUploadUrl(up.url || "");
+    const applicable =
+      (settings || []).find((row) => row.teacher_id === teacherId) ||
+      (settings || []).find((row) => row.teacher_id === null);
 
-      const { error: saveDocErr } = await supabase
-        .from("teacher_contracts")
-        .update({ teacher_id_upload_url: uploadPath })
-        .eq("id", contractId);
-
-      if (saveDocErr) throw saveDocErr;
+    if (
+      !applicable ||
+      applicable.contract_start !== schoolYearStartISO ||
+      applicable.contract_end !== schoolYearEndISO
+    ) {
+      throw new Error(
+        "Les dates du contrat ont été modifiées. Fermez et rouvrez le contrat."
+      );
     }
 
-    // Always save NIF/CIN
-    const { error: upErr } = await supabase
-  .from("teacher_contracts")
-  .update({
-    teacher_nif_cin: nifCin.trim(),
-    teacher_signature_dataurl: signature, // ✅ SAVE TEACHER SIGNATURE
-  })
-  .eq("id", contractId);
+    // 2. Check existing signed contracts before generating a PDF.
+    const { data: signedContracts, error: overlapError } = await supabase
+      .from("teacher_contracts")
+      .select("id, school_year_start, school_year_end")
+      .eq("teacher_id", teacherId)
+      .eq("status", "signed")
+      .lte("school_year_start", schoolYearEndISO)
+      .gte("school_year_end", schoolYearStartISO);
 
-if (upErr) throw upErr;
+    if (overlapError) throw overlapError;
 
-    // Render final HTML
+    if (signedContracts?.length) {
+      throw new Error(
+        "Un contrat signé existe déjà pour cette période. Contactez l'administration."
+      );
+    }
+
+    // 3. Upload identification without creating a draft contract.
+    let uploadPath = idUploadPath;
+
+    if (!uploadPath && idFile) {
+      const uploaded = await uploadTeacherIdFile(idFile);
+      uploadPath = uploaded.path;
+
+      setIdUploadPath(uploadPath);
+      setIdUploadUrl(uploaded.url || "");
+    }
+
+    // 4. Generate the signed PDF.
     const finalHtml = renderContractHTML();
 
-    // PDF generation
+    // Unique path for each signing attempt.
+    // This prevents overwriting historical contract PDFs.
+    const signingId = crypto.randomUUID();
+
     const pdfUrl = await sendHTMLToPDFAndUpload({
-  html: finalHtml,
-  formName: "Contrat Professeur",
-  fullName: teacher?.full_name || teacherFullName || "Professeur",
-  safeName: teacherFolder, // ✅ creates signed_docs/PROFESSEURS/<year>/<name>/
-});
+      html: finalHtml,
+      formName: "Contrat Professeur",
+      fullName: teacher?.full_name || teacherFullName || "Professeur",
+      safeName: `${teacherFolder}/${schoolYearStartISO}_${schoolYearEndISO}_${signingId}`,
+    });
 
+    if (!pdfUrl) {
+      throw new Error("La génération du PDF a échoué.");
+    }
 
+    // 5. Create the contract only after the PDF exists.
+    const signedAt = new Date().toISOString();
 
-    if (!pdfUrl) throw new Error("PDF URL missing.");
-
-    // Mark contract signed
-    const { error: signErr } = await supabase
+    const { data: inserted, error: insertError } = await supabase
       .from("teacher_contracts")
-      .update({
-        pdf_url: pdfUrl,
+      .insert({
+        teacher_id: teacherId,
+        template_id: template.id,
+        school_year_start: schoolYearStartISO,
+        school_year_end: schoolYearEndISO,
         status: "signed",
-        signed_at: new Date().toISOString(),
+        signed_at: signedAt,
+        pdf_url: pdfUrl,
+        teacher_nif_cin: nifCin.trim(),
+        teacher_id_upload_url: uploadPath,
+        teacher_signature_dataurl: signature,
       })
-      .eq("id", contractId);
+      .select("id, pdf_url")
+      .single();
 
-    if (signErr) throw signErr;
+    if (insertError) {
+      if (
+        insertError.code === "23P01" ||
+        insertError.message?.includes("teacher_contracts_no_signed_overlap")
+      ) {
+        throw new Error(
+          "Un autre contrat signé existe déjà pour cette période. Contactez l'administration."
+        );
+      }
 
-    // Optional documents log (keep if you want)
-    try {
-      await supabase.from("documents").insert([
-        {
-          user_id: teacherId,
-          type: "Contrat Professeur",
-          file_url: pdfUrl,
-          signed_at: new Date().toISOString(),
-        },
-      ]);
-    } catch (_) {}
+      throw insertError;
+    }
 
-    onDone?.({ pdf_url: pdfUrl, contract_id: contractId });
+    setContractId(inserted.id);
+
+    // 6. Optional documents log.
+    const { error: documentError } = await supabase
+      .from("documents")
+      .insert({
+        user_id: teacherId,
+        type: "Contrat Professeur",
+        file_url: pdfUrl,
+        signed_at: signedAt,
+      });
+
+    if (documentError) {
+      console.warn("Contract signed; documents log failed:", documentError);
+    }
+
+    onDone?.({
+      pdf_url: inserted.pdf_url,
+      contract_id: inserted.id,
+    });
+
     onClose?.();
   } catch (err) {
+    console.error("Teacher contract signing failed:", err);
     setUiError(err?.message || String(err));
   } finally {
     setSaving(false);
   }
 }
-
     
 
     const docWrapClasses =

@@ -61,6 +61,10 @@ export default function AdminTeacherContract() {
   const [contractStartOverride, setContractStartOverride] = useState("");
   const [contractEndOverride, setContractEndOverride] = useState("");
 
+  const [globalContractStart, setGlobalContractStart] = useState("");
+const [globalContractEnd, setGlobalContractEnd] = useState("");
+const [globalDatesLoading, setGlobalDatesLoading] = useState(true);
+
     // === Teachers dropdown ===
   const [teachers, setTeachers] = useState([]); // rows for dropdown
   const [selectedTeacherId, setSelectedTeacherId] = useState("");
@@ -270,168 +274,167 @@ ${inner || `<div class="muted"><i>(Aucun HTML)</i></div>`}
 }
 
 
-    async function fetchTeachersForContracts() {
+
+async function fetchTeachersForContracts() {
   setUiError("");
 
-  // 1) Read contracts (include created_at so we can pick latest per teacher)
-  const { data: contracts, error } = await supabase
+  // 1. Load all teacher profiles, including those without contracts.
+  const { data: profiles, error: profilesError } = await supabase
+    .from("profiles")
+    .select("id, full_name, email, phone, address")
+    .eq("role", "teacher")
+    .order("full_name", { ascending: true });
+
+  if (profilesError) throw profilesError;
+
+  const teacherProfiles = profiles || [];
+  const teacherIds = teacherProfiles.map((p) => p.id);
+
+  if (!teacherIds.length) {
+    setTeachers([]);
+    setSelectedTeacherId("");
+    return;
+  }
+
+  // 2. Load contract history for these teachers.
+  const { data: contracts, error: contractsError } = await supabase
     .from("teacher_contracts")
-    .select("id, teacher_id, status, school_year_start, school_year_end, teacher_id_number, teacher_nif_cin, payload, created_at")
+    .select(
+      "id, teacher_id, status, school_year_start, school_year_end, teacher_id_number, teacher_nif_cin, payload, created_at"
+    )
+    .in("teacher_id", teacherIds)
     .order("created_at", { ascending: false });
 
-  if (error) {
-    setTeachers([]);
-    throw error;
-  }
+  if (contractsError) throw contractsError;
 
-    // ✅ Build fallback maps: latest NON-empty salary fields per teacher (scan in created_at desc order)
-const lastNonEmptyCategoryByTeacher = {};
-const lastNonNullBaseByTeacher = {};
+  // 3. Load salary assignments independently of contracts.
+  const { data: assignments, error: assignmentsError } = await supabase
+    .from("teacher_salary_assignments")
+    .select(`
+      profile_id,
+      category_id,
+      category_name,
+      teacher_salary_categories (
+        name,
+        base_salary,
+        salary_mid_htg,
+        salary_min_htg
+      )
+    `)
+    .in("profile_id", teacherIds);
 
-for (const c of contracts || []) {
-  const tid = c?.teacher_id;
-  if (!tid) continue;
+  if (assignmentsError) throw assignmentsError;
 
-  const p = c.payload || {};
-
-  if (lastNonEmptyCategoryByTeacher[tid] == null && p.salary_category_name) {
-    lastNonEmptyCategoryByTeacher[tid] = p.salary_category_name;
-  }
-
-  if (lastNonNullBaseByTeacher[tid] == null && p.salary_base_htg != null) {
-    lastNonNullBaseByTeacher[tid] = p.salary_base_htg;
-  }
-}
-
-
-  const teacherIds = Array.from(
-    new Set((contracts || []).map((c) => c.teacher_id).filter(Boolean))
+  const assignmentByTeacherId = Object.fromEntries(
+    (assignments || []).map((a) => [a.profile_id, a])
   );
 
-  // 2) Fetch teacher identity from profiles (source of truth for dropdown label)
-  let profilesById = {};
-  let assignmentByTeacherId = {}; // ✅ move here (so it exists for rows.push later)
+  // Keep the most recent non-empty historical salary information.
+  const lastNonEmptyCategoryByTeacher = {};
+  const lastNonNullBaseByTeacher = {};
 
-  if (teacherIds.length) {
-    const { data: profs, error: pErr } = await supabase
-      .from("profiles")
-      .select("id, full_name, email, phone, address")
-      .in("id", teacherIds);
+  for (const c of contracts || []) {
+    const tid = c.teacher_id;
+    if (!tid) continue;
 
+    const payload = c.payload || {};
 
-    if (!pErr && profs?.length) {
-      profilesById = Object.fromEntries(profs.map((p) => [p.id, p]));
+    if (
+      lastNonEmptyCategoryByTeacher[tid] == null &&
+      payload.salary_category_name
+    ) {
+      lastNonEmptyCategoryByTeacher[tid] = payload.salary_category_name;
     }
 
-    // 2b) Fetch salary assignment (category_id + category name) from DB (source of truth)
- 
-  if (teacherIds.length) {
-    const { data: assigns, error: aErr } = await supabase
-  .from("teacher_salary_assignments")
-  .select(`
-    profile_id,
-    category_id,
-    category_name,
-    teacher_salary_categories (
-      name,
-      base_salary,
-      salary_mid_htg,
-      salary_min_htg
-    )
-  `)
-  .in("profile_id", teacherIds);
-
-    if (!aErr && assigns?.length) {
-      assignmentByTeacherId = Object.fromEntries(
-        assigns.map((a) => [a.profile_id, a])
-      );
+    if (
+      lastNonNullBaseByTeacher[tid] == null &&
+      payload.salary_base_htg != null
+    ) {
+      lastNonNullBaseByTeacher[tid] = payload.salary_base_htg;
     }
   }
-}
 
-  // 3) Build rows, but keep ONLY the latest contract per teacher_id
-  const seen = new Set();
-  const rows = [];
-
+  // 4. Keep one representative contract per teacher for historical
+  // fields, but never use contracts to determine teacher eligibility.
   const orderedContracts = [...(contracts || [])].sort((a, b) => {
-  // Current editable draft always comes before historical contracts
-  if (a.status === "draft" && b.status !== "draft") return -1;
-  if (a.status !== "draft" && b.status === "draft") return 1;
+    if (a.status === "draft" && b.status !== "draft") return -1;
+    if (a.status !== "draft" && b.status === "draft") return 1;
 
-  // Within the same status, newest school year first
-  const yearCompare = String(b.school_year_start || "").localeCompare(
-    String(a.school_year_start || "")
-  );
-  if (yearCompare !== 0) return yearCompare;
+    const dateCompare = String(b.school_year_start || "").localeCompare(
+      String(a.school_year_start || "")
+    );
 
-  // Final fallback: newest creation date
-  return new Date(b.created_at || 0) - new Date(a.created_at || 0);
-});
+    if (dateCompare !== 0) return dateCompare;
 
-for (const r of orderedContracts) {
-    if (!r?.teacher_id) continue;
-    if (seen.has(r.teacher_id)) continue; // ✅ dedupe (keep first = latest because sorted desc)
-    seen.add(r.teacher_id);
+    return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+  });
 
-    const p = r.payload || {};
-    const prof = profilesById[r.teacher_id] || {};
+  const latestContractByTeacher = {};
 
-    rows.push({
-      contract_id: r.id,
-      teacher_id: r.teacher_id,
-      status: r.status,
-      school_year_start: r.school_year_start,
-      school_year_end: r.school_year_end,
+  for (const contract of orderedContracts) {
+    if (!latestContractByTeacher[contract.teacher_id]) {
+      latestContractByTeacher[contract.teacher_id] = contract;
+    }
+  }
 
-      teacher_id_number: r.teacher_id_number || p.teacher_id_number || "",
-      teacher_nif_cin: r.teacher_nif_cin || p.teacher_nif_cin || "",
+  // 5. Build dropdown rows from teacher profiles.
+  const rows = teacherProfiles.map((profile) => {
+    const contract = latestContractByTeacher[profile.id] || {};
+    const payload = contract.payload || {};
+    const assignment = assignmentByTeacherId[profile.id] || {};
+    const category = assignment.teacher_salary_categories || {};
 
-      // ✅ prefer profiles, fallback to payload
-      teacher_full_name: prof.full_name || p.teacher_full_name || "",
-      teacher_address: prof.address || p.teacher_address || "",
-      teacher_email: prof.email || p.teacher_email || "",
-      teacher_phone: prof.phone || p.teacher_phone || "",
+    return {
+      contract_id: contract.id || null,
+      teacher_id: profile.id,
+      status: contract.status || null,
 
-salary_base_htg:
-  assignmentByTeacherId[r.teacher_id]?.teacher_salary_categories?.base_salary ??
-  null,
+      school_year_start: contract.school_year_start || "",
+      school_year_end: contract.school_year_end || "",
 
-salary_mid_htg:
-  assignmentByTeacherId[r.teacher_id]?.teacher_salary_categories?.salary_mid_htg ??
-  null,
+      teacher_id_number:
+        contract.teacher_id_number || payload.teacher_id_number || "",
 
-salary_min_htg:
-  assignmentByTeacherId[r.teacher_id]?.teacher_salary_categories?.salary_min_htg ??
-  null,
+      teacher_nif_cin:
+        contract.teacher_nif_cin || payload.teacher_nif_cin || "",
 
-      salary_category_id: assignmentByTeacherId[r.teacher_id]?.category_id || null,
+      teacher_full_name:
+        profile.full_name || payload.teacher_full_name || "",
+
+      teacher_address:
+        profile.address || payload.teacher_address || "",
+
+      teacher_email:
+        profile.email || payload.teacher_email || "",
+
+      teacher_phone:
+        profile.phone || payload.teacher_phone || "",
+
+      salary_base_htg: category.base_salary ?? lastNonNullBaseByTeacher[profile.id] ?? null,
+      salary_mid_htg: category.salary_mid_htg ?? null,
+      salary_min_htg: category.salary_min_htg ?? null,
+
+      salary_category_id: assignment.category_id || null,
 
       salary_category_name:
-  assignmentByTeacherId[r.teacher_id]?.teacher_salary_categories?.name ||
-  assignmentByTeacherId[r.teacher_id]?.category_name ||
-  "",
-
-
-    });
-  }
+        category.name ||
+        assignment.category_name ||
+        lastNonEmptyCategoryByTeacher[profile.id] ||
+        "",
+    };
+  });
 
   setTeachers(rows);
 
-  console.log(
-  "Teachers missing salary_category_name:",
-  rows.filter((x) => !x.salary_category_name).map((x) => ({
-    teacher_id: x.teacher_id,
-    teacher_full_name: x.teacher_full_name,
-    status: x.status,
-  }))
-);
-
-
-  // auto-pick first teacher if none selected yet
-  if (!selectedTeacherId && rows.length) {
-    setSelectedTeacherId(rows[0].teacher_id);
+  // Preserve the selected teacher when refreshing.
+  if (
+    !selectedTeacherId ||
+    !rows.some((t) => t.teacher_id === selectedTeacherId)
+  ) {
+    setSelectedTeacherId(rows[0]?.teacher_id || "");
   }
 }
+
 
 
   async function fetchSalarySettings() {
@@ -490,22 +493,87 @@ useEffect(() => {
   }, [selectedId]); // eslint-disable-line
 
   useEffect(() => {
-  if (!selectedTeacher) return;
-  setContractStartOverride(selectedTeacher.school_year_start || "");
-  setContractEndOverride(selectedTeacher.school_year_end || "");
-}, [selectedTeacherId]); // eslint-disable-line
-
-
-async function handleSaveContractDates() {
-  setUiError("");
-  setUiOk("");
-
-  if (!contractStartOverride || !contractEndOverride) {
-    setUiError("Veuillez saisir les deux dates.");
+  if (!selectedTeacherId) {
+    setContractStartOverride("");
+    setContractEndOverride("");
     return;
   }
 
-  if (contractEndOverride < contractStartOverride) {
+  let cancelled = false;
+
+  async function loadContractDates() {
+    setUiError("");
+
+    const { data, error } = await supabase
+      .from("teacher_contract_settings")
+      .select("teacher_id, contract_start, contract_end")
+      .or(`teacher_id.is.null,teacher_id.eq.${selectedTeacherId}`);
+
+    if (cancelled) return;
+
+    if (error) {
+      setUiError(error.message);
+      setContractStartOverride("");
+      setContractEndOverride("");
+      return;
+    }
+
+    const individual = (data || []).find(
+      (row) => row.teacher_id === selectedTeacherId
+    );
+
+    const globalDefault = (data || []).find(
+      (row) => row.teacher_id === null
+    );
+
+    const applicable = individual || globalDefault;
+
+    setContractStartOverride(applicable?.contract_start || "");
+    setContractEndOverride(applicable?.contract_end || "");
+  }
+
+  loadContractDates();
+
+  return () => {
+    cancelled = true;
+  };
+}, [selectedTeacherId]);
+
+async function fetchGlobalContractDates() {
+  setGlobalDatesLoading(true);
+
+  try {
+    const { data, error } = await supabase
+      .from("teacher_contract_settings")
+      .select("id, contract_start, contract_end")
+      .is("teacher_id", null)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    setGlobalContractStart(data?.contract_start || "");
+    setGlobalContractEnd(data?.contract_end || "");
+  } catch (e) {
+    setUiError(e?.message || String(e));
+  } finally {
+    setGlobalDatesLoading(false);
+  }
+}
+
+useEffect(() => {
+  fetchGlobalContractDates();
+}, []);
+
+async function handleSaveGlobalContractDates() {
+  setUiError("");
+  setUiOk("");
+
+  if (!globalContractStart || !globalContractEnd) {
+    setUiError("Veuillez saisir les deux dates du contrat général.");
+    return;
+  }
+
+  if (globalContractEnd <= globalContractStart) {
     setUiError("La date de fin doit être postérieure à la date de début.");
     return;
   }
@@ -513,38 +581,116 @@ async function handleSaveContractDates() {
   try {
     setSaving(true);
 
-    const { data, error } = await supabase
-      .from("teacher_contracts")
-      .update({
-        school_year_start: contractStartOverride,
-        school_year_end: contractEndOverride,
-      })
-      .eq("status", "draft")
-      .select("id, teacher_id, school_year_start, school_year_end, status");
+    const { data: existing, error: lookupError } = await supabase
+      .from("teacher_contract_settings")
+      .select("id")
+      .is("teacher_id", null)
+      .maybeSingle();
 
-    if (error) throw error;
+    if (lookupError) throw lookupError;
 
-    const updatedById = Object.fromEntries(
-      (data || []).map((contract) => [contract.id, contract])
-    );
+    const values = {
+      contract_start: globalContractStart,
+      contract_end: globalContractEnd,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (existing?.id) {
+      const { error } = await supabase
+        .from("teacher_contract_settings")
+        .update(values)
+        .eq("id", existing.id);
+
+      if (error) throw error;
+    } else {
+      const { error } = await supabase
+        .from("teacher_contract_settings")
+        .insert({
+          teacher_id: null,
+          ...values,
+        });
+
+      if (error) throw error;
+    }
+
+    setUiOk("Période générale des contrats sauvegardée.");
+
+    await fetchGlobalContractDates();
+  } catch (e) {
+    setUiError(e?.message || String(e));
+  } finally {
+    setSaving(false);
+  }
+}
+
+
+async function handleSaveContractDates() {
+  setUiError("");
+  setUiOk("");
+
+  if (!selectedTeacherId) {
+    setUiError("Veuillez sélectionner un professeur.");
+    return;
+  }
+
+  if (!contractStartOverride || !contractEndOverride) {
+    setUiError("Veuillez saisir les deux dates.");
+    return;
+  }
+
+  if (contractEndOverride <= contractStartOverride) {
+    setUiError("La date de fin doit être postérieure à la date de début.");
+    return;
+  }
+
+  try {
+    setSaving(true);
+
+    const { data: existing, error: lookupError } = await supabase
+  .from("teacher_contract_settings")
+  .select("id")
+  .eq("teacher_id", selectedTeacherId)
+  .maybeSingle();
+
+if (lookupError) throw lookupError;
+
+const values = {
+  contract_start: contractStartOverride,
+  contract_end: contractEndOverride,
+  updated_at: new Date().toISOString(),
+};
+
+if (existing?.id) {
+  const { error } = await supabase
+    .from("teacher_contract_settings")
+    .update(values)
+    .eq("id", existing.id);
+
+  if (error) throw error;
+} else {
+  const { error } = await supabase
+    .from("teacher_contract_settings")
+    .insert({
+      teacher_id: selectedTeacherId,
+      ...values,
+    });
+
+  if (error) throw error;
+}
 
     setTeachers((current) =>
-      current.map((teacher) => {
-        const updated = updatedById[teacher.contract_id];
-
-        if (!updated) return teacher;
-
-        return {
-          ...teacher,
-          school_year_start: updated.school_year_start,
-          school_year_end: updated.school_year_end,
-        };
-      })
+      current.map((teacher) =>
+        teacher.teacher_id === selectedTeacherId
+          ? {
+              ...teacher,
+              school_year_start: contractStartOverride,
+              school_year_end: contractEndOverride,
+            }
+          : teacher
+      )
     );
 
-    setUiOk(
-      `Dates sauvegardées pour ${data?.length || 0} contrat(s) en brouillon.`
-    );
+    setUiOk("Dates du contrat sauvegardées pour ce professeur.");
   } catch (e) {
     setUiError(e?.message || String(e));
   } finally {
@@ -758,6 +904,61 @@ async function handleSaveContractDates() {
           {uiError ? `⚠️ ${uiError}` : `✅ ${uiOk}`}
         </div>
       )}
+
+      {/* Global contract period */}
+<div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
+  <div>
+    <h3 className="font-semibold text-gray-800">
+      Période générale des contrats
+    </h3>
+    <p className="text-sm text-gray-500 mt-1">
+      Ces dates s'appliquent par défaut à tous les professeurs,
+      sauf lorsqu'une période individuelle a été définie.
+    </p>
+  </div>
+
+  <div className="flex flex-wrap items-end gap-3">
+    <div>
+      <label className="block text-sm text-gray-600 mb-1">
+        Date de début
+      </label>
+      <input
+        type="date"
+        value={globalContractStart}
+        onChange={(e) => setGlobalContractStart(e.target.value)}
+        disabled={saving || globalDatesLoading}
+        className="border rounded-lg px-3 py-2 text-sm"
+      />
+    </div>
+
+    <div>
+      <label className="block text-sm text-gray-600 mb-1">
+        Date de fin
+      </label>
+      <input
+        type="date"
+        value={globalContractEnd}
+        onChange={(e) => setGlobalContractEnd(e.target.value)}
+        disabled={saving || globalDatesLoading}
+        className="border rounded-lg px-3 py-2 text-sm"
+      />
+    </div>
+
+    <button
+      type="button"
+      onClick={handleSaveGlobalContractDates}
+      disabled={
+        saving ||
+        globalDatesLoading ||
+        !globalContractStart ||
+        !globalContractEnd
+      }
+      className="px-4 py-2 rounded-lg bg-aquaBlue text-white text-sm disabled:opacity-50"
+    >
+      {saving ? "Sauvegarde..." : "Sauvegarder pour tous"}
+    </button>
+  </div>
+</div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* LEFT: templates list */}
